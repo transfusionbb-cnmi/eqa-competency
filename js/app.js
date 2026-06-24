@@ -862,29 +862,59 @@
     });
   }
 
+  async function removeRoundStorageFiles(paths) {
+    const uniquePaths = [...new Set((paths || []).map((value) => String(value || '').trim()).filter(Boolean))];
+    if (!uniquePaths.length) return null;
+    const chunkSize = 100;
+    for (let start = 0; start < uniquePaths.length; start += chunkSize) {
+      const chunk = uniquePaths.slice(start, start + chunkSize);
+      let lastError = null;
+      for (let attempt = 1; attempt <= 3; attempt += 1) {
+        const { error } = await state.supabase.storage.from(cfg.PRIVATE_BUCKET).remove(chunk);
+        if (!error) {
+          lastError = null;
+          break;
+        }
+        lastError = error;
+        if (attempt < 3) await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
+      }
+      if (lastError) return lastError;
+    }
+    return null;
+  }
+
   function openDeleteRoundModal(round) {
     if (!canDeleteRound()) return toast('เฉพาะผู้ดูแลระบบเท่านั้นที่ลบรอบ EQA ได้', 'danger');
     const roundName = `${round.provider || ''} ${round.round_code || ''}`.trim();
-    showModal('ลบรอบ EQA', `
+    showModal('ลบรอบ EQA ถาวร', `
       <div class="notice danger">
-        <strong>ยืนยันลบรอบ ${esc(roundName)}</strong><br>
-        รอบนี้จะถูกซ่อนออกจากหน้ารายการและรายงานทันที แต่ระบบยังเก็บข้อมูลและประวัติการใช้งานไว้ในฐานข้อมูลเพื่อการตรวจสอบย้อนหลัง
+        <strong>ยืนยันลบรอบ ${esc(roundName)} แบบถาวร</strong><br>
+        รอบนี้ ผลการปฏิบัติ ผลกลาง การอนุมัติ การประเมินความสามารถ เอกสาร และข้อมูลที่เกี่ยวข้องทั้งหมดจะถูกลบออกจากฐานข้อมูล
       </div>
       <div style="height:12px"></div>
-      <p class="muted">ใช้เมื่อต้องการลบรอบที่สร้างผิดหรือสร้างซ้ำเท่านั้น</p>
+      <p class="muted"><strong>กู้คืนไม่ได้</strong> หลังลบแล้วสามารถสร้างรอบชื่อเดิมและปีเดิมใหม่ได้</p>
     `, `
       <button class="btn btn-outline" data-close-modal>ยกเลิก</button>
-      <button class="btn btn-danger" id="confirm-delete-round" data-busy-sensitive>ยืนยันลบ</button>
+      <button class="btn btn-danger" id="confirm-delete-round" data-busy-sensitive>ลบถาวร</button>
     `);
     document.getElementById('confirm-delete-round')?.addEventListener('click', async () => {
       setBusy(true);
-      const { error } = await state.supabase.rpc('ec_archive_eqa_round', {
+      const { data, error } = await state.supabase.rpc('ec_delete_eqa_round', {
         p_round_id: round.id
       });
+      if (error) {
+        setBusy(false);
+        return toast(friendlyError(error), 'danger');
+      }
+      const storagePaths = Array.isArray(data?.storage_paths) ? data.storage_paths : [];
+      const storageError = await removeRoundStorageFiles(storagePaths);
       setBusy(false);
-      if (error) return toast(friendlyError(error), 'danger');
       closeModal();
-      toast(`ลบรอบ ${roundName} ออกจากรายการแล้ว`, 'success');
+      if (storageError) {
+        toast(`ลบรอบ ${roundName} และข้อมูลในฐานข้อมูลถาวรแล้ว แต่ไฟล์บางรายการลบไม่สำเร็จ กรุณาตรวจสอบ Storage`, 'warning', 8000);
+      } else {
+        toast(`ลบรอบ ${roundName} และข้อมูลที่เกี่ยวข้องถาวรแล้ว`, 'success', 5500);
+      }
       route();
     });
   }
