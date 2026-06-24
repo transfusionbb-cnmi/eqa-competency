@@ -1,4 +1,4 @@
-/* CNMI EQA & Competency Management System v2.0.2
+/* CNMI EQA & Competency Management System v2.0.3
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -12,6 +12,7 @@
     user: null,
     profile: null,
     roles: [],
+    activeRole: null,
     rounds: [],
     directory: [],
     currentRound: null,
@@ -19,8 +20,22 @@
   };
 
   const ROLE_LABELS = {
-    staff: 'Staff', reviewer: 'Reviewer', qm: 'QM', physician: 'Physician', admin: 'Admin', viewer: 'Viewer / Auditor'
+    staff: 'เจ้าหน้าที่ (Staff)',
+    reviewer: 'ผู้ทบทวน (Reviewer)',
+    qm: 'ผู้จัดการคุณภาพ (QM)',
+    physician: 'แพทย์ผู้รับรอง',
+    admin: 'ผู้ดูแลระบบ (Admin)',
+    viewer: 'ผู้ตรวจติดตาม (Viewer)'
   };
+  const ROLE_HELP = {
+    staff: 'ทำแบบทดสอบและบันทึกงานที่ได้รับมอบหมาย',
+    reviewer: 'ตรวจทานผลรายบุคคลและผลกลาง',
+    qm: 'บริหารรอบ EQA และอนุมัติด้านคุณภาพ',
+    physician: 'ตรวจรับรองผลในขั้นแพทย์',
+    admin: 'จัดการผู้ใช้งาน สิทธิ์ และการตั้งค่าระบบ',
+    viewer: 'อ่านรายงานและ Audit Log โดยไม่แก้ไขข้อมูล'
+  };
+  const ROLE_PRIORITY = ['admin', 'qm', 'reviewer', 'physician', 'viewer', 'staff'];
   const STATUS_LABELS = {
     preparing: 'เตรียมดำเนินการ',
     in_progress: 'กำลังดำเนินการ',
@@ -67,10 +82,39 @@
     return d.toISOString().slice(0, 10);
   }
 
-  function hasRole(...roles) { return roles.some((r) => state.roles.includes(r)); }
+  function roleStorageKey() {
+    return `cnmi_eqa_active_role_${state.user?.id || 'anonymous'}`;
+  }
+
+  function syncActiveRole() {
+    const saved = localStorage.getItem(roleStorageKey());
+    const fallback = ROLE_PRIORITY.find((role) => state.roles.includes(role)) || state.roles[0] || 'staff';
+    state.activeRole = saved && state.roles.includes(saved) ? saved : fallback;
+    localStorage.setItem(roleStorageKey(), state.activeRole);
+  }
+
+  function hasAssignedRole(...roles) { return roles.some((r) => state.roles.includes(r)); }
+  function hasRole(...roles) { return roles.includes(state.activeRole); }
   function canManage() { return hasRole('admin', 'qm'); }
   function canReview() { return hasRole('admin', 'qm', 'reviewer'); }
   function isPhysician() { return hasRole('physician', 'admin'); }
+
+  function roleOptions(selected = state.activeRole) {
+    return state.roles.map((role) => `<option value="${esc(role)}" ${role === selected ? 'selected' : ''}>${esc(ROLE_LABELS[role] || role)}</option>`).join('');
+  }
+
+  function roleChoices(currentRoles = [], lockedRoles = []) {
+    return Object.entries(ROLE_LABELS).map(([role, label]) => {
+      const locked = role === 'staff' || lockedRoles.includes(role);
+      const checked = role === 'staff' || currentRoles.includes(role);
+      const note = role === 'staff' ? ' · เป็นสิทธิ์พื้นฐานและเอาออกไม่ได้' : locked ? ' · ล็อกไว้สำหรับบัญชีที่กำลังใช้งาน' : '';
+      return `
+        <label class="role-choice">
+          <input type="checkbox" name="roles" value="${esc(role)}" ${checked ? 'checked' : ''} ${locked ? 'disabled' : ''}>
+          <span><strong>${esc(label)}</strong><span>${esc(ROLE_HELP[role] || '')}${note}</span></span>
+        </label>`;
+    }).join('');
+  }
 
   function statusBadge(status) {
     const label = STATUS_LABELS[status] || status || '-';
@@ -208,7 +252,7 @@
     state.session = session;
     state.user = session?.user || null;
     if (!state.user) {
-      state.profile = null; state.roles = [];
+      state.profile = null; state.roles = []; state.activeRole = null;
       return false;
     }
 
@@ -218,11 +262,12 @@
     ]);
     if (profileError || rolesError || !profile || profile.active === false) {
       await state.supabase.auth.signOut();
-      state.profile = null; state.roles = [];
+      state.profile = null; state.roles = []; state.activeRole = null;
       return false;
     }
     state.profile = profile;
     state.roles = (roles || []).map((r) => r.role);
+    syncActiveRole();
     return true;
   }
 
@@ -238,12 +283,13 @@
 
   function shell(content, title = '') {
     const route = currentRoute();
+    const assignedRoleBadges = state.roles.map((role) => `<span class="badge">${esc(ROLE_LABELS[role] || role)}</span>`).join('');
     return `
       <div class="app-shell">
         <aside class="sidebar" id="sidebar">
           <div class="sidebar-brand">
             <div class="brand-mark">CNMI</div>
-            <div><strong>EQA & Competency</strong><div class="small muted">v${esc(cfg.VERSION || '2.0.0')}</div></div>
+            <div><strong>EQA & Competency</strong><div class="small muted">v${esc(cfg.VERSION || '2.0.3')}</div></div>
           </div>
           <div class="nav-section">งานของฉัน</div>
           ${navItem('dashboard', '⌂', 'ภาพรวม', route)}
@@ -257,19 +303,34 @@
           ${navItem('settings', '⚙', 'ตั้งค่าของฉัน', route)}
           <div class="sidebar-footer">
             <div class="user-mini">
-              <strong>${esc(state.profile?.full_name)}</strong>
-              <span class="small">${state.roles.map((r) => ROLE_LABELS[r] || r).join(', ')}</span>
-              <button class="btn btn-outline btn-sm" id="logout-btn" style="margin-top:8px">ออกจากระบบ</button>
+              <div class="user-name-row">
+                <strong>${esc(state.profile?.full_name)}</strong>
+                <span class="badge info">ออนไลน์</span>
+              </div>
+              <div class="role-switcher">
+                <label for="active-role-select">โหมดการทำงาน</label>
+                <select class="role-select" id="active-role-select" data-role-switch ${state.roles.length <= 1 ? 'disabled' : ''}>
+                  ${roleOptions()}
+                </select>
+                <div class="role-hint">เลือกบทบาทที่กำลังปฏิบัติงาน ระบบจะเปิดปุ่มตามโหมดนี้ โดยไม่เปลี่ยนสิทธิ์จริงที่ Admin กำหนด</div>
+              </div>
+              <div class="small muted">สิทธิ์ที่ได้รับทั้งหมด</div>
+              <div class="user-role-list">${assignedRoleBadges || '<span class="badge">ไม่มี Role</span>'}</div>
+              <button class="btn btn-outline btn-sm" id="logout-btn">ออกจากระบบ</button>
             </div>
           </div>
         </aside>
+        <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
         <main class="main">
           <header class="topbar">
-            <div style="display:flex;align-items:center;gap:12px">
-              <button class="btn btn-outline mobile-menu" id="mobile-menu">☰</button>
-              <div><strong>${esc(title || cfg.APP_NAME)}</strong><div class="small muted">${esc(cfg.ORGANIZATION_NAME || '')}</div></div>
+            <div style="display:flex;align-items:center;gap:12px;min-width:0">
+              <button class="btn btn-outline mobile-menu" id="mobile-menu" aria-label="เปิดเมนู">☰</button>
+              <div style="min-width:0"><strong>${esc(title || cfg.APP_NAME)}</strong><div class="small muted">${esc(cfg.ORGANIZATION_NAME || '')}</div></div>
             </div>
-            <div class="small muted">${esc(state.profile?.username || '')}</div>
+            <div class="topbar-user">
+              <span class="active-role-badge">โหมด: ${esc(ROLE_LABELS[state.activeRole] || state.activeRole || '-')}</span>
+              <span class="small topbar-username">${esc(state.profile?.username || '')}</span>
+            </div>
           </header>
           ${content}
         </main>
@@ -277,16 +338,36 @@
   }
 
   function bindShell() {
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    const closeSidebar = () => {
+      sidebar?.classList.remove('open');
+      backdrop?.classList.remove('show');
+    };
     document.querySelectorAll('[data-nav]').forEach((b) => b.addEventListener('click', () => navigate(b.dataset.nav)));
     document.getElementById('logout-btn')?.addEventListener('click', async () => {
       await state.supabase.auth.signOut();
     });
-    document.getElementById('mobile-menu')?.addEventListener('click', () => document.getElementById('sidebar')?.classList.toggle('open'));
+    document.getElementById('mobile-menu')?.addEventListener('click', () => {
+      const isOpen = sidebar?.classList.toggle('open');
+      backdrop?.classList.toggle('show', Boolean(isOpen));
+    });
+    backdrop?.addEventListener('click', closeSidebar);
+    document.querySelectorAll('[data-role-switch]').forEach((select) => select.addEventListener('change', async (event) => {
+      const nextRole = String(event.currentTarget.value || '');
+      if (!state.roles.includes(nextRole)) return;
+      state.activeRole = nextRole;
+      localStorage.setItem(roleStorageKey(), nextRole);
+      closeSidebar();
+      toast(`เปลี่ยนโหมดเป็น ${ROLE_LABELS[nextRole] || nextRole} แล้ว`, 'success');
+      await route();
+    }));
   }
 
   function navigate(route) {
     location.hash = `#/${route}`;
     document.getElementById('sidebar')?.classList.remove('open');
+    document.getElementById('sidebar-backdrop')?.classList.remove('show');
   }
 
   async function renderForcePassword() {
@@ -865,21 +946,224 @@
     const content=`<section class="page"><div class="page-header"><div><h1>รายงาน / ทะเบียน EQA</h1><p>ใช้ Browser Print แล้วเลือก Save as PDF</p></div><button class="btn btn-primary no-print" id="print-report">พิมพ์ / Save PDF</button></div><div class="print-only"><h1>ทะเบียน EQA ประจำปี</h1><p>${esc(cfg.ORGANIZATION_NAME)}</p></div><div class="card"><div class="table-wrap"><table><thead><tr><th>ปี</th><th>ผู้ให้บริการ / รอบ</th><th>โปรแกรม</th><th>วันครบกำหนด</th><th>สถานะ</th><th>เลขเอกสาร</th></tr></thead><tbody>${(rounds||[]).map(r=>`<tr><td>${r.survey_year}</td><td>${esc(r.provider)} ${esc(r.round_code)}</td><td>${esc(r.program_name)}</td><td>${fmtDate(r.due_date)}</td><td>${STATUS_LABELS[r.status]||r.status}</td><td>${esc(r.document_number||'-')} Rev.${esc(r.document_revision||'1')}</td></tr>`).join('')}</tbody></table></div><div class="small muted" style="margin-top:12px">พิมพ์จากระบบวันที่ ${fmtDate(new Date(),true)} · เวอร์ชันระบบ ${esc(cfg.VERSION)}</div></div></section>`;appEl.innerHTML=shell(content,'รายงาน');bindShell();document.getElementById('print-report').onclick=()=>window.print();
   }
 
-  async function renderUsers() {
-    if(!hasRole('admin')){const content=`<section class="page"><div class="page-header"><div><h1>ผู้ใช้งานและสิทธิ์</h1></div></div><div class="notice warning">เฉพาะ Admin เท่านั้นที่จัดการผู้ใช้ได้</div></section>`;appEl.innerHTML=shell(content,'ผู้ใช้งาน');bindShell();return;}
-    const [{data:profiles,error},{data:roles},{data:requests}]=await Promise.all([state.supabase.from('ec_profiles').select('*').order('full_name'),state.supabase.from('ec_user_roles').select('*'),state.supabase.from('ec_profile_change_requests').select('*,ec_profiles!ec_profile_change_requests_profile_id_fkey(full_name)').eq('status','pending').order('created_at')]);if(error)return renderError(error);
-    const roleMap=new Map();(roles||[]).forEach(r=>{if(!roleMap.has(r.profile_id))roleMap.set(r.profile_id,[]);roleMap.get(r.profile_id).push(r.role);});
-    const content=`<section class="page"><div class="page-header"><div><h1>ผู้ใช้งานและสิทธิ์</h1><p>รหัสผ่านปัจจุบันไม่แสดงให้ Admin เห็น</p></div><button class="btn btn-primary" id="create-user">＋ สร้างผู้ใช้</button></div>${requests?.length?`<div class="card"><h2>คำขอเปลี่ยนข้อมูล (${requests.length})</h2>${requests.map(r=>`<div style="padding:10px 0;border-bottom:1px solid var(--line)"><strong>${esc(r.ec_profiles?.full_name)}</strong> ขอเปลี่ยนเป็น ${esc(r.requested_full_name||'')} ${esc(r.requested_email||'')}<div class="table-actions" style="margin-top:7px"><button class="btn btn-success btn-sm" data-approve-request="${r.id}">อนุมัติ</button><button class="btn btn-danger btn-sm" data-reject-request="${r.id}">ไม่อนุมัติ</button></div></div>`).join('')}</div><div style="height:16px"></div>`:''}<div class="card"><div class="table-wrap"><table><thead><tr><th>ชื่อ</th><th>Username / Email</th><th>รหัสพนักงาน</th><th>Role</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>${(profiles||[]).map(p=>`<tr><td><strong>${esc(p.full_name)}</strong><br><span class="small muted">${esc(p.position_title||'')}</span></td><td>${esc(p.username)}<br><span class="small muted">${esc(p.email)}</span></td><td>${esc(p.employee_id)}</td><td>${(roleMap.get(p.id)||[]).map(r=>`<span class="badge">${esc(r)}</span>`).join(' ')}</td><td>${p.active?'<span class="badge success">ใช้งาน</span>':'<span class="badge danger">ปิดใช้งาน</span>'}</td><td class="table-actions"><button class="btn btn-outline btn-sm" data-role-user="${p.id}">Role</button><button class="btn btn-warning btn-sm" data-reset-user="${p.id}">รีเซ็ตรหัสผ่าน</button><button class="btn ${p.active?'btn-danger':'btn-success'} btn-sm" data-toggle-user="${p.id}" data-active="${p.active}">${p.active?'ปิดใช้':'เปิดใช้'}</button></td></tr>`).join('')}</tbody></table></div></div></section>`;
-    appEl.innerHTML=shell(content,'ผู้ใช้งาน');bindShell();
-    document.getElementById('create-user').onclick=()=>openCreateUser();
-    document.querySelectorAll('[data-reset-user]').forEach(b=>b.onclick=async()=>{const reason=prompt('เหตุผลที่รีเซ็ตรหัสผ่าน');if(!reason)return;const {error}=await state.supabase.functions.invoke('admin-users',{body:{action:'reset_password',user_id:b.dataset.resetUser,reason}});if(error)return toast(error.message,'danger');toast('รีเซ็ตเป็น CNMI@รหัสพนักงานแล้ว','success');});
-    document.querySelectorAll('[data-toggle-user]').forEach(b=>b.onclick=async()=>{const active=b.dataset.active!=='true';const reason=prompt(`เหตุผลที่${active?'เปิด':'ปิด'}ใช้งานบัญชี`);if(!reason)return;const {error}=await state.supabase.functions.invoke('admin-users',{body:{action:'set_active',user_id:b.dataset.toggleUser,active,reason}});if(error)return toast(error.message,'danger');toast('อัปเดตสถานะแล้ว','success');route();});
-    document.querySelectorAll('[data-role-user]').forEach(b=>b.onclick=()=>{const current=roleMap.get(b.dataset.roleUser)||[];showModal('จัดการ Role',`<form id="role-form" class="form-grid">${Object.entries(ROLE_LABELS).map(([r,l])=>`<label><input type="checkbox" name="roles" value="${r}" ${current.includes(r)?'checked':''} ${r==='staff'?'checked disabled':''}> ${esc(l)}</label>`).join('')}</form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-roles">บันทึก</button>`);document.getElementById('save-roles').onclick=async()=>{const roles=[...document.querySelectorAll('#role-form input[name="roles"]:checked')].map(x=>x.value);const {error}=await state.supabase.functions.invoke('admin-users',{body:{action:'update_roles',user_id:b.dataset.roleUser,roles}});if(error)return toast(error.message,'danger');closeModal();toast('บันทึก Role แล้ว','success');route();};});
-    document.querySelectorAll('[data-approve-request]').forEach(b=>b.onclick=async()=>{const note=prompt('หมายเหตุการอนุมัติ')||'';const {error}=await state.supabase.functions.invoke('admin-users',{body:{action:'approve_profile_change',request_id:b.dataset.approveRequest,note}});if(error)return toast(error.message,'danger');toast('อนุมัติคำขอแล้ว','success');route();});
-    document.querySelectorAll('[data-reject-request]').forEach(b=>b.onclick=async()=>{const note=prompt('เหตุผลที่ไม่อนุมัติ');if(!note)return;const {error}=await state.supabase.functions.invoke('admin-users',{body:{action:'reject_profile_change',request_id:b.dataset.rejectRequest,note}});if(error)return toast(error.message,'danger');route();});
+  async function invokeAdminUserAction(body) {
+    const { data, error } = await state.supabase.functions.invoke('admin-users', { body });
+    if (error) throw error;
+    if (data?.error) throw new Error(data.error);
+    return data;
   }
 
-  function openCreateUser(){showModal('สร้างบัญชีผู้ใช้',`<form id="create-user-form" class="form-grid cols-2"><div class="field"><label>ชื่อ-สกุล</label><input class="input" name="full_name" required></div><div class="field"><label>รหัสพนักงาน</label><input class="input" name="employee_id" required></div><div class="field"><label>อีเมล Mahidol</label><input class="input" type="email" name="email" required placeholder="name@mahidol.ac.th"></div><div class="field"><label>Username</label><input class="input" name="username" placeholder="เว้นว่าง = ส่วนหน้าอีเมล"></div><div class="field"><label>ตำแหน่ง</label><input class="input" name="position_title"></div><div class="field"><label>Role เพิ่มเติม</label><div>${['reviewer','qm','physician','admin','viewer'].map(r=>`<label style="display:block"><input type="checkbox" name="roles" value="${r}"> ${ROLE_LABELS[r]}</label>`).join('')}</div></div></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="create-user-save">สร้างบัญชี</button>`);document.getElementById('create-user-save').onclick=async()=>{const f=document.getElementById('create-user-form');if(!f.reportValidity())return;const fd=new FormData(f);const roles=[...f.querySelectorAll('input[name="roles"]:checked')].map(x=>x.value);const {data,error}=await state.supabase.functions.invoke('admin-users',{body:{action:'create_user',full_name:String(fd.get('full_name')),employee_id:String(fd.get('employee_id')),email:String(fd.get('email')),username:String(fd.get('username')||''),position_title:String(fd.get('position_title')||''),roles}});if(error||data?.error)return toast(error?.message||data.error,'danger');closeModal();toast('สร้างบัญชีแล้ว รหัสเริ่มต้น CNMI@รหัสพนักงาน','success');route();};}
+  async function renderUsers() {
+    if (!hasRole('admin')) {
+      const content = `<section class="page">
+        <div class="page-header"><div><h1>ผู้ใช้งานและสิทธิ์</h1><p>ขณะนี้อยู่ในโหมด ${esc(ROLE_LABELS[state.activeRole] || state.activeRole)}</p></div></div>
+        <div class="notice warning">หน้านี้จัดการได้เฉพาะโหมดผู้ดูแลระบบ (Admin) กรุณาเลือกโหมดการทำงานจากเมนูด้านซ้าย</div>
+      </section>`;
+      appEl.innerHTML = shell(content, 'ผู้ใช้งาน');
+      bindShell();
+      return;
+    }
+
+    const [{ data: profiles, error }, { data: roles }, { data: requests }] = await Promise.all([
+      state.supabase.from('ec_profiles').select('*').order('full_name'),
+      state.supabase.from('ec_user_roles').select('*'),
+      state.supabase.from('ec_profile_change_requests').select('*,ec_profiles!ec_profile_change_requests_profile_id_fkey(full_name)').eq('status', 'pending').order('created_at')
+    ]);
+    if (error) return renderError(error);
+
+    const roleMap = new Map();
+    (roles || []).forEach((row) => {
+      if (!roleMap.has(row.profile_id)) roleMap.set(row.profile_id, []);
+      roleMap.get(row.profile_id).push(row.role);
+    });
+
+    const content = `<section class="page">
+      <div class="page-header">
+        <div>
+          <h1>ผู้ใช้งานและสิทธิ์</h1>
+          <p>กำหนดได้ทั้งบทบาทที่ผู้ใช้ทำงานได้ และสถานะเปิด/ปิดบัญชี โดยระบบไม่แสดงรหัสผ่านปัจจุบันให้ Admin เห็น</p>
+        </div>
+        <div class="header-actions"><button class="btn btn-primary" id="create-user">＋ สร้างผู้ใช้</button></div>
+      </div>
+      ${requests?.length ? `<div class="card">
+        <div class="card-header"><h2>คำขอเปลี่ยนข้อมูล</h2><span class="badge warning">${requests.length} รายการ</span></div>
+        ${requests.map((request) => `<div style="padding:12px 0;border-bottom:1px solid var(--line)">
+          <strong>${esc(request.ec_profiles?.full_name)}</strong>
+          <div class="small muted">ขอเปลี่ยนเป็น ${esc(request.requested_full_name || '-')} · ${esc(request.requested_email || '-')}</div>
+          <div class="table-actions" style="margin-top:8px">
+            <button class="btn btn-success btn-sm" data-approve-request="${request.id}">อนุมัติ</button>
+            <button class="btn btn-danger btn-sm" data-reject-request="${request.id}">ไม่อนุมัติ</button>
+          </div>
+        </div>`).join('')}
+      </div><div style="height:16px"></div>` : ''}
+      <div class="card">
+        <div class="table-wrap">
+          <table style="min-width:980px">
+            <thead><tr><th>ชื่อ</th><th>Username / Email</th><th>รหัสพนักงาน</th><th>บทบาทที่ได้รับ</th><th>สถานะบัญชี</th><th>จัดการ</th></tr></thead>
+            <tbody>${(profiles || []).map((profile) => {
+              const userRoles = roleMap.get(profile.id) || [];
+              return `<tr>
+                <td><strong>${esc(profile.full_name)}</strong><br><span class="small muted">${esc(profile.position_title || '-')}</span></td>
+                <td>${esc(profile.username)}<br><span class="small muted">${esc(profile.email)}</span></td>
+                <td>${esc(profile.employee_id)}</td>
+                <td><div class="role-badges">${userRoles.map((role) => `<span class="badge ${role === 'admin' ? 'info' : ''}">${esc(ROLE_LABELS[role] || role)}</span>`).join('')}</div></td>
+                <td>${profile.active ? '<span class="badge success">เปิดใช้งาน</span>' : '<span class="badge danger">ปิดใช้งาน</span>'}</td>
+                <td><div class="table-actions">
+                  <button class="btn btn-primary btn-sm" data-manage-user="${profile.id}">กำหนด Role / สถานะ</button>
+                  <button class="btn btn-warning btn-sm" data-reset-user="${profile.id}">รีเซ็ตรหัสผ่าน</button>
+                </div></td>
+              </tr>`;
+            }).join('')}</tbody>
+          </table>
+        </div>
+      </div>
+    </section>`;
+
+    appEl.innerHTML = shell(content, 'ผู้ใช้งาน');
+    bindShell();
+    document.getElementById('create-user').onclick = () => openCreateUser();
+
+    document.querySelectorAll('[data-manage-user]').forEach((button) => button.addEventListener('click', () => {
+      const target = (profiles || []).find((profile) => profile.id === button.dataset.manageUser);
+      if (!target) return;
+      const currentRoles = roleMap.get(target.id) || [];
+      const isSelf = target.id === state.user.id;
+      showModal('กำหนด Role และสถานะบัญชี', `
+        <form id="manage-user-form" class="form-grid">
+          <div class="notice"><strong>${esc(target.full_name)}</strong><br><span class="small">${esc(target.email)} · รหัสพนักงาน ${esc(target.employee_id)}</span></div>
+          <div class="field">
+            <label>บทบาทที่อนุญาตให้ปฏิบัติงาน</label>
+            <div class="role-choice-grid">${roleChoices(currentRoles, isSelf && currentRoles.includes('admin') ? ['admin'] : [])}</div>
+          </div>
+          <div class="account-status-row">
+            <div class="field">
+              <label>สถานะบัญชี</label>
+              <select class="select" name="active" ${isSelf ? 'disabled' : ''}>
+                <option value="true" ${target.active ? 'selected' : ''}>เปิดใช้งาน</option>
+                <option value="false" ${!target.active ? 'selected' : ''}>ปิดใช้งาน</option>
+              </select>
+              <div class="help">${isSelf ? 'ไม่อนุญาตให้ปิดบัญชีที่กำลังใช้งานอยู่' : 'บัญชีที่ปิดใช้งานจะเข้าสู่ระบบไม่ได้'}</div>
+            </div>
+            <div class="field">
+              <label>เหตุผลเมื่อเปลี่ยนสถานะ</label>
+              <textarea class="textarea" name="reason" placeholder="จำเป็นเมื่อเปลี่ยนจากเปิดเป็นปิด หรือปิดเป็นเปิด"></textarea>
+            </div>
+          </div>
+        </form>`, `
+        <button class="btn btn-outline" data-close-modal>ยกเลิก</button>
+        <button class="btn btn-primary" id="save-user-access">บันทึก Role และสถานะ</button>`, true);
+
+      document.getElementById('save-user-access').onclick = async () => {
+        const form = document.getElementById('manage-user-form');
+        const selectedRoles = [...form.querySelectorAll('input[name="roles"]:checked')].map((input) => input.value);
+        const nextActive = isSelf ? Boolean(target.active) : form.elements.active.value === 'true';
+        const reason = String(form.elements.reason.value || '').trim();
+        if (nextActive !== Boolean(target.active) && !reason) return toast('กรุณาระบุเหตุผลที่เปลี่ยนสถานะบัญชี', 'warning');
+        try {
+          setBusy(true);
+          await invokeAdminUserAction({ action: 'update_roles', user_id: target.id, roles: selectedRoles });
+          if (nextActive !== Boolean(target.active)) {
+            await invokeAdminUserAction({ action: 'set_active', user_id: target.id, active: nextActive, reason });
+          }
+          if (isSelf) await loadIdentity();
+          closeModal();
+          toast('บันทึก Role และสถานะแล้ว', 'success');
+          await route();
+        } catch (err) {
+          toast(err.message || String(err), 'danger');
+        } finally {
+          setBusy(false);
+        }
+      };
+    }));
+
+    document.querySelectorAll('[data-reset-user]').forEach((button) => button.addEventListener('click', async () => {
+      const reason = prompt('กรุณาระบุเหตุผลที่รีเซ็ตรหัสผ่าน');
+      if (!reason) return;
+      try {
+        await invokeAdminUserAction({ action: 'reset_password', user_id: button.dataset.resetUser, reason });
+        toast('รีเซ็ตรหัสผ่านเป็น CNMI@รหัสพนักงานแล้ว', 'success');
+      } catch (err) {
+        toast(err.message || String(err), 'danger');
+      }
+    }));
+
+    document.querySelectorAll('[data-approve-request]').forEach((button) => button.addEventListener('click', async () => {
+      const note = prompt('หมายเหตุการอนุมัติ') || '';
+      try {
+        await invokeAdminUserAction({ action: 'approve_profile_change', request_id: button.dataset.approveRequest, note });
+        toast('อนุมัติคำขอแล้ว', 'success');
+        await route();
+      } catch (err) {
+        toast(err.message || String(err), 'danger');
+      }
+    }));
+
+    document.querySelectorAll('[data-reject-request]').forEach((button) => button.addEventListener('click', async () => {
+      const note = prompt('เหตุผลที่ไม่อนุมัติ');
+      if (!note) return;
+      try {
+        await invokeAdminUserAction({ action: 'reject_profile_change', request_id: button.dataset.rejectRequest, note });
+        toast('ไม่อนุมัติคำขอแล้ว', 'success');
+        await route();
+      } catch (err) {
+        toast(err.message || String(err), 'danger');
+      }
+    }));
+  }
+
+  function openCreateUser() {
+    showModal('สร้างบัญชีผู้ใช้', `
+      <form id="create-user-form" class="form-grid cols-2">
+        <div class="field"><label>ชื่อ-สกุล</label><input class="input" name="full_name" required></div>
+        <div class="field"><label>รหัสพนักงาน</label><input class="input" name="employee_id" required></div>
+        <div class="field"><label>อีเมล Mahidol</label><input class="input" type="email" name="email" required placeholder="name@mahidol.ac.th"></div>
+        <div class="field"><label>Username</label><input class="input" name="username" placeholder="เว้นว่าง = ส่วนหน้าอีเมล"></div>
+        <div class="field"><label>ตำแหน่งงาน</label><input class="input" name="position_title"></div>
+        <div class="field"><label>สถานะเริ่มต้น</label><select class="select" name="active"><option value="true">เปิดใช้งาน</option><option value="false">ปิดใช้งานไว้ก่อน</option></select></div>
+        <div class="field" style="grid-column:1/-1">
+          <label>เลือกบทบาทที่ผู้ใช้งานทำได้</label>
+          <div class="role-choice-grid">${roleChoices([])}</div>
+        </div>
+      </form>`, `
+      <button class="btn btn-outline" data-close-modal>ยกเลิก</button>
+      <button class="btn btn-primary" id="create-user-save">สร้างบัญชี</button>`, true);
+
+    document.getElementById('create-user-save').onclick = async () => {
+      const form = document.getElementById('create-user-form');
+      if (!form.reportValidity()) return;
+      const fd = new FormData(form);
+      const roles = [...form.querySelectorAll('input[name="roles"]:checked')].map((input) => input.value);
+      const active = String(fd.get('active')) === 'true';
+      try {
+        setBusy(true);
+        const data = await invokeAdminUserAction({
+          action: 'create_user',
+          full_name: String(fd.get('full_name')),
+          employee_id: String(fd.get('employee_id')),
+          email: String(fd.get('email')),
+          username: String(fd.get('username') || ''),
+          position_title: String(fd.get('position_title') || ''),
+          roles
+        });
+        if (!active && data?.user_id) {
+          await invokeAdminUserAction({
+            action: 'set_active',
+            user_id: data.user_id,
+            active: false,
+            reason: 'สร้างบัญชีในสถานะปิดใช้งาน'
+          });
+        }
+        closeModal();
+        toast(`สร้างบัญชีแล้ว รหัสเริ่มต้นคือ CNMI@รหัสพนักงาน${active ? '' : ' และปิดใช้งานไว้ก่อน'}`, 'success');
+        await route();
+      } catch (err) {
+        toast(err.message || String(err), 'danger');
+      } finally {
+        setBusy(false);
+      }
+    };
+  }
 
   async function renderAudit(){if(!hasRole('admin','qm','viewer')){const content=`<section class="page"><div class="notice warning">ไม่มีสิทธิ์ดู Audit Log</div></section>`;appEl.innerHTML=shell(content,'Audit Log');bindShell();return;}const {data,error}=await state.supabase.from('ec_audit_logs').select('*').order('occurred_at',{ascending:false}).limit(300);if(error)return renderError(error);const content=`<section class="page"><div class="page-header"><div><h1>Audit Log</h1><p>บันทึกผู้ดำเนินการ วันเวลา ค่าก่อนและหลัง</p></div></div><div class="card"><div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>Action</th><th>ตาราง</th><th>Record</th><th>เหตุผล</th></tr></thead><tbody>${(data||[]).map(x=>`<tr><td>${fmtDate(x.occurred_at,true)}</td><td>${esc(x.action)}</td><td>${esc(x.table_name||'-')}</td><td><code>${esc(x.record_id||'-')}</code></td><td>${esc(x.reason||'-')}</td></tr>`).join('')}</tbody></table></div></div></section>`;appEl.innerHTML=shell(content,'Audit Log');bindShell();}
 
@@ -912,7 +1196,7 @@
     await loadIdentity();
     state.supabase.auth.onAuthStateChange(async(event,session)=>{
       state.session=session;state.user=session?.user||null;
-      if(event==='SIGNED_OUT'||!session){state.profile=null;state.roles=[];renderLogin();return;}
+      if(event==='SIGNED_OUT'||!session){state.profile=null;state.roles=[];state.activeRole=null;renderLogin();return;}
       await loadIdentity();await route();
     });
     window.addEventListener('hashchange',route);
