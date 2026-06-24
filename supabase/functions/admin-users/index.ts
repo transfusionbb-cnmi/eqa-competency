@@ -64,9 +64,11 @@ Deno.serve(async (req) => {
       const fullName = String(body.full_name ?? '').trim();
       const positionTitle = String(body.position_title ?? '').trim() || null;
       const username = String(body.username ?? email.split('@')[0]).trim().toLowerCase();
-      const requestedRoles: string[] = Array.isArray(body.roles) ? body.roles : ['staff'];
+      const requestedRoles: string[] = Array.isArray(body.roles) ? body.roles : [];
       const allowedRoles = ['staff', 'reviewer', 'qm', 'physician', 'admin', 'viewer'];
-      const roles = [...new Set(['staff', ...requestedRoles.filter((r) => allowedRoles.includes(r))])];
+      const roles = [...new Set(requestedRoles.filter((r) => allowedRoles.includes(r)))];
+      if ((roles.includes('reviewer') || roles.includes('qm')) && !roles.includes('staff')) roles.unshift('staff');
+      if (roles.length === 0) return json({ error: 'กรุณาเลือกอย่างน้อย 1 บทบาท' }, 400);
 
       if (!isMahidolEmail(email)) return json({ error: 'ต้องใช้อีเมล @mahidol.ac.th' }, 400);
       if (!employeeId || !fullName) return json({ error: 'กรุณากรอกรหัสพนักงานและชื่อ-สกุล' }, 400);
@@ -198,8 +200,10 @@ Deno.serve(async (req) => {
       const userId = String(body.user_id ?? '');
       const requestedRoles: string[] = Array.isArray(body.roles) ? body.roles : [];
       const allowedRoles = ['staff', 'reviewer', 'qm', 'physician', 'admin', 'viewer'];
-      const roles = [...new Set(['staff', ...requestedRoles.filter((r) => allowedRoles.includes(r))])];
+      const roles = [...new Set(requestedRoles.filter((r) => allowedRoles.includes(r)))];
+      if ((roles.includes('reviewer') || roles.includes('qm')) && !roles.includes('staff')) roles.unshift('staff');
       if (!userId) return json({ error: 'Missing user_id' }, 400);
+      if (roles.length === 0) return json({ error: 'กรุณาเลือกอย่างน้อย 1 บทบาท' }, 400);
 
       await admin.from('ec_user_roles').delete().eq('profile_id', userId);
       const { error } = await admin.from('ec_user_roles').insert(
