@@ -878,11 +878,9 @@
     `);
     document.getElementById('confirm-delete-round')?.addEventListener('click', async () => {
       setBusy(true);
-      const { error } = await state.supabase.from('ec_eqa_rounds').update({
-        status: 'cancelled',
-        archived_at: new Date().toISOString(),
-        updated_by: state.user.id
-      }).eq('id', round.id);
+      const { error } = await state.supabase.rpc('ec_archive_eqa_round', {
+        p_round_id: round.id
+      });
       setBusy(false);
       if (error) return toast(friendlyError(error), 'danger');
       closeModal();

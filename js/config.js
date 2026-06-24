@@ -10,5 +10,5 @@ window.CNMI_CONFIG = {
   MAHIDOL_EMAIL_DOMAIN: 'mahidol.ac.th',
   PRIVATE_BUCKET: 'eqa-competency-private',
   DEFAULT_DOMAIN: 'https://eqa-competency.cnmiblood.com',
-  VERSION: '2.0.6'
+  VERSION: '2.0.7'
 };
