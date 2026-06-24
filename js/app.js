@@ -260,6 +260,7 @@
   function hasAssignedRole(...roles) { return roles.some((r) => state.roles.includes(r)); }
   function hasRole(...roles) { return roles.includes(state.activeRole); }
   function canManage() { return hasRole('admin', 'qm'); }
+  function canDeleteRound() { return hasRole('admin'); }
   function canReview() { return hasRole('admin', 'qm', 'reviewer'); }
   function isPhysician() { return hasRole('physician'); }
   function canReceiveEqa() { return hasRole('staff', 'qm', 'admin'); }
@@ -861,6 +862,35 @@
     });
   }
 
+  function openDeleteRoundModal(round) {
+    if (!canDeleteRound()) return toast('เฉพาะผู้ดูแลระบบเท่านั้นที่ลบรอบ EQA ได้', 'danger');
+    const roundName = `${round.provider || ''} ${round.round_code || ''}`.trim();
+    showModal('ลบรอบ EQA', `
+      <div class="notice danger">
+        <strong>ยืนยันลบรอบ ${esc(roundName)}</strong><br>
+        รอบนี้จะถูกซ่อนออกจากหน้ารายการและรายงานทันที แต่ระบบยังเก็บข้อมูลและประวัติการใช้งานไว้ในฐานข้อมูลเพื่อการตรวจสอบย้อนหลัง
+      </div>
+      <div style="height:12px"></div>
+      <p class="muted">ใช้เมื่อต้องการลบรอบที่สร้างผิดหรือสร้างซ้ำเท่านั้น</p>
+    `, `
+      <button class="btn btn-outline" data-close-modal>ยกเลิก</button>
+      <button class="btn btn-danger" id="confirm-delete-round" data-busy-sensitive>ยืนยันลบ</button>
+    `);
+    document.getElementById('confirm-delete-round')?.addEventListener('click', async () => {
+      setBusy(true);
+      const { error } = await state.supabase.from('ec_eqa_rounds').update({
+        status: 'cancelled',
+        archived_at: new Date().toISOString(),
+        updated_by: state.user.id
+      }).eq('id', round.id);
+      setBusy(false);
+      if (error) return toast(friendlyError(error), 'danger');
+      closeModal();
+      toast(`ลบรอบ ${roundName} ออกจากรายการแล้ว`, 'success');
+      route();
+    });
+  }
+
   async function renderRounds() {
     let rounds;
     try { rounds = await loadRounds(); } catch (e) { return renderError(e); }
@@ -876,7 +906,7 @@
           ${rounds.length ? `<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>โปรแกรม / ชุดตัวอย่าง</th><th>ครบกำหนด</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>
             ${rounds.map((r) => `<tr><td><strong>${esc(r.provider)} ${esc(r.round_code)}</strong> ${isHistoricalRound(r) ? '<span class="badge info">ข้อมูลย้อนหลัง</span>' : ''}<br><span class="small muted">ปี ${esc(r.survey_year)}</span></td>
             <td>${esc(r.program_name)}<br><span class="small muted">${esc(r.program_code || '-')} · ชุดตัวอย่าง ${esc(r.kit_number || '-')}</span></td>
-            <td>${fmtDate(r.due_date)}</td><td>${statusBadge(r.status)}</td><td class="table-actions"><button class="btn btn-primary btn-sm" data-open-round="${r.id}">เปิดรอบ</button>${canManage() ? `<button class="btn btn-outline btn-sm" data-edit-round="${r.id}">แก้ไข</button>` : ''}</td></tr>`).join('')}
+            <td>${fmtDate(r.due_date)}</td><td>${statusBadge(r.status)}</td><td class="table-actions"><button class="btn btn-primary btn-sm" data-open-round="${r.id}">เปิดรอบ</button>${canManage() ? `<button class="btn btn-outline btn-sm" data-edit-round="${r.id}">แก้ไข</button>` : ''}${canDeleteRound() ? `<button class="btn btn-danger btn-sm" data-delete-round="${r.id}">ลบ</button>` : ''}</td></tr>`).join('')}
           </tbody></table></div>` : empty('ยังไม่มีรอบ EQA')}
         </div>
       </section>`;
@@ -890,6 +920,10 @@
       if (!target) return;
       if (isHistoricalRound(target)) openHistoricalRoundModal(target);
       else openRoundModal(target);
+    }));
+    document.querySelectorAll('[data-delete-round]').forEach((b) => b.addEventListener('click', () => {
+      const target = rounds.find((r) => r.id === b.dataset.deleteRound);
+      if (target) openDeleteRoundModal(target);
     }));
   }
 
