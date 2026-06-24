@@ -1101,7 +1101,8 @@
     const uploadAllowed = canManage() || canReview() || round.receiver_id === state.user.id || await isAssigned(round.id);
     return `<div class="card">
       <div class="card-header"><div><h2>เอกสารและภาพ</h2><div class="small muted">ไฟล์เก็บไว้ในพื้นที่ส่วนตัวของระบบ ไม่ได้เก็บไว้ใน GitHub</div></div>
-      ${uploadAllowed ? `<button class="btn btn-primary" id="upload-doc-btn">＋ อัปโหลดไฟล์</button>` : ''}</div>
+      <div class="table-actions">${canManage() ? `<button class="btn btn-success" id="go-auto-competency">สร้าง Competency จากไฟล์</button>` : ''}${uploadAllowed ? `<button class="btn btn-primary" id="upload-doc-btn">＋ อัปโหลดไฟล์</button>` : ''}</div></div>
+      ${canManage() ? `<div class="notice info"><strong>ไฟล์ที่ใช้สร้างข้อสอบอัตโนมัติ</strong><br>ภาพผลทดสอบดิบ · คู่มือหรือคำแนะนำ · เอกสารต้นฉบับจากผู้ให้บริการ<br><span class="small">เมื่ออัปโหลดรายงานผลประเมินอย่างเป็นทางการแล้ว ระบบจะสร้างเฉลยและสรุปเพิ่มได้</span></div><div style="height:12px"></div>` : ''}
       ${(docs || []).length ? `<div class="table-wrap"><table><thead><tr><th>ประเภท</th><th>ชื่อ</th><th>ผู้ที่เปิดดูได้</th><th>วันที่อัปโหลด</th><th>จัดการ</th></tr></thead><tbody>
         ${(docs || []).map((d) => {
           const canEditDocument = canManage() || d.uploaded_by === state.user.id;
@@ -1473,15 +1474,36 @@
   }
 
   async function roundCompetency(round) {
-    const [{ data: questions }, { data: assignments }, { data: imageDocuments }, directory] = await Promise.all([
+    const [
+      { data: questions, error: questionError },
+      { data: assignments, error: assignmentError },
+      { data: documents, error: documentError },
+      { data: keys, error: keyError },
+      { data: generationRuns, error: runError },
+      directory
+    ] = await Promise.all([
       state.supabase.from('ec_questions').select('*, ec_question_choices(*)').eq('round_id', round.id).order('question_order'),
       state.supabase.from('ec_competency_assignments').select('*').eq('round_id', round.id).order('created_at'),
-      state.supabase.from('ec_round_documents').select('id,title,file_name,mime_type,visibility').eq('round_id', round.id).like('mime_type', 'image/%').order('created_at', { ascending: false }),
+      state.supabase.from('ec_round_documents').select('id,title,file_name,mime_type,visibility,category').eq('round_id', round.id).is('archived_at', null).order('created_at', { ascending: false }),
+      state.supabase.from('ec_question_answer_keys').select('question_id,correct_choice_ids,answer_key_json,explanation'),
+      state.supabase.from('ec_ai_generation_runs').select('*').eq('round_id', round.id).order('created_at', { ascending: false }).limit(5),
       loadDirectory()
     ]);
+    if (questionError || assignmentError || documentError || keyError || runError) throw (questionError || assignmentError || documentError || keyError || runError);
+
     const name = (id) => directory.find((p) => p.id === id)?.full_name || id;
-    const imageName = (id) => (imageDocuments || []).find((doc) => doc.id === id)?.title || '';
+    const imageName = (id) => (documents || []).find((doc) => doc.id === id)?.title || '';
+    const keyMap = new Map((keys || []).map((key) => [key.question_id, key]));
+    const sourceCategories = new Set(['source_document','instruction','raw_result_image']);
+    const sourceDocs = (documents || []).filter((doc) => sourceCategories.has(doc.category));
+    const officialDocs = (documents || []).filter((doc) => doc.category === 'official_result');
+    const latestRun = generationRuns?.[0] || null;
     const canCreateCompetency = canManage() && (!isHistoricalRound(round) || round.historical_review_status === 'qm_certified');
+    const closePassed = round.competency_close_at && new Date(round.competency_close_at).getTime() < Date.now();
+    const windowText = round.competency_close_at
+      ? `${round.competency_open_at ? `เปิด ${fmtDate(round.competency_open_at, true)} · ` : ''}ปิด ${fmtDate(round.competency_close_at, true)}`
+      : 'ยังไม่ได้กำหนดวันปิด Competency';
+
     const actionFor = (assignment) => {
       if (hasRole('reviewer')) {
         const canReviewQuiz = assignment.assignment_type === 'quiz' && assignment.status === 'submitted';
@@ -1493,17 +1515,48 @@
       }
       return '<span class="small muted">รอตามลำดับงาน</span>';
     };
+
+    const aiNotice = canManage() ? `<div class="notice info">
+      <strong>สร้างจากไฟล์อัตโนมัติ</strong><br>
+      ระบบใช้เฉพาะ “ภาพผลทดสอบดิบ”, “คู่มือหรือคำแนะนำ” และ “เอกสารต้นฉบับจากผู้ให้บริการ” เพื่อสร้างข้อสอบฉบับร่าง
+      ${officialDocs.length ? ' และพบรายงานผลประเมินอย่างเป็นทางการแล้ว จึงสามารถสร้างเฉลยและสรุปได้' : ' ส่วนเฉลยจะสร้างเมื่ออัปโหลดรายงานผลประเมินอย่างเป็นทางการ'}
+      <div class="small" style="margin-top:6px">ไฟล์ต้นทาง ${sourceDocs.length} รายการ · รายงานผลอย่างเป็นทางการ ${officialDocs.length} รายการ</div>
+    </div><div style="height:12px"></div>` : '';
+
     return `<div class="grid cols-2">
-      <div class="card"><div class="card-header"><div><h2>ข้อสอบ</h2><div class="small muted">เผยแพร่คำถามหลังห้องส่งผลให้ผู้ให้บริการ และก่อนเปิดเฉลย</div></div>${canManage() ? `<button class="btn btn-primary" id="add-question">＋ เพิ่มคำถาม</button>` : ''}</div>
-        ${(questions || []).length ? questions.map((q) => `<div style="padding:12px 0;border-bottom:1px solid var(--line)"><span class="badge ${q.published?'success':'warning'}">${q.published?'เผยแพร่':'ฉบับร่าง'}</span> <strong>${q.question_order}. ${esc(q.prompt)}</strong><br><span class="small muted">${esc(labelFrom(QUESTION_TYPE_LABELS, q.question_type))} · ${q.points} คะแนน ${q.is_critical?'· ข้อสำคัญ':''}${q.image_document_id ? ` · รูป: ${esc(imageName(q.image_document_id) || 'ไฟล์รูป')}` : ''}</span>${canManage()?`<div style="margin-top:7px"><button class="btn btn-outline btn-sm" data-edit-question="${q.id}">แก้ไข</button></div>`:''}</div>`).join('') : empty('ยังไม่มีคำถาม')}
+      <div class="card">
+        <div class="card-header"><div><h2>ข้อสอบ</h2><div class="small muted">AI สร้างเป็นฉบับร่างก่อน ผู้จัดการคุณภาพตรวจแล้วค่อยเผยแพร่</div></div></div>
+        ${aiNotice}
+        ${canManage() ? `<div class="table-actions" style="margin-bottom:14px;flex-wrap:wrap">
+          <button class="btn btn-primary" id="ai-generate-questions" ${sourceDocs.length ? '' : 'disabled'}>สร้างข้อสอบอัตโนมัติจากไฟล์</button>
+          <button class="btn btn-success" id="ai-generate-answers" ${officialDocs.length && (questions || []).length ? '' : 'disabled'}>สร้างเฉลยและสรุปจากรายงานผล</button>
+          <button class="btn btn-outline" id="publish-all-questions" ${(questions || []).length ? '' : 'disabled'}>เผยแพร่ข้อสอบทั้งหมด</button>
+          <button class="btn btn-outline" id="add-question">＋ เพิ่มเอง</button>
+        </div>` : ''}
+        ${latestRun ? `<div class="small muted" style="margin-bottom:10px">การสร้างล่าสุด: ${latestRun.generation_type === 'questions' ? 'ข้อสอบ' : 'เฉลยและสรุป'} · ${latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' ? 'ไม่สำเร็จ' : 'กำลังประมวลผล'} · ${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}</div>` : ''}
+        ${(questions || []).length ? questions.map((q) => {
+          const key = keyMap.get(q.id);
+          const hasKey = Boolean(key?.correct_choice_ids?.length || key?.answer_key_json?.text);
+          return `<div style="padding:12px 0;border-bottom:1px solid var(--line)">
+            <span class="badge ${q.published?'success':'warning'}">${q.published?'เผยแพร่':'ฉบับร่าง'}</span>
+            ${q.generated_by_ai ? '<span class="badge info">สร้างจากไฟล์</span>' : ''}
+            <span class="badge ${hasKey?'success':'warning'}">${hasKey?'มีเฉลย':'รอเฉลย'}</span>
+            <strong>${q.question_order}. ${esc(q.prompt)}</strong><br>
+            <span class="small muted">${esc(labelFrom(QUESTION_TYPE_LABELS, q.question_type))} · ${q.points} คะแนน ${q.is_critical?'· ข้อสำคัญ':''}${q.image_document_id ? ` · รูป: ${esc(imageName(q.image_document_id) || 'ไฟล์รูป')}` : ''}</span>
+            ${canManage()?`<div class="table-actions" style="margin-top:7px"><button class="btn btn-outline btn-sm" data-edit-question="${q.id}">แก้ไข</button><button class="btn btn-danger btn-sm" data-delete-question="${q.id}" data-question-label="${esc(`${q.question_order}. ${q.prompt}`)}">ลบ</button></div>`:''}
+          </div>`;
+        }).join('') : empty('ยังไม่มีคำถาม')}
       </div>
-      <div class="card"><div class="card-header"><div><h2>การมอบหมายและตรวจประเมิน</h2><div class="small muted">ผู้ปฏิบัติจริงประเมินจากการทำงาน เจ้าหน้าที่คนอื่นทำแบบทดสอบ ผู้ทบทวนตรวจด่านแรก แล้วผู้จัดการคุณภาพรับรอง</div></div>${canCreateCompetency?`<button class="btn btn-primary" id="assign-all-competency">สร้างรายการประเมิน</button>`:''}</div>
-        ${isHistoricalRound(round) && round.historical_review_status !== 'qm_certified' ? `<div class="notice warning">ต้องให้ผู้ปฏิบัติทั้งสองคนยืนยัน ผู้ทบทวนตรวจ และผู้จัดการคุณภาพรับรองข้อมูลย้อนหลังให้ครบก่อน จึงจะสร้างรายการประเมินได้</div><div style="height:12px"></div>` : ''}
+      <div class="card">
+        <div class="card-header"><div><h2>การมอบหมายและตรวจประเมิน</h2><div class="small muted">ผู้ปฏิบัติจริงประเมินจากการทำงาน เจ้าหน้าที่คนอื่นทำแบบทดสอบ</div></div>${canCreateCompetency?`<button class="btn btn-primary" id="assign-all-competency">สร้างรายการประเมิน</button>`:''}</div>
+        <div class="notice ${closePassed ? 'danger' : 'info'}"><strong>${closePassed ? 'ปิดรับคำตอบแล้ว' : 'ช่วงเวลาทำ Competency'}</strong><br>${esc(windowText)}${canManage() ? `<div style="margin-top:8px"><button class="btn btn-outline btn-sm" id="set-competency-window">กำหนด/แก้ไขวันเปิด–ปิด</button></div>` : ''}</div>
+        <div style="height:12px"></div>
+        ${isHistoricalRound(round) && round.historical_review_status !== 'qm_certified' ? `<div class="notice warning">ต้องให้ผู้ปฏิบัติ ผู้ทบทวน และผู้จัดการคุณภาพรับรองข้อมูลย้อนหลังให้ครบก่อน จึงจะสร้างรายการประเมินได้</div><div style="height:12px"></div>` : ''}
+        ${isHistoricalRound(round) && round.historical_review_status === 'qm_certified' ? `<div class="notice">รอบย้อนหลัง: สร้างข้อสอบและเฉลยจากไฟล์ได้ทันที แล้วกำหนดวันที่ปิดรับคำตอบของน้อง ๆ ก่อนสร้างรายการประเมิน</div><div style="height:12px"></div>` : ''}
         ${(assignments || []).length ? `<div class="table-wrap"><table style="min-width:760px"><thead><tr><th>ชื่อ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${assignments.map((a)=>`<tr><td>${esc(name(a.user_id))}</td><td>${esc(labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${assignmentBadge(a.status)}</td><td>${a.score ?? '-'}</td><td><div class="table-actions">${actionFor(a)}</div></td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่ได้สร้างรายการประเมิน')}
       </div>
     </div>`;
   }
-
   function bindRoundTab(round, tab) {
     if (tab === 'overview') {
       document.getElementById('edit-current-round')?.addEventListener('click', () => openRoundModal(round));
@@ -1593,6 +1646,7 @@
   }
 
   function bindDocuments(round) {
+    document.getElementById('go-auto-competency')?.addEventListener('click', () => navigate(`round/${round.id}/competency`));
     const acceptedTypes = new Set(['application/pdf','image/jpeg','image/png','image/webp']);
     const validateFile = (file) => {
       if (!(file instanceof File) || !file.size) return null;
@@ -1624,7 +1678,36 @@
           await state.supabase.storage.from(cfg.PRIVATE_BUCKET).remove([path]);
           return toast(friendlyError(ins.error), 'danger');
         }
-        closeModal(); toast('อัปโหลดเรียบร้อย', 'success'); route();
+        closeModal();
+        if (category === 'official_result' && canManage() && confirm('อัปโหลดรายงานผลอย่างเป็นทางการแล้ว ต้องการให้ระบบสร้างเฉลยและสรุปจากไฟล์นี้ตอนนี้เลยหรือไม่')) {
+          try {
+            setBusy(true);
+            const { data, error } = await state.supabase.functions.invoke('generate-competency', { body: { action: 'generate_answers', round_id: round.id } });
+            if (error) {
+              let detail = error.message || 'สร้างเฉลยไม่สำเร็จ';
+              try {
+                const payload = error.context && typeof error.context.json === 'function' ? await error.context.json() : null;
+                if (payload?.error) detail = payload.error;
+              } catch (_) { /* use original message */ }
+              throw new Error(detail);
+            }
+            if (data?.error) throw new Error(data.error);
+            toast(`อัปโหลดแล้ว และสร้างเฉลย ${data?.generated_count || 0} ข้อพร้อมสรุปเรียบร้อย กรุณาตรวจทานก่อนเปิดเผย`, 'success');
+            navigate(`round/${round.id}/competency`);
+          } catch (generationError) {
+            toast(`อัปโหลดไฟล์สำเร็จ แต่ยังสร้างเฉลยไม่ได้: ${friendlyError(generationError)}`, 'warning');
+            route();
+          } finally {
+            setBusy(false);
+          }
+          return;
+        }
+        const nextHint = ['source_document','instruction','raw_result_image'].includes(category)
+          ? ' อัปโหลดไฟล์ต้นทางแล้ว เมื่อครบให้กด “สร้าง Competency จากไฟล์”'
+          : category === 'official_result'
+            ? ' อัปโหลดรายงานผลแล้ว ไปหัวข้อ 10 เพื่อสร้างเฉลยและสรุปอัตโนมัติ'
+            : '';
+        toast(`อัปโหลดเรียบร้อย${nextHint}`, 'success'); route();
       });
     });
 
@@ -1801,6 +1884,20 @@
   }
 
   function bindCompetencyAdmin(round) {
+    const invokeCompetencyAI = async (body) => {
+      const { data, error } = await state.supabase.functions.invoke('generate-competency', { body });
+      if (error) {
+        let detail = error.message || 'เรียกบริการสร้าง Competency ไม่สำเร็จ';
+        try {
+          const payload = error.context && typeof error.context.json === 'function' ? await error.context.json() : null;
+          if (payload?.error) detail = payload.error;
+        } catch (_) { /* use the original error message */ }
+        throw new Error(detail);
+      }
+      if (data?.error) throw new Error(data.error);
+      return data;
+    };
+
     const openQuestion = async (row = null) => {
       let choices = [];
       let key = null;
@@ -1822,14 +1919,15 @@
         : '<option value="">ยังไม่มีไฟล์รูปในหัวข้อ 2. เอกสาร/ภาพ</option>';
       showModal(row ? 'แก้ไขคำถาม' : 'เพิ่มคำถาม', `<form id="question-form" class="form-grid cols-2">
         <input type="hidden" name="id" value="${esc(row?.id || '')}">
+        ${row?.generated_by_ai ? '<div class="notice info" style="grid-column:1/-1">คำถามนี้สร้างจากไฟล์อัตโนมัติ กรุณาตรวจข้อความ ตัวเลือก และเฉลยก่อนเผยแพร่</div>' : ''}
         <div class="field"><label>ลำดับ</label><input class="input" type="number" name="order" required value="${esc(row?.question_order || 1)}"></div>
         <div class="field"><label>หัวข้อ</label><input class="input" name="section" value="${esc(row?.section || '')}"></div>
         <div class="field"><label>ประเภท</label><select class="select" name="type">${Object.entries(QUESTION_TYPE_LABELS).map(([value,label])=>`<option value="${value}" ${row?.question_type===value?'selected':''}>${esc(label)}</option>`).join('')}</select></div>
         <div class="field"><label>คะแนน</label><input class="input" type="number" step="0.1" name="points" value="${esc(row?.points || 1)}"></div>
         <div class="field" style="grid-column:1/-1"><label>คำถาม</label><textarea class="textarea" name="prompt" required>${esc(row?.prompt || '')}</textarea></div>
-        <div class="field" style="grid-column:1/-1"><label>รูปประกอบจากหัวข้อ 2. เอกสาร/ภาพ</label><select class="select" name="image_document_id">${imageOptions}</select><div class="help">เลือกภาพที่อัปโหลดไว้แล้วได้ทันที เมื่อใช้เป็นรูปข้อสอบ ระบบจะตั้งสิทธิ์ไฟล์เป็น “บุคลากรทุกคน” เพื่อให้ผู้ทำแบบทดสอบเปิดดูได้</div></div>
-        <div class="field" style="grid-column:1/-1"><label>ตัวเลือก (หนึ่งบรรทัดต่อหนึ่งตัวเลือก)</label><textarea class="textarea" name="choices">${esc(choices.map((choice) => choice.choice_text).join('\n'))}</textarea><div class="help">ใช้เมื่อเลือกประเภท “เลือกคำตอบเดียว”</div></div>
-        <div class="field"><label>ลำดับตัวเลือกที่ถูก</label><input class="input" type="number" name="correct" min="1" value="${correctIndex >= 0 ? correctIndex + 1 : ''}"></div>
+        <div class="field" style="grid-column:1/-1"><label>รูปประกอบจากหัวข้อ 2. เอกสาร/ภาพ</label><select class="select" name="image_document_id">${imageOptions}</select><div class="help">เมื่อใช้เป็นรูปข้อสอบ ระบบจะตั้งสิทธิ์ไฟล์เป็น “บุคลากรทุกคน”</div></div>
+        <div class="field" style="grid-column:1/-1"><label>ตัวเลือก (หนึ่งบรรทัดต่อหนึ่งตัวเลือก)</label><textarea class="textarea" name="choices">${esc(choices.map((choice) => choice.choice_text).join('\n'))}</textarea></div>
+        <div class="field"><label>ลำดับตัวเลือกที่ถูก</label><input class="input" type="number" name="correct" min="1" value="${correctIndex >= 0 ? correctIndex + 1 : ''}"><div class="help">เว้นว่างได้จนกว่าจะได้รับรายงานผลอย่างเป็นทางการ</div></div>
         <div class="field"><label>คำอธิบายเฉลย</label><input class="input" name="explanation" value="${esc(key?.explanation || '')}"></div>
         <label><input type="checkbox" name="critical" ${row?.is_critical?'checked':''}> ข้อสำคัญ</label>
         <label><input type="checkbox" name="published" ${row?.published?'checked':''}> เผยแพร่คำถาม</label>
@@ -1880,29 +1978,134 @@
         closeModal(); toast('บันทึกคำถามแล้ว', 'success'); route();
       });
     };
+
+    const openWindowModal = (afterSave = null) => {
+      const defaultOpen = round.competency_open_at || new Date().toISOString();
+      const defaultClose = round.competency_close_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+      showModal(isHistoricalRound(round) ? 'กำหนดวันปิด Competency สำหรับข้อมูลย้อนหลัง' : 'กำหนดช่วงเวลาทำ Competency', `<form id="competency-window-form" class="form-grid cols-2">
+        <div class="field"><label>วันและเวลาเปิด</label><input class="input" type="datetime-local" name="open_at" required value="${fmtDateTimeInput(defaultOpen)}"></div>
+        <div class="field"><label>วันและเวลาปิดรับคำตอบ</label><input class="input" type="datetime-local" name="close_at" required value="${fmtDateTimeInput(defaultClose)}"></div>
+        <div class="notice" style="grid-column:1/-1">เมื่อเลยเวลาปิด เจ้าหน้าที่ที่ยังไม่ส่งจะไม่สามารถเริ่มหรือส่งคำตอบได้ ผู้ดูแลสามารถขยายเวลาได้ภายหลัง</div>
+      </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-competency-window">บันทึกช่วงเวลา</button>`);
+      document.getElementById('save-competency-window').addEventListener('click', async () => {
+        const form = document.getElementById('competency-window-form'); if (!form.reportValidity()) return;
+        const fd = new FormData(form);
+        const openAt = new Date(String(fd.get('open_at')));
+        const closeAt = new Date(String(fd.get('close_at')));
+        if (Number.isNaN(openAt.getTime()) || Number.isNaN(closeAt.getTime())) return toast('วันเวลาไม่ถูกต้อง', 'warning');
+        if (closeAt <= openAt) return toast('วันปิดต้องอยู่หลังวันเปิด', 'warning');
+        const { error } = await state.supabase.rpc('ec_set_competency_window', { p_round_id: round.id, p_open_at: openAt.toISOString(), p_close_at: closeAt.toISOString() });
+        if (error) return toast(friendlyError(error), 'danger');
+        closeModal();
+        if (typeof afterSave === 'function') await afterSave();
+        else { toast('บันทึกช่วงเวลาทำ Competency แล้ว', 'success'); route(); }
+      });
+    };
+
     document.getElementById('add-question')?.addEventListener('click', () => openQuestion());
     document.querySelectorAll('[data-edit-question]').forEach((button) => button.addEventListener('click', async () => {
       const { data, error } = await state.supabase.from('ec_questions').select('*').eq('id', button.dataset.editQuestion).single();
       if (error) return toast(friendlyError(error), 'danger');
       openQuestion(data);
     }));
+    document.querySelectorAll('[data-delete-question]').forEach((button) => button.addEventListener('click', () => {
+      showModal('ลบคำถาม', `<div class="notice danger"><strong>ยืนยันลบคำถาม</strong><br>${esc(button.dataset.questionLabel || '')}</div><div style="height:12px"></div><div class="small muted">หากมีเจ้าหน้าที่ตอบข้อนี้แล้ว ระบบจะไม่อนุญาตให้ลบ เพื่อรักษาหลักฐานเดิม</div>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-danger" id="confirm-delete-question">ยืนยันลบ</button>`);
+      document.getElementById('confirm-delete-question').addEventListener('click', async () => {
+        const { error } = await state.supabase.rpc('ec_delete_question', { p_question_id: button.dataset.deleteQuestion });
+        if (error) return toast(friendlyError(error), 'danger');
+        closeModal(); toast('ลบคำถามแล้ว', 'success'); route();
+      });
+    }));
+
+    document.getElementById('ai-generate-questions')?.addEventListener('click', () => {
+      showModal('สร้างข้อสอบอัตโนมัติจากไฟล์', `<form id="ai-question-form" class="form-grid">
+        <div class="notice info"><strong>ระบบจะอ่านเฉพาะ 3 ประเภทเอกสาร</strong><br>ภาพผลทดสอบดิบ · คู่มือหรือคำแนะนำ · เอกสารต้นฉบับจากผู้ให้บริการ</div>
+        <div class="field"><label>จำนวนข้อโดยประมาณ</label><input class="input" type="number" name="question_count" min="3" max="25" value="12" required></div>
+        <label><input type="checkbox" name="replace_drafts" checked> แทนที่เฉพาะข้อสอบฉบับร่างที่ AI เคยสร้างไว้ (ไม่แตะข้อที่เพิ่มเองหรือเผยแพร่แล้ว)</label>
+        <label><input type="checkbox" name="confirm_privacy" required> ยืนยันว่าไฟล์ไม่มีชื่อผู้ป่วย HN หรือข้อมูลส่วนบุคคลที่ไม่ควรส่งไปประมวลผล</label>
+        <label><input type="checkbox" name="generate_answers" ${isHistoricalRound(round) ? 'checked' : ''}> เมื่อสร้างข้อสอบเสร็จ ให้สร้างเฉลยและสรุปต่อทันที หากมีรายงานผลประเมินอย่างเป็นทางการ</label>
+        <div class="small muted">ข้อสอบที่สร้างจะเป็น “ฉบับร่าง” และยังไม่เปิดให้น้องทำจนกว่าจะกดเผยแพร่</div>
+      </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="confirm-ai-generate">เริ่มสร้าง</button>`, true);
+      document.getElementById('confirm-ai-generate').addEventListener('click', async () => {
+        const form = document.getElementById('ai-question-form'); if (!form.reportValidity()) return;
+        const fd = new FormData(form);
+        try {
+          setBusy(true);
+          const result = await invokeCompetencyAI({
+            action: 'generate_questions',
+            round_id: round.id,
+            question_count: Number(fd.get('question_count') || 12),
+            replace_ai_drafts: fd.get('replace_drafts') === 'on'
+          });
+          let message = `สร้างข้อสอบฉบับร่าง ${result.generated_count || 0} ข้อแล้ว`;
+          if (fd.get('generate_answers') === 'on') {
+            try {
+              const answerResult = await invokeCompetencyAI({ action: 'generate_answers', round_id: round.id });
+              message += ` และสร้างเฉลย ${answerResult.generated_count || 0} ข้อพร้อมสรุปแล้ว`;
+            } catch (answerError) {
+              message += ' แต่ยังสร้างเฉลยไม่ได้ กรุณาตรวจว่ามีรายงานผลประเมินอย่างเป็นทางการแล้ว';
+            }
+          }
+          closeModal(); toast(message, 'success'); route();
+        } catch (error) {
+          toast(friendlyError(error), 'danger');
+        } finally {
+          setBusy(false);
+        }
+      });
+    });
+
+    document.getElementById('ai-generate-answers')?.addEventListener('click', async () => {
+      if (!confirm('ให้ระบบอ่านรายงานผลประเมินอย่างเป็นทางการ แล้วสร้างเฉลยและสรุปผลหรือไม่? ข้อมูลจะยังไม่เปิดให้น้องเห็นจนกว่าจะกดเปิดผลและเฉลย')) return;
+      try {
+        setBusy(true);
+        const result = await invokeCompetencyAI({ action: 'generate_answers', round_id: round.id });
+        toast(`สร้างเฉลย ${result.generated_count || 0} ข้อและสรุปผลแล้ว กรุณาตรวจทานก่อนเปิดเผย`, 'success');
+        route();
+      } catch (error) {
+        toast(friendlyError(error), 'danger');
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    document.getElementById('publish-all-questions')?.addEventListener('click', async () => {
+      if (!confirm('ยืนยันเผยแพร่ข้อสอบทั้งหมดหรือไม่ เจ้าหน้าที่ที่ได้รับมอบหมายจะเห็นคำถามทันทีตามช่วงเวลาที่กำหนด')) return;
+      const { data, error } = await state.supabase.rpc('ec_publish_all_questions', { p_round_id: round.id });
+      if (error) return toast(friendlyError(error), 'danger');
+      toast(`เผยแพร่ข้อสอบแล้ว ${data || 0} ข้อ`, 'success'); route();
+    });
+
+    document.getElementById('set-competency-window')?.addEventListener('click', () => openWindowModal());
+
     document.getElementById('assign-all-competency')?.addEventListener('click', async () => {
       if (isHistoricalRound(round) && round.historical_review_status !== 'qm_certified') return toast('ต้องให้ผู้จัดการคุณภาพรับรองข้อมูลย้อนหลังให้ครบก่อน', 'warning');
-      if (!confirm('สร้างรายการประเมินให้เจ้าหน้าที่ห้องปฏิบัติการทั้งหมดหรือไม่ แพทย์จะไม่ถูกนำมาสร้างแบบทดสอบ')) return;
-      let directory;
-      try { directory = await loadDirectory(); } catch (error) { return toast(friendlyError(error), 'danger'); }
-      const { data: practitioners, error: practitionerError } = await state.supabase.from('ec_round_assignments').select('user_id').eq('round_id', round.id).eq('assignment_role', 'practitioner').eq('active', true);
-      if (practitionerError) return toast(friendlyError(practitionerError), 'danger');
-      const practitionerIds = new Set((practitioners || []).map((item) => item.user_id));
-      const eligible = directory.filter((person) => personHasRole(person, 'staff') && !personHasRole(person, 'physician'));
-      const rows = eligible.map((person) => ({ round_id: round.id, user_id: person.id, assignment_type: practitionerIds.has(person.id) ? 'practical' : 'quiz', assigned_by: state.user.id }));
-      if (!rows.length) return toast('ไม่พบเจ้าหน้าที่ที่ต้องรับการประเมิน', 'warning');
-      const { error } = await state.supabase.from('ec_competency_assignments').upsert(rows, { onConflict: 'round_id,user_id', ignoreDuplicates: true });
-      if (error) return toast(friendlyError(error), 'danger');
-      toast('สร้างรายการประเมินแล้ว', 'success'); route();
+      const { count: publishedCount, error: questionCountError } = await state.supabase.from('ec_questions').select('id', { count: 'exact', head: true }).eq('round_id', round.id).eq('published', true).is('archived_at', null);
+      if (questionCountError) return toast(friendlyError(questionCountError), 'danger');
+      if (!publishedCount) return toast('กรุณาตรวจและเผยแพร่ข้อสอบอย่างน้อย 1 ข้อก่อนสร้างรายการประเมิน', 'warning');
+
+      const createAssignments = async () => {
+        let directory;
+        try { directory = await loadDirectory(); } catch (error) { return toast(friendlyError(error), 'danger'); }
+        const { data: practitioners, error: practitionerError } = await state.supabase.from('ec_round_assignments').select('user_id').eq('round_id', round.id).eq('assignment_role', 'practitioner').eq('active', true);
+        if (practitionerError) return toast(friendlyError(practitionerError), 'danger');
+        const practitionerIds = new Set((practitioners || []).map((item) => item.user_id));
+        const eligible = directory.filter((person) => personHasRole(person, 'staff') && !personHasRole(person, 'physician'));
+        const rows = eligible.map((person) => ({ round_id: round.id, user_id: person.id, assignment_type: practitionerIds.has(person.id) ? 'practical' : 'quiz', assigned_by: state.user.id }));
+        if (!rows.length) return toast('ไม่พบเจ้าหน้าที่ที่ต้องรับการประเมิน', 'warning');
+        const { error } = await state.supabase.from('ec_competency_assignments').upsert(rows, { onConflict: 'round_id,user_id', ignoreDuplicates: true });
+        if (error) return toast(friendlyError(error), 'danger');
+        toast('สร้างรายการประเมินและกำหนดวันปิดแล้ว', 'success'); route();
+      };
+
+      if (!round.competency_close_at) {
+        openWindowModal(createAssignments);
+        return;
+      }
+      if (!confirm(`สร้างรายการประเมินให้เจ้าหน้าที่ทั้งหมดหรือไม่\nปิดรับคำตอบ: ${fmtDate(round.competency_close_at, true)}`)) return;
+      await createAssignments();
     });
   }
-
   async function openQuizReview(assignmentId) {
     const [{ data: assignment, error: assignmentError }, { data: answers, error: answersError }, { data: questions }, { data: choices }, { data: keys }] = await Promise.all([
       state.supabase.from('ec_competency_assignments').select('*, ec_profiles!ec_competency_assignments_user_id_fkey(full_name)').eq('id', assignmentId).single(),
@@ -1975,16 +2178,29 @@
     }
     const { data: assignments, error } = await state.supabase.from('ec_competency_assignments').select('*, ec_eqa_rounds(*)').eq('user_id', state.user.id).order('created_at', { ascending: false });
     if (error) return renderError(error);
-    const content=`<section class="page"><div class="page-header"><div><h1>การประเมินของฉัน</h1><p>คำตอบของคุณถูกเก็บแยกและส่งแล้วจะล็อก</p></div></div><div class="card">${(assignments||[]).length?`<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${assignments.map(a=>`<tr><td><strong>${esc(a.ec_eqa_rounds?.provider)} ${esc(a.ec_eqa_rounds?.round_code)}</strong></td><td>${esc(labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${assignmentBadge(a.status)}</td><td>${a.score??'-'}</td><td><button class="btn btn-primary btn-sm" data-open-assignment="${a.id}">เปิด</button></td></tr>`).join('')}</tbody></table></div>`:empty('ยังไม่มีรายการประเมิน')}</div></section>`;
-    appEl.innerHTML=shell(content,'การประเมินของฉัน');bindShell();document.querySelectorAll('[data-open-assignment]').forEach(b=>b.addEventListener('click',()=>navigate(`assignment/${b.dataset.openAssignment}`)));
+    const content=`<section class="page"><div class="page-header"><div><h1>การประเมินของฉัน</h1><p>คำตอบถูกเก็บแยก และหลังส่งแล้วจะแก้ไขไม่ได้</p></div></div><div class="card">${(assignments||[]).length?`<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>ประเภท</th><th>ปิดรับคำตอบ</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${assignments.map(a=>{
+      const closeAt = a.ec_eqa_rounds?.competency_close_at;
+      const expired = closeAt && new Date(closeAt).getTime() < Date.now() && ['not_started','in_progress'].includes(a.status);
+      return `<tr><td><strong>${esc(a.ec_eqa_rounds?.provider)} ${esc(a.ec_eqa_rounds?.round_code)}</strong></td><td>${esc(labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${closeAt ? fmtDate(closeAt, true) : '-'}${expired ? '<br><span class="badge danger">ปิดแล้ว</span>' : ''}</td><td>${assignmentBadge(a.status)}</td><td>${a.score??'-'}</td><td><button class="btn btn-primary btn-sm" data-open-assignment="${a.id}" ${expired ? 'disabled' : ''}>เปิด</button></td></tr>`;
+    }).join('')}</tbody></table></div>`:empty('ยังไม่มีรายการประเมิน')}</div></section>`;
+    appEl.innerHTML=shell(content,'การประเมินของฉัน');bindShell();document.querySelectorAll('[data-open-assignment]:not([disabled])').forEach(b=>b.addEventListener('click',()=>navigate(`assignment/${b.dataset.openAssignment}`)));
   }
 
   async function renderAssignment(id) {
     if (!isCompetencyParticipant()) return navigate('dashboard');
     const { data: assignment, error } = await state.supabase.from('ec_competency_assignments').select('*,ec_eqa_rounds(*)').eq('id', id).single();
     if (error) return renderError(error);
+    const openAt = assignment.ec_eqa_rounds?.competency_open_at;
+    const closeAt = assignment.ec_eqa_rounds?.competency_close_at;
+    const notOpened = openAt && new Date(openAt).getTime() > Date.now();
+    const deadlinePassed = closeAt && new Date(closeAt).getTime() < Date.now();
+    const windowNotice = notOpened
+      ? `<div class="notice warning">การประเมินจะเปิดวันที่ ${fmtDate(openAt, true)}</div>`
+      : deadlinePassed
+        ? `<div class="notice danger">ปิดรับคำตอบเมื่อ ${fmtDate(closeAt, true)} แล้ว กรุณาติดต่อผู้จัดการคุณภาพหากต้องขยายเวลา</div>`
+        : closeAt ? `<div class="notice info">กรุณาส่งคำตอบภายใน ${fmtDate(closeAt, true)}</div>` : '';
     if (assignment.assignment_type === 'practical') {
-      const content = `<section class="page"><div class="page-header"><div><h1>การประเมินจากการปฏิบัติจริง</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><button class="btn btn-outline" id="back-my">กลับ</button></div><div class="card"><h2>การประเมินผู้ปฏิบัติจริง</h2><p>ผลการประเมินเชื่อมจากผล EQA รายบุคคล วิธีตรวจ การแปลผล การบันทึก และการแก้ปัญหา</p>${assignmentBadge(assignment.status)}<div style="height:12px"></div><button class="btn btn-primary" id="open-round-practical">เปิดรอบ EQA</button></div></section>`;
+      const content = `<section class="page"><div class="page-header"><div><h1>การประเมินจากการปฏิบัติจริง</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><button class="btn btn-outline" id="back-my">กลับ</button></div>${windowNotice}<div style="height:12px"></div><div class="card"><h2>การประเมินผู้ปฏิบัติจริง</h2><p>ผลการประเมินเชื่อมจากผล EQA รายบุคคล วิธีตรวจ การแปลผล การบันทึก และการแก้ปัญหา</p>${assignmentBadge(assignment.status)}<div style="height:12px"></div><button class="btn btn-primary" id="open-round-practical">เปิดรอบ EQA</button></div></section>`;
       appEl.innerHTML = shell(content, 'การประเมินจากการปฏิบัติจริง');
       bindShell();
       document.getElementById('back-my').onclick = () => navigate('my-competency');
@@ -1998,7 +2214,7 @@
     ]);
     const imageMap = await loadSignedImageMap((questions || []).map((question) => question.image_document_id));
     const answerMap = new Map((answers || []).map((answer) => [answer.question_id, answer]));
-    const editable = ['not_started','in_progress'].includes(assignment.status);
+    const editable = ['not_started','in_progress'].includes(assignment.status) && !deadlinePassed && !notOpened;
     const questionHtml = (questions || []).map((question) => {
       const answerPayload = answerMap.get(question.id)?.answer_payload || {};
       const questionChoices = (choices || []).filter((choice) => choice.question_id === question.id);
@@ -2011,12 +2227,13 @@
       }
       return `<div class="card"><span class="badge">${esc(question.section || '')}</span>${question.is_critical?'<span class="badge danger">ข้อสำคัญ</span>':''}<h3>${question.question_order}. ${esc(question.prompt)}</h3>${image ? `<div style="margin:14px 0;text-align:center"><img src="${esc(image.url)}" alt="${esc(image.title || 'รูปประกอบคำถาม')}" style="max-width:100%;max-height:620px;border:1px solid var(--line);border-radius:12px;object-fit:contain"></div>` : ''}${input}</div>`;
     }).join('');
-    const content = `<section class="page"><div class="page-header"><div><h1>แบบทดสอบ</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}<button class="btn btn-outline" id="back-my">กลับ</button></div></div><form id="quiz-form" class="grid">${questionHtml || empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form>${editable && questions?.length ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>` : ''}</section>`;
+    const content = `<section class="page"><div class="page-header"><div><h1>แบบทดสอบ</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div><form id="quiz-form" class="grid">${questionHtml || empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form>${editable && questions?.length ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>` : ''}</section>`;
     appEl.innerHTML = shell(content, 'แบบทดสอบ');
     bindShell();
     document.getElementById('back-my').onclick = () => navigate('my-competency');
     if (editable) {
-      await state.supabase.rpc('ec_start_competency', { p_assignment_id: id });
+      const startResult = await state.supabase.rpc('ec_start_competency', { p_assignment_id: id });
+      if (startResult.error) toast(friendlyError(startResult.error), 'danger');
       const save = async () => {
         const rows = [];
         (questions || []).forEach((question) => {
@@ -2046,7 +2263,6 @@
       };
     }
   }
-
   async function renderReports() {
     const {data:rounds,error}=await state.supabase.from('ec_eqa_rounds').select('*').order('survey_year',{ascending:false});if(error)return renderError(error);
     const content=`<section class="page"><div class="page-header"><div><h1>รายงาน / ทะเบียน EQA</h1><p>กดปุ่มพิมพ์ แล้วเลือกบันทึกเป็นไฟล์ PDF</p></div><button class="btn btn-primary no-print" id="print-report">พิมพ์ / บันทึกเป็น PDF</button></div><div class="print-only"><h1>ทะเบียน EQA ประจำปี</h1><p>${esc(cfg.ORGANIZATION_NAME)}</p></div><div class="card"><div class="table-wrap"><table><thead><tr><th>ปี</th><th>ผู้ให้บริการ / รอบ</th><th>ประเภทข้อมูล</th><th>โปรแกรม</th><th>วันครบกำหนด</th><th>สถานะ</th><th>เลขเอกสาร</th></tr></thead><tbody>${(rounds||[]).map(r=>`<tr><td>${r.survey_year}</td><td>${esc(r.provider)} ${esc(r.round_code)}</td><td>${isHistoricalRound(r)?'ข้อมูลย้อนหลัง':'รอบใหม่'}</td><td>${esc(r.program_name)}</td><td>${fmtDate(r.due_date)}</td><td>${STATUS_LABELS[r.status]||'ไม่ทราบสถานะ'}${isHistoricalRound(r)?`<br><span class="small muted">${esc(labelFrom(HISTORICAL_REVIEW_LABELS,r.historical_review_status))}</span>`:''}</td><td>${esc(r.document_number||'-')} ฉบับแก้ไขที่ ${esc(r.document_revision||'1')}</td></tr>`).join('')}</tbody></table></div><div class="small muted" style="margin-top:12px">พิมพ์จากระบบวันที่ ${fmtDate(new Date(),true)}</div></div></section>`;appEl.innerHTML=shell(content,'รายงาน');bindShell();document.getElementById('print-report').onclick=()=>window.print();
