@@ -1,4 +1,4 @@
-/* CNMI EQA & Competency Management System v2.0.3
+/* CNMI EQA and Competency Management System
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -20,12 +20,12 @@
   };
 
   const ROLE_LABELS = {
-    staff: 'เจ้าหน้าที่ (Staff)',
-    reviewer: 'ผู้ทบทวน (Reviewer)',
-    qm: 'ผู้จัดการคุณภาพ (QM)',
+    staff: 'เจ้าหน้าที่',
+    reviewer: 'ผู้ทบทวนผล',
+    qm: 'ผู้จัดการคุณภาพ',
     physician: 'แพทย์ผู้รับรอง',
-    admin: 'ผู้ดูแลระบบ (Admin)',
-    viewer: 'ผู้ตรวจติดตาม (Viewer)'
+    admin: 'ผู้ดูแลระบบ',
+    viewer: 'ผู้ตรวจติดตาม'
   };
   const ROLE_HELP = {
     staff: 'ทำแบบทดสอบและบันทึกงานที่ได้รับมอบหมาย',
@@ -33,7 +33,7 @@
     qm: 'บริหารรอบ EQA และอนุมัติด้านคุณภาพ',
     physician: 'ตรวจรับรองผลในขั้นแพทย์',
     admin: 'จัดการผู้ใช้งาน สิทธิ์ และการตั้งค่าระบบ',
-    viewer: 'อ่านรายงานและ Audit Log โดยไม่แก้ไขข้อมูล'
+    viewer: 'อ่านรายงานและประวัติการใช้งานโดยไม่แก้ไขข้อมูล'
   };
   const ROLE_PRIORITY = ['admin', 'qm', 'reviewer', 'physician', 'viewer', 'staff'];
   const STATUS_LABELS = {
@@ -41,14 +41,123 @@
     in_progress: 'กำลังดำเนินการ',
     awaiting_review: 'รอตรวจทาน',
     returned_for_revision: 'ส่งกลับแก้ไข',
-    awaiting_qm_approval: 'รอ QM อนุมัติ',
-    qm_approved: 'QM อนุมัติแล้ว',
+    awaiting_qm_approval: 'รอผู้จัดการคุณภาพอนุมัติ',
+    qm_approved: 'ผู้จัดการคุณภาพอนุมัติแล้ว',
     awaiting_physician_approval: 'รอแพทย์อนุมัติ',
     physician_approved: 'แพทย์อนุมัติแล้ว',
     submitted_to_provider: 'ส่งผลแล้ว',
     official_result_received: 'ได้รับผลประเมินแล้ว',
     closed: 'ปิดรอบ',
     cancelled: 'ยกเลิก'
+  };
+
+  const DOCUMENT_CATEGORY_LABELS = {
+    source_document: 'เอกสารต้นฉบับจากผู้ให้บริการ',
+    instruction: 'คู่มือหรือคำแนะนำ',
+    specimen_image: 'ภาพสิ่งส่งตรวจ',
+    raw_result_image: 'ภาพผลทดสอบดิบ',
+    submission_form: 'แบบฟอร์มส่งผล',
+    submission_evidence: 'หลักฐานการส่งผล',
+    official_result: 'รายงานผลประเมินอย่างเป็นทางการ',
+    corrective_action: 'หลักฐานการแก้ไขและป้องกัน',
+    closure_report: 'รายงานสรุปปิดรอบ',
+    other: 'เอกสารอื่น ๆ'
+  };
+  const VISIBILITY_LABELS = {
+    restricted: 'เฉพาะผู้ทบทวน ผู้จัดการคุณภาพ และแพทย์',
+    assigned: 'เฉพาะผู้ได้รับมอบหมาย',
+    staff: 'บุคลากรทุกคน'
+  };
+  const ASSIGNMENT_ROLE_LABELS = {
+    practitioner: 'ผู้ปฏิบัติจริง',
+    reviewer: 'ผู้ทบทวนผล',
+    physician: 'แพทย์ผู้อนุมัติ'
+  };
+  const RESULT_STATUS_LABELS = {
+    draft: 'ฉบับร่าง',
+    submitted: 'ส่งแล้ว',
+    returned: 'ส่งกลับแก้ไข',
+    resubmitted: 'ส่งใหม่แล้ว',
+    awaiting_practitioner_confirmations: 'รอผู้ปฏิบัติทั้งสองคนยืนยัน',
+    qm_approved: 'ผู้จัดการคุณภาพอนุมัติแล้ว',
+    physician_approved: 'แพทย์อนุมัติแล้ว'
+  };
+  const APPROVAL_STAGE_LABELS = {
+    practitioner_confirm: 'ผู้ปฏิบัติยืนยันผลกลาง',
+    qm_review: 'ผู้จัดการคุณภาพตรวจและอนุมัติ',
+    physician_approval: 'แพทย์อนุมัติขั้นสุดท้าย',
+    closure_acknowledgement: 'แพทย์รับทราบการปิดรอบ'
+  };
+  const DECISION_LABELS = {
+    approved: 'อนุมัติ',
+    returned: 'ส่งกลับแก้ไข',
+    acknowledged: 'รับทราบ',
+    rejected: 'ไม่อนุมัติ'
+  };
+  const CAPA_STATUS_LABELS = {
+    open: 'เปิดรายการ',
+    in_progress: 'กำลังดำเนินการ',
+    awaiting_effectiveness_review: 'รอตรวจประสิทธิผล',
+    effective: 'มีประสิทธิผล',
+    ineffective: 'ยังไม่มีประสิทธิผล',
+    closed: 'ปิดรายการ',
+    cancelled: 'ยกเลิก'
+  };
+  const QUESTION_TYPE_LABELS = {
+    single_choice: 'เลือกคำตอบเดียว',
+    multiple_choice: 'เลือกได้หลายคำตอบ',
+    text: 'คำตอบแบบข้อความ',
+    numeric: 'คำตอบเป็นตัวเลข',
+    image_interpretation: 'แปลผลจากภาพ'
+  };
+  const COMPETENCY_TYPE_LABELS = {
+    practical: 'ประเมินจากการปฏิบัติจริง',
+    quiz: 'แบบทดสอบ'
+  };
+  const OFFICIAL_OUTCOME_LABELS = {
+    pending: 'รอผล',
+    pass: 'ผ่าน',
+    fail: 'ไม่ผ่าน',
+    partial: 'ผ่านบางส่วน'
+  };
+  const AUDIT_ACTION_LABELS = {
+    insert: 'เพิ่มข้อมูล',
+    update: 'แก้ไขข้อมูล',
+    delete: 'ลบข้อมูล',
+    password_changed: 'เปลี่ยนรหัสผ่าน',
+    create_user: 'สร้างบัญชีผู้ใช้',
+    update_roles: 'แก้ไขบทบาทผู้ใช้',
+    set_active: 'เปลี่ยนสถานะบัญชี',
+    reset_password: 'รีเซ็ตรหัสผ่าน',
+    approve_profile_change: 'อนุมัติการเปลี่ยนข้อมูลส่วนตัว',
+    reject_profile_change: 'ไม่อนุมัติการเปลี่ยนข้อมูลส่วนตัว'
+  };
+  const AUDIT_TABLE_LABELS = {
+    ec_profiles: 'ข้อมูลผู้ใช้งาน',
+    ec_user_roles: 'บทบาทผู้ใช้งาน',
+    ec_eqa_rounds: 'รอบ EQA',
+    ec_round_documents: 'เอกสารและภาพ',
+    ec_round_assignments: 'ผู้รับผิดชอบในรอบ',
+    ec_individual_results: 'ผลรายบุคคล',
+    ec_consensus_results: 'ผลกลางของห้อง',
+    ec_approvals: 'การตรวจและอนุมัติ',
+    ec_submission_evidence: 'หลักฐานการส่งผล',
+    ec_official_results: 'ผลประเมินอย่างเป็นทางการ',
+    ec_corrective_actions: 'การแก้ไขและป้องกัน',
+    ec_questions: 'คำถามประเมินความสามารถ',
+    ec_question_choices: 'ตัวเลือกคำตอบ',
+    ec_question_answer_keys: 'เฉลยคำตอบ',
+    ec_competency_assignments: 'การมอบหมายการประเมิน',
+    ec_competency_answers: 'คำตอบการประเมิน',
+    ec_profile_change_requests: 'คำขอเปลี่ยนข้อมูลส่วนตัว'
+  };
+  const METHOD_LABELS = {
+    abo: 'หมู่เลือด ABO',
+    rh: 'หมู่เลือด Rh',
+    screen: 'การคัดกรองแอนติบอดี',
+    antibody: 'การระบุชนิดแอนติบอดี',
+    crossmatch: 'การทดสอบความเข้ากันได้',
+    antigen: 'การตรวจแอนติเจน'
   };
 
   const RESULT_SPECIMENS = ['J-08', 'J-09', 'J-10', 'J-11', 'J-12'];
@@ -63,6 +172,24 @@
     return String(value ?? '')
       .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+  }
+
+  function labelFrom(map, value, fallback = '-') {
+    return map[value] || fallback;
+  }
+
+  function friendlyError(error) {
+    console.error(error);
+    const message = String(error?.message || error || '').toLowerCase();
+    if (message.includes('invalid login credentials')) return 'ชื่อผู้ใช้ อีเมล หรือรหัสผ่านไม่ถูกต้อง';
+    if (message.includes('email not confirmed')) return 'อีเมลนี้ยังไม่ได้รับการยืนยัน กรุณาติดต่อผู้ดูแลระบบ';
+    if (message.includes('user already registered') || message.includes('already exists')) return 'ข้อมูลนี้มีอยู่ในระบบแล้ว';
+    if (message.includes('password') && message.includes('least')) return 'รหัสผ่านสั้นเกินไป กรุณาตั้งรหัสผ่านใหม่ให้ยาวขึ้น';
+    if (message.includes('failed to fetch') || message.includes('network')) return 'เชื่อมต่อระบบไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ตแล้วลองใหม่';
+    if (message.includes('row-level security') || message.includes('permission') || message.includes('not authorized')) return 'บัญชีนี้ไม่มีสิทธิ์ดำเนินการรายการนี้';
+    if (message.includes('jwt') || message.includes('token') || message.includes('session')) return 'การเข้าสู่ระบบหมดอายุ กรุณาออกจากระบบแล้วเข้าสู่ระบบใหม่';
+    if (message.includes('duplicate key') || message.includes('unique constraint')) return 'ข้อมูลนี้ถูกบันทึกไว้แล้ว กรุณาตรวจสอบรายการเดิม';
+    return 'ระบบดำเนินการไม่สำเร็จ กรุณาลองใหม่อีกครั้ง หากยังพบปัญหาให้แจ้งผู้ดูแลระบบ';
   }
 
   function fmtDate(value, withTime = false) {
@@ -100,7 +227,7 @@
   function isPhysician() { return hasRole('physician', 'admin'); }
 
   function roleOptions(selected = state.activeRole) {
-    return state.roles.map((role) => `<option value="${esc(role)}" ${role === selected ? 'selected' : ''}>${esc(ROLE_LABELS[role] || role)}</option>`).join('');
+    return state.roles.map((role) => `<option value="${esc(role)}" ${role === selected ? 'selected' : ''}>${esc(ROLE_LABELS[role] || 'บทบาทอื่น')}</option>`).join('');
   }
 
   function roleChoices(currentRoles = [], lockedRoles = []) {
@@ -117,7 +244,7 @@
   }
 
   function statusBadge(status) {
-    const label = STATUS_LABELS[status] || status || '-';
+    const label = STATUS_LABELS[status] || 'ไม่ทราบสถานะ';
     const cls = ['closed', 'physician_approved', 'official_result_received'].includes(status) ? 'success'
       : ['returned_for_revision', 'cancelled'].includes(status) ? 'danger'
       : ['awaiting_review', 'awaiting_qm_approval', 'awaiting_physician_approval'].includes(status) ? 'warning'
@@ -128,13 +255,13 @@
   function assignmentBadge(status) {
     const map = {
       not_started: 'ยังไม่เริ่ม', in_progress: 'กำลังทำ', submitted: 'ส่งแล้ว', under_review: 'รอตรวจ',
-      passed: 'ผ่าน', needs_reflection: 'ต้องทบทวน', reflection_submitted: 'ส่ง Reflection แล้ว',
+      passed: 'ผ่าน', needs_reflection: 'ต้องทบทวน', reflection_submitted: 'ส่งแบบทบทวนแล้ว',
       passed_after_review: 'ผ่านหลังทบทวน', cancelled: 'ยกเลิก'
     };
     const cls = ['passed', 'passed_after_review'].includes(status) ? 'success'
       : ['needs_reflection'].includes(status) ? 'danger'
       : ['submitted', 'under_review', 'reflection_submitted'].includes(status) ? 'warning' : 'info';
-    return `<span class="badge ${cls}">${esc(map[status] || status)}</span>`;
+    return `<span class="badge ${cls}">${esc(map[status] || 'ไม่ทราบสถานะ')}</span>`;
   }
 
   function setBusy(value) {
@@ -180,15 +307,15 @@
       <div class="login-page">
         <section class="login-visual">
           <div class="brand-mark">CNMI</div>
-          <h1>EQA & Competency<br>Management System</h1>
+          <h1>ระบบ EQA และ<br>ประเมินความสามารถ</h1>
           <p>ระบบบริหารผลทดสอบความชำนาญและการประเมินสมรรถนะบุคลากร</p>
         </section>
         <section class="login-card-wrap">
           <div class="login-card">
-            <div class="brand-mark">SETUP</div>
-            <h2>ยังไม่ได้เชื่อม Supabase</h2>
-            <p class="muted">เปิดไฟล์ <strong>js/config.js</strong> แล้วใส่ Project URL และ Publishable key ตามคู่มือ</p>
-            <div class="notice warning">ห้ามใส่ Secret key หรือ service_role key ใน GitHub</div>
+            <div class="brand-mark">ตั้งค่า</div>
+            <h2>ยังไม่ได้เชื่อมฐานข้อมูล</h2>
+            <p class="muted">เปิดไฟล์ <strong>js/config.js</strong> แล้วใส่ที่อยู่โครงการและกุญแจสำหรับเชื่อมต่อ ตามคู่มือ</p>
+            <div class="notice warning">ห้ามใส่กุญแจลับหรือกุญแจระดับผู้ดูแลระบบไว้ใน GitHub</div>
             <div style="height:16px"></div>
             <a class="btn btn-primary btn-block" href="./docs/01_เริ่มตรงนี้.md">เปิดคู่มือเริ่มต้น</a>
           </div>
@@ -206,19 +333,19 @@
       <div class="login-page">
         <section class="login-visual">
           <div class="brand-mark">CNMI</div>
-          <h1>CNMI EQA &<br>Competency</h1>
-          <p>ติดตาม EQA ตั้งแต่รับตัวอย่าง ผลรายบุคคล ผลกลาง การอนุมัติ ผลประเมิน CAP การแก้ไข และ Competency ในรอบเดียว</p>
+          <h1>ระบบ EQA และ<br>ประเมินความสามารถ</h1>
+          <p>ติดตามการประเมินคุณภาพภายนอกตั้งแต่รับตัวอย่าง บันทึกผล ตรวจอนุมัติ รับผลประเมิน แก้ไขปัญหา และประเมินความสามารถบุคลากรในรอบเดียว</p>
         </section>
         <section class="login-card-wrap">
           <form class="login-card" id="login-form">
             <div class="brand-mark">CNMI</div>
             <h2>เข้าสู่ระบบ</h2>
-            <p class="muted">ใช้ Username หรืออีเมล Mahidol</p>
+            <p class="muted">ใช้ชื่อผู้ใช้หรืออีเมลมหิดล</p>
             ${message ? `<div class="notice danger">${esc(message)}</div><div style="height:12px"></div>` : ''}
             <div class="form-grid">
               <div class="field">
-                <label for="login-name">Username หรืออีเมล Mahidol</label>
-                <input class="input" id="login-name" name="login" required autocomplete="username" placeholder="username หรือ name@mahidol.ac.th">
+                <label for="login-name">ชื่อผู้ใช้หรืออีเมลมหิดล</label>
+                <input class="input" id="login-name" name="login" required autocomplete="username" placeholder="ชื่อผู้ใช้ หรือ name@mahidol.ac.th">
               </div>
               <div class="field">
                 <label for="login-password">รหัสผ่าน</label>
@@ -228,7 +355,7 @@
               <div class="notice">
                 <strong>การเข้าสู่ระบบครั้งแรก</strong><br>
                 รหัสผ่านเริ่มต้นคือ <strong>CNMI@</strong> ตามด้วยรหัสพนักงาน<br>
-                หากเปลี่ยนรหัสผ่านแล้วและจำไม่ได้ กรุณาติดต่อ Admin เพื่อรีเซ็ต
+                หากเปลี่ยนรหัสผ่านแล้วและจำไม่ได้ กรุณาติดต่อผู้ดูแลระบบเพื่อรีเซ็ต
               </div>
             </div>
           </form>
@@ -243,7 +370,7 @@
       const password = String(fd.get('password') || '');
       const { error } = await state.supabase.auth.signInWithPassword({ email, password });
       setBusy(false);
-      if (error) return renderLogin('เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจ Username/Email และรหัสผ่าน');
+      if (error) return renderLogin('เข้าสู่ระบบไม่สำเร็จ กรุณาตรวจชื่อผู้ใช้ อีเมล และรหัสผ่าน');
     });
   }
 
@@ -283,23 +410,23 @@
 
   function shell(content, title = '') {
     const route = currentRoute();
-    const assignedRoleBadges = state.roles.map((role) => `<span class="badge">${esc(ROLE_LABELS[role] || role)}</span>`).join('');
+    const assignedRoleBadges = state.roles.map((role) => `<span class="badge">${esc(ROLE_LABELS[role] || 'บทบาทอื่น')}</span>`).join('');
     return `
       <div class="app-shell">
         <aside class="sidebar" id="sidebar">
           <div class="sidebar-brand">
             <div class="brand-mark">CNMI</div>
-            <div><strong>EQA & Competency</strong></div>
+            <div><strong>EQA และประเมินความสามารถ</strong></div>
           </div>
           <div class="nav-section">งานของฉัน</div>
           ${navItem('dashboard', '⌂', 'ภาพรวม', route)}
-          ${navItem('my-competency', '✓', 'Competency ของฉัน', route)}
-          <div class="nav-section">EQA</div>
+          ${navItem('my-competency', '✓', 'การประเมินของฉัน', route)}
+          <div class="nav-section">งาน EQA</div>
           ${navItem('rounds', '▦', 'รอบ EQA', route)}
           ${navItem('reports', '▤', 'รายงาน / ทะเบียน', route)}
           <div class="nav-section">การจัดการ</div>
           ${navItem('users', '♙', 'ผู้ใช้งานและสิทธิ์', route)}
-          ${navItem('audit', '◷', 'Audit Log', route)}
+          ${navItem('audit', '◷', 'ประวัติการใช้งาน', route)}
           ${navItem('settings', '⚙', 'ตั้งค่าของฉัน', route)}
           <div class="sidebar-footer">
             <div class="user-mini">
@@ -312,10 +439,10 @@
                 <select class="role-select" id="active-role-select" data-role-switch ${state.roles.length <= 1 ? 'disabled' : ''}>
                   ${roleOptions()}
                 </select>
-                <div class="role-hint">เลือกบทบาทที่กำลังปฏิบัติงาน ระบบจะเปิดปุ่มตามโหมดนี้ โดยไม่เปลี่ยนสิทธิ์จริงที่ Admin กำหนด</div>
+                <div class="role-hint">เลือกบทบาทที่กำลังปฏิบัติงาน ระบบจะเปิดปุ่มตามโหมดนี้ โดยไม่เปลี่ยนสิทธิ์จริงที่ผู้ดูแลระบบกำหนด</div>
               </div>
               <div class="small muted">สิทธิ์ที่ได้รับทั้งหมด</div>
-              <div class="user-role-list">${assignedRoleBadges || '<span class="badge">ไม่มี Role</span>'}</div>
+              <div class="user-role-list">${assignedRoleBadges || '<span class="badge">ยังไม่ได้รับบทบาท</span>'}</div>
               <button class="btn btn-outline btn-sm" id="logout-btn">ออกจากระบบ</button>
             </div>
           </div>
@@ -325,10 +452,10 @@
           <header class="topbar">
             <div style="display:flex;align-items:center;gap:12px;min-width:0">
               <button class="btn btn-outline mobile-menu" id="mobile-menu" aria-label="เปิดเมนู">☰</button>
-              <div style="min-width:0"><strong>${esc(title || cfg.APP_NAME)}</strong><div class="small muted">${esc(cfg.ORGANIZATION_NAME || '')}</div></div>
+              <div style="min-width:0"><strong>${esc(title || 'ระบบ EQA และประเมินความสามารถ')}</strong><div class="small muted">${esc(cfg.ORGANIZATION_NAME || '')}</div></div>
             </div>
             <div class="topbar-user">
-              <span class="active-role-badge">โหมด: ${esc(ROLE_LABELS[state.activeRole] || state.activeRole || '-')}</span>
+              <span class="active-role-badge">โหมด: ${esc(ROLE_LABELS[state.activeRole] || 'ไม่ระบุบทบาท')}</span>
               <span class="small topbar-username">${esc(state.profile?.username || '')}</span>
             </div>
           </header>
@@ -359,7 +486,7 @@
       state.activeRole = nextRole;
       localStorage.setItem(roleStorageKey(), nextRole);
       closeSidebar();
-      toast(`เปลี่ยนโหมดเป็น ${ROLE_LABELS[nextRole] || nextRole} แล้ว`, 'success');
+      toast(`เปลี่ยนโหมดเป็น ${ROLE_LABELS[nextRole] || 'บทบาทที่เลือก'} แล้ว`, 'success');
       await route();
     }));
   }
@@ -375,11 +502,11 @@
       <div class="login-page">
         <section class="login-visual">
           <div class="brand-mark">CNMI</div><h1>ตั้งรหัสผ่านใหม่</h1>
-          <p>รหัสเริ่มต้นใช้ได้เฉพาะครั้งแรกหรือหลัง Admin รีเซ็ต</p>
+          <p>รหัสเริ่มต้นใช้ได้เฉพาะครั้งแรกหรือหลังผู้ดูแลระบบรีเซ็ต</p>
         </section>
         <section class="login-card-wrap">
           <form class="login-card" id="force-password-form">
-            <div class="brand-mark">KEY</div>
+            <div class="brand-mark">รหัส</div>
             <h2>กรุณาเปลี่ยนรหัสผ่าน</h2>
             <div class="notice warning">รหัสผ่านใหม่อย่างน้อย 8 ตัวอักษร ไม่บังคับรูปแบบอื่น</div>
             <div style="height:14px"></div>
@@ -404,10 +531,10 @@
       const { error } = await state.supabase.auth.updateUser({ password });
       if (!error) {
         const { error: rpcError } = await state.supabase.rpc('ec_complete_password_change');
-        if (rpcError) toast(rpcError.message, 'danger');
+        if (rpcError) toast(friendlyError(rpcError), 'danger');
       }
       setBusy(false);
-      if (error) return toast(error.message, 'danger');
+      if (error) return toast(friendlyError(error), 'danger');
       state.profile.must_change_password = false;
       toast('เปลี่ยนรหัสผ่านเรียบร้อย', 'success');
       navigate('dashboard');
@@ -448,7 +575,7 @@
         <div class="grid cols-4">
           <div class="card stat-card"><div><div class="stat-value">${rounds.length}</div><div class="stat-label">รอบล่าสุด</div></div><div class="stat-icon">▦</div></div>
           <div class="card stat-card"><div><div class="stat-value">${openRounds}</div><div class="stat-label">รอบที่ยังไม่ปิด</div></div><div class="stat-icon">◷</div></div>
-          <div class="card stat-card"><div><div class="stat-value">${assignments.length}</div><div class="stat-label">Competency ของฉัน</div></div><div class="stat-icon">✓</div></div>
+          <div class="card stat-card"><div><div class="stat-value">${assignments.length}</div><div class="stat-label">การประเมินของฉัน</div></div><div class="stat-icon">✓</div></div>
           <div class="card stat-card"><div><div class="stat-value">${pendingCompetency}</div><div class="stat-label">รายการที่ต้องดำเนินการ</div></div><div class="stat-icon">!</div></div>
         </div>
         <div style="height:18px"></div>
@@ -463,11 +590,11 @@
               </div></div>`).join('')}</div>` : empty('ยังไม่มีรอบ EQA')}
           </div>
           <div class="card">
-            <div class="card-header"><h2>Competency ของฉัน</h2><button class="btn btn-outline btn-sm" data-nav-inline="my-competency">ดูทั้งหมด</button></div>
+            <div class="card-header"><h2>การประเมินของฉัน</h2><button class="btn btn-outline btn-sm" data-nav-inline="my-competency">ดูทั้งหมด</button></div>
             ${assignments.length ? assignments.slice(0, 6).map((a) => `<div style="padding:10px 0;border-bottom:1px solid var(--line)">
               <strong>${esc(a.ec_eqa_rounds?.provider || '')} ${esc(a.ec_eqa_rounds?.round_code || '')}</strong>
               <span style="float:right">${assignmentBadge(a.status)}</span>
-            </div>`).join('') : empty('ยังไม่มี Competency ที่ได้รับมอบหมาย')}
+            </div>`).join('') : empty('ยังไม่มีการประเมินที่ได้รับมอบหมาย')}
           </div>
         </div>
       </section>`;
@@ -488,9 +615,9 @@
         <input type="hidden" name="id" value="${esc(round?.id || '')}">
         <div class="field"><label>ผู้ให้บริการ</label><input class="input" name="provider" required value="${esc(round?.provider || 'CAP')}"></div>
         <div class="field"><label>ชื่อโปรแกรม</label><input class="input" name="program_name" required value="${esc(round?.program_name || 'Comprehensive Transfusion Medicine')}"></div>
-        <div class="field"><label>Program code</label><input class="input" name="program_code" value="${esc(round?.program_code || 'J')}"></div>
+        <div class="field"><label>รหัสโปรแกรม</label><input class="input" name="program_code" value="${esc(round?.program_code || 'J')}"></div>
         <div class="field"><label>ชื่อรอบ</label><input class="input" name="round_code" required value="${esc(round?.round_code || 'J-B 2026')}"></div>
-        <div class="field"><label>Kit number</label><input class="input" name="kit_number" value="${esc(round?.kit_number || '')}"></div>
+        <div class="field"><label>เลขชุดตัวอย่าง</label><input class="input" name="kit_number" value="${esc(round?.kit_number || '')}"></div>
         <div class="field"><label>ปี ค.ศ.</label><input class="input" type="number" name="survey_year" required min="2000" max="2200" value="${esc(round?.survey_year || new Date().getFullYear())}"></div>
         <div class="field"><label>วันรับตัวอย่าง</label><input class="input" type="datetime-local" name="received_at" value="${round?.received_at ? new Date(round.received_at).toISOString().slice(0,16) : ''}"></div>
         <div class="field"><label>อุณหภูมิตอนรับ (°C)</label><input class="input" type="number" step="0.1" name="received_temperature" value="${esc(round?.received_temperature || '')}"></div>
@@ -515,7 +642,7 @@
       let result;
       if (id) result = await state.supabase.from('ec_eqa_rounds').update(payload).eq('id', id).select().single();
       else result = await state.supabase.from('ec_eqa_rounds').insert({ ...payload, created_by: state.user.id }).select().single();
-      if (result.error) return toast(result.error.message, 'danger');
+      if (result.error) return toast(friendlyError(result.error), 'danger');
       closeModal(); toast('บันทึกรอบ EQA แล้ว', 'success');
       navigate(`round/${result.data.id}/overview`);
     });
@@ -526,12 +653,12 @@
     try { rounds = await loadRounds(); } catch (e) { return renderError(e); }
     const content = `
       <section class="page">
-        <div class="page-header"><div><h1>รอบ EQA</h1><p>เปิดรอบเดียวเพื่อดูหลักฐาน ผล การอนุมัติ CAPA และ Competency</p></div>
+        <div class="page-header"><div><h1>รอบ EQA</h1><p>เปิดรอบเดียวเพื่อดูหลักฐาน ผล การอนุมัติ การแก้ไขและป้องกัน และการประเมินความสามารถ</p></div>
         ${canManage() ? `<div class="header-actions"><button class="btn btn-primary" id="new-round-btn">＋ สร้างรอบ EQA</button></div>` : ''}</div>
         <div class="card">
-          ${rounds.length ? `<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>โปรแกรม / Kit</th><th>ครบกำหนด</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>
+          ${rounds.length ? `<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>โปรแกรม / ชุดตัวอย่าง</th><th>ครบกำหนด</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>
             ${rounds.map((r) => `<tr><td><strong>${esc(r.provider)} ${esc(r.round_code)}</strong><br><span class="small muted">ปี ${esc(r.survey_year)}</span></td>
-            <td>${esc(r.program_name)}<br><span class="small muted">${esc(r.program_code || '-')} · Kit ${esc(r.kit_number || '-')}</span></td>
+            <td>${esc(r.program_name)}<br><span class="small muted">${esc(r.program_code || '-')} · ชุดตัวอย่าง ${esc(r.kit_number || '-')}</span></td>
             <td>${fmtDate(r.due_date)}</td><td>${statusBadge(r.status)}</td><td class="table-actions"><button class="btn btn-primary btn-sm" data-open-round="${r.id}">เปิดรอบ</button>${canManage() ? `<button class="btn btn-outline btn-sm" data-edit-round="${r.id}">แก้ไข</button>` : ''}</td></tr>`).join('')}
           </tbody></table></div>` : empty('ยังไม่มีรอบ EQA')}
         </div>
@@ -545,7 +672,7 @@
   const ROUND_TABS = [
     ['overview', '1. ข้อมูลรอบ'], ['documents', '2. เอกสาร/ภาพ'], ['assignments', '3. ผู้รับผิดชอบ'],
     ['individual', '4. ผลรายบุคคล'], ['consensus', '5. ผลกลางของห้อง'], ['approval', '6. ตรวจ/อนุมัติ'],
-    ['submission', '7. หลักฐานการส่ง'], ['official', '8. ผลประเมินกลับ'], ['capa', '9. CAPA'], ['competency', '10. Competency']
+    ['submission', '7. หลักฐานการส่ง'], ['official', '8. ผลประเมินกลับ'], ['capa', '9. การแก้ไขและป้องกัน'], ['competency', '10. การประเมินความสามารถ']
   ];
 
   function roundTabs(roundId, active) {
@@ -554,7 +681,7 @@
 
   function roundStepper(round) {
     const steps = [
-      ['preparing','เตรียม'], ['in_progress','ดำเนินการ'], ['awaiting_review','ตรวจทาน'], ['awaiting_qm_approval','QM'],
+      ['preparing','เตรียม'], ['in_progress','ดำเนินการ'], ['awaiting_review','ตรวจทาน'], ['awaiting_qm_approval','ผู้จัดการคุณภาพ'],
       ['awaiting_physician_approval','แพทย์'], ['submitted_to_provider','ส่งผล'], ['official_result_received','ผลกลับ'], ['closed','ปิดรอบ']
     ];
     const currentIndex = Math.max(0, steps.findIndex(([s]) => s === round.status));
@@ -585,10 +712,10 @@
       else if (tab === 'official') tabContent = await roundOfficial(round);
       else if (tab === 'capa') tabContent = await roundCapa(round);
       else if (tab === 'competency') tabContent = await roundCompetency(round);
-    } catch (e) { tabContent = `<div class="notice danger">${esc(e.message || e)}</div>`; }
+    } catch (e) { tabContent = `<div class="notice danger">${esc(friendlyError(e))}</div>`; }
 
     const content = `<section class="page">
-      <div class="page-header"><div><h1>${esc(round.provider)} ${esc(round.round_code)}</h1><p>${esc(round.program_name)} · Kit ${esc(round.kit_number || '-')}</p></div>
+      <div class="page-header"><div><h1>${esc(round.provider)} ${esc(round.round_code)}</h1><p>${esc(round.program_name)} · ชุดตัวอย่าง ${esc(round.kit_number || '-')}</p></div>
       <div class="header-actions">${statusBadge(round.status)}<button class="btn btn-outline" id="back-rounds">กลับ</button></div></div>
       <div class="card">${roundStepper(round)}</div><div style="height:14px"></div>
       ${roundTabs(round.id, tab)}
@@ -607,15 +734,15 @@
       <div class="card"><div class="card-header"><h2>ข้อมูลรอบ EQA</h2>${canManage() ? `<button class="btn btn-outline btn-sm" id="edit-current-round">แก้ไข</button>` : ''}</div>
         <div class="table-wrap"><table><tbody>
           <tr><th>ผู้ให้บริการ</th><td>${esc(round.provider)}</td></tr><tr><th>ชื่อโปรแกรม</th><td>${esc(round.program_name)}</td></tr>
-          <tr><th>Program code</th><td>${esc(round.program_code || '-')}</td></tr><tr><th>รอบ</th><td>${esc(round.round_code)}</td></tr>
-          <tr><th>Kit</th><td>${esc(round.kit_number || '-')}</td></tr><tr><th>วันครบกำหนด</th><td>${fmtDate(round.due_date)}</td></tr>
+          <tr><th>รหัสโปรแกรม</th><td>${esc(round.program_code || '-')}</td></tr><tr><th>รอบ</th><td>${esc(round.round_code)}</td></tr>
+          <tr><th>เลขชุดตัวอย่าง</th><td>${esc(round.kit_number || '-')}</td></tr><tr><th>วันครบกำหนด</th><td>${fmtDate(round.due_date)}</td></tr>
           <tr><th>วันรับ</th><td>${fmtDate(round.received_at, true)}</td></tr><tr><th>อุณหภูมิรับ</th><td>${round.received_temperature ?? '-'} °C</td></tr>
-          <tr><th>เจ้าหน้าที่รับ</th><td>${esc(receiver?.full_name || '-')}</td></tr><tr><th>เลขเอกสาร</th><td>${esc(round.document_number || '-')} Rev.${esc(round.document_revision || '1')}</td></tr>
+          <tr><th>เจ้าหน้าที่รับ</th><td>${esc(receiver?.full_name || '-')}</td></tr><tr><th>เลขเอกสาร</th><td>${esc(round.document_number || '-')} ฉบับแก้ไขที่ ${esc(round.document_revision || '1')}</td></tr>
         </tbody></table></div>
       </div>
       <div class="card"><h2>หลักการของรอบนี้</h2>
         <div class="notice">ผู้ปฏิบัติจริง 2 คนบันทึกผลแยกกัน และยังไม่เห็นคำตอบกันจนกว่าทั้งคู่ส่ง</div>
-        <div style="height:10px"></div><div class="notice">ผู้ปฏิบัติทั้งสองคนร่วมกันสร้างผลกลางของห้อง จากนั้น QM ตรวจ และแพทย์อนุมัติขั้นสุดท้าย</div>
+        <div style="height:10px"></div><div class="notice">ผู้ปฏิบัติทั้งสองคนร่วมกันสร้างผลกลางของห้อง จากนั้นผู้จัดการคุณภาพตรวจ และแพทย์อนุมัติขั้นสุดท้าย</div>
         <div style="height:10px"></div><div class="notice">บุคลากรที่เหลือทำข้อสอบหลังห้องส่งผล CAP แต่ก่อนเปิดเฉลย</div>
         ${round.notes ? `<div style="height:14px"></div><h3>หมายเหตุ</h3><p>${esc(round.notes)}</p>` : ''}
       </div>
@@ -627,10 +754,10 @@
     if (error) throw error;
     const uploadAllowed = canManage() || canReview() || await isAssigned(round.id);
     return `<div class="card">
-      <div class="card-header"><div><h2>เอกสารและภาพ</h2><div class="small muted">ไฟล์อยู่ใน Supabase Private Storage ไม่อยู่ใน GitHub</div></div>
+      <div class="card-header"><div><h2>เอกสารและภาพ</h2><div class="small muted">ไฟล์เก็บไว้ในพื้นที่ส่วนตัวของระบบ ไม่ได้เก็บไว้ใน GitHub</div></div>
       ${uploadAllowed ? `<button class="btn btn-primary" id="upload-doc-btn">＋ อัปโหลดไฟล์</button>` : ''}</div>
-      ${(docs || []).length ? `<div class="table-wrap"><table><thead><tr><th>ประเภท</th><th>ชื่อ</th><th>การมองเห็น</th><th>ผู้อัปโหลด</th><th>จัดการ</th></tr></thead><tbody>
-        ${(docs || []).map((d) => `<tr><td>${esc(d.category)}</td><td><strong>${esc(d.title)}</strong><br><span class="small muted">${esc(d.file_name)}</span></td><td>${esc(d.visibility)}</td><td>${fmtDate(d.created_at, true)}</td><td><button class="btn btn-outline btn-sm" data-open-doc="${d.id}" data-path="${esc(d.storage_path)}">เปิดไฟล์</button></td></tr>`).join('')}
+      ${(docs || []).length ? `<div class="table-wrap"><table><thead><tr><th>ประเภท</th><th>ชื่อ</th><th>ผู้ที่เปิดดูได้</th><th>วันที่อัปโหลด</th><th>จัดการ</th></tr></thead><tbody>
+        ${(docs || []).map((d) => `<tr><td>${esc(labelFrom(DOCUMENT_CATEGORY_LABELS, d.category))}</td><td><strong>${esc(d.title)}</strong><br><span class="small muted">${esc(d.file_name)}</span></td><td>${esc(labelFrom(VISIBILITY_LABELS, d.visibility))}</td><td>${fmtDate(d.created_at, true)}</td><td><button class="btn btn-outline btn-sm" data-open-doc="${d.id}" data-path="${esc(d.storage_path)}">เปิดไฟล์</button></td></tr>`).join('')}
       </tbody></table></div>` : empty('ยังไม่มีไฟล์ในรอบนี้')}
     </div>`;
   }
@@ -649,9 +776,9 @@
     const name = (id) => directory.find((p) => p.id === id)?.full_name || id;
     return `<div class="card">
       <div class="card-header"><div><h2>ผู้รับผิดชอบ</h2><div class="small muted">ผู้ปฏิบัติจริงกำหนดได้ 2 คน</div></div>${canManage() ? `<button class="btn btn-primary" id="manage-assignments">กำหนดผู้รับผิดชอบ</button>` : ''}</div>
-      ${(assignments || []).length ? `<div class="table-wrap"><table><thead><tr><th>บทบาท</th><th>ชื่อ</th><th>Slot</th><th>วันที่มอบหมาย</th></tr></thead><tbody>
-        ${(assignments || []).map((a) => `<tr><td>${esc(a.assignment_role)}</td><td>${esc(name(a.user_id))}</td><td>${a.practitioner_slot || '-'}</td><td>${fmtDate(a.assigned_at, true)}</td></tr>`).join('')}
-      </tbody></table></div>` : empty('ยังไม่ได้มอบหมายผู้ปฏิบัติ Reviewer หรือแพทย์')}
+      ${(assignments || []).length ? `<div class="table-wrap"><table><thead><tr><th>บทบาท</th><th>ชื่อ</th><th>ลำดับผู้ปฏิบัติ</th><th>วันที่มอบหมาย</th></tr></thead><tbody>
+        ${(assignments || []).map((a) => `<tr><td>${esc(labelFrom(ASSIGNMENT_ROLE_LABELS, a.assignment_role))}</td><td>${esc(name(a.user_id))}</td><td>${a.practitioner_slot || '-'}</td><td>${fmtDate(a.assigned_at, true)}</td></tr>`).join('')}
+      </tbody></table></div>` : empty('ยังไม่ได้มอบหมายผู้ปฏิบัติ ผู้ทบทวนผล หรือแพทย์')}
     </div>`;
   }
 
@@ -667,18 +794,18 @@
     const p = { ...defaultResultPayload(), ...(payload || {}) };
     p.specimens = { ...defaultResultPayload().specimens, ...(payload?.specimens || {}) };
     return `<div class="result-grid">
-      <div class="result-row"><strong>ตัวอย่าง</strong><span>ABO</span><span>Rh</span><span>Antibody screen</span><span>Antibody ID</span><span>Crossmatch / Strength</span></div>
+      <div class="result-row"><strong>ตัวอย่าง</strong><span>ABO</span><span>Rh</span><span>คัดกรองแอนติบอดี</span><span>ระบุชนิดแอนติบอดี</span><span>ความเข้ากันได้ / ความแรงปฏิกิริยา</span></div>
       ${RESULT_SPECIMENS.map((s) => { const x = p.specimens[s] || {}; return `<div class="result-row"><strong>${s}</strong>
         <input class="input" name="${prefix}_${s}_abo" value="${esc(x.abo)}" ${disabled?'disabled':''} placeholder="A/B/O/AB">
-        <input class="input" name="${prefix}_${s}_rh" value="${esc(x.rh)}" ${disabled?'disabled':''} placeholder="Positive/Negative">
-        <input class="input" name="${prefix}_${s}_screen" value="${esc(x.screen)}" ${disabled?'disabled':''} placeholder="Detected/Not detected">
-        <input class="input" name="${prefix}_${s}_antibody" value="${esc(x.antibody)}" ${disabled?'disabled':''} placeholder="เช่น Anti-K">
-        <div class="form-grid"><input class="input" name="${prefix}_${s}_crossmatch" value="${esc(x.crossmatch)}" ${disabled?'disabled':''} placeholder="Positive/Negative"><input class="input" name="${prefix}_${s}_strength" value="${esc(x.strength)}" ${disabled?'disabled':''} placeholder="0–4+"></div>
+        <input class="input" name="${prefix}_${s}_rh" value="${esc(x.rh)}" ${disabled?'disabled':''} placeholder="บวก / ลบ">
+        <input class="input" name="${prefix}_${s}_screen" value="${esc(x.screen)}" ${disabled?'disabled':''} placeholder="พบ / ไม่พบ">
+        <input class="input" name="${prefix}_${s}_antibody" value="${esc(x.antibody)}" ${disabled?'disabled':''} placeholder="เช่น แอนติ-K">
+        <div class="form-grid"><input class="input" name="${prefix}_${s}_crossmatch" value="${esc(x.crossmatch)}" ${disabled?'disabled':''} placeholder="เข้ากันได้ / เข้ากันไม่ได้"><input class="input" name="${prefix}_${s}_strength" value="${esc(x.strength)}" ${disabled?'disabled':''} placeholder="0–4+"></div>
       </div>`; }).join('')}
       <div class="form-grid cols-3">
-        ${['abo','rh','screen','antibody','crossmatch','antigen'].map((m) => `<div class="field"><label>วิธีตรวจ ${m}</label><input class="input" name="${prefix}_method_${m}" value="${esc(p.methods?.[m] || '')}" ${disabled?'disabled':''}></div>`).join('')}
+        ${['abo','rh','screen','antibody','crossmatch','antigen'].map((m) => `<div class="field"><label>วิธีตรวจ: ${esc(METHOD_LABELS[m] || m)}</label><input class="input" name="${prefix}_method_${m}" value="${esc(p.methods?.[m] || '')}" ${disabled?'disabled':''}></div>`).join('')}
       </div>
-      <div class="form-grid cols-2"><div class="field"><label>น้ำยา / Lot</label><textarea class="textarea" name="${prefix}_reagents" ${disabled?'disabled':''}>${esc(p.reagents || '')}</textarea></div><div class="field"><label>เครื่องมือ</label><textarea class="textarea" name="${prefix}_instrument" ${disabled?'disabled':''}>${esc(p.instrument || '')}</textarea></div></div>
+      <div class="form-grid cols-2"><div class="field"><label>น้ำยา / เลขรุ่นผลิต</label><textarea class="textarea" name="${prefix}_reagents" ${disabled?'disabled':''}>${esc(p.reagents || '')}</textarea></div><div class="field"><label>เครื่องมือ</label><textarea class="textarea" name="${prefix}_instrument" ${disabled?'disabled':''}>${esc(p.instrument || '')}</textarea></div></div>
       <div class="field"><label>หมายเหตุรวม</label><textarea class="textarea" name="${prefix}_overall_note" ${disabled?'disabled':''}>${esc(p.overall_note || '')}</textarea></div>
     </div>`;
   }
@@ -708,11 +835,11 @@
     const practitioner = await isPractitioner(round.id);
     const canEditOwn = practitioner && (!own || ['draft','returned'].includes(own.status));
     return `<div class="grid ${canReview() ? 'cols-2' : ''}">
-      <div class="card"><div class="card-header"><div><h2>ผลของฉัน</h2><div class="small muted">ระบบเก็บเวอร์ชันเดิมทุกครั้งที่แก้ไข</div></div>${own ? `<span class="badge">${esc(own.status)} · v${own.version}</span>` : ''}</div>
+      <div class="card"><div class="card-header"><div><h2>ผลที่ฉันบันทึก</h2><div class="small muted">ระบบเก็บประวัติฉบับเดิมทุกครั้งที่แก้ไข</div></div>${own ? `<span class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, own.status))} · ฉบับที่ ${own.version}</span>` : ''}</div>
         ${practitioner ? `<form id="individual-result-form">${resultForm(own?.result_payload, 'individual', !canEditOwn)}</form>
-          ${canEditOwn ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-individual">บันทึกร่าง</button><button class="btn btn-primary" id="submit-individual">ยืนยันและส่งผล</button></div>` : `<div class="notice">ผลถูกส่งแล้วและล็อกการแก้ไข หากต้องแก้ต้องให้ QM ส่งกลับ</div>`}` : `<div class="notice">หน้านี้ใช้สำหรับผู้ปฏิบัติจริงที่ได้รับมอบหมายเท่านั้น</div>`}
+          ${canEditOwn ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-individual">บันทึกร่าง</button><button class="btn btn-primary" id="submit-individual">ยืนยันและส่งผล</button></div>` : `<div class="notice">ผลถูกส่งแล้วและล็อกการแก้ไข หากต้องแก้ต้องให้ผู้จัดการคุณภาพส่งกลับ</div>`}` : `<div class="notice">หน้านี้ใช้สำหรับผู้ปฏิบัติจริงที่ได้รับมอบหมายเท่านั้น</div>`}
       </div>
-      ${canReview() ? `<div class="card"><h2>ผลรายบุคคลทั้งหมด</h2>${(rows || []).length ? (rows || []).map((r) => `<div style="padding:12px 0;border-bottom:1px solid var(--line)"><strong>${esc(r.ec_profiles?.full_name || r.user_id)}</strong><span style="float:right" class="badge">${esc(r.status)} · v${r.version}</span><br><span class="small muted">ส่ง ${fmtDate(r.submitted_at, true)}</span><div style="margin-top:8px"><button class="btn btn-outline btn-sm" data-view-individual="${r.id}">ดูผล</button>${['submitted','resubmitted'].includes(r.status) ? `<button class="btn btn-warning btn-sm" data-return-individual="${r.id}">ส่งกลับแก้ไข</button>` : ''}</div></div>`).join('') : empty('ยังไม่มีผู้ปฏิบัติส่งผล')}</div>` : ''}
+      ${canReview() ? `<div class="card"><h2>ผลของผู้ปฏิบัติทั้งหมด</h2>${(rows || []).length ? (rows || []).map((r) => `<div style="padding:12px 0;border-bottom:1px solid var(--line)"><strong>${esc(r.ec_profiles?.full_name || r.user_id)}</strong><span style="float:right" class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, r.status))} · ฉบับที่ ${r.version}</span><br><span class="small muted">ส่ง ${fmtDate(r.submitted_at, true)}</span><div style="margin-top:8px"><button class="btn btn-outline btn-sm" data-view-individual="${r.id}">ดูผล</button>${['submitted','resubmitted'].includes(r.status) ? `<button class="btn btn-warning btn-sm" data-return-individual="${r.id}">ส่งกลับแก้ไข</button>` : ''}</div></div>`).join('') : empty('ยังไม่มีผู้ปฏิบัติส่งผล')}</div>` : ''}
     </div>`;
   }
 
@@ -728,13 +855,13 @@
     ]);
     const practitioner = await isPractitioner(round.id);
     const editable = practitioner && (!consensus || ['draft','returned','awaiting_practitioner_confirmations'].includes(consensus.status));
-    return `<div class="card"><div class="card-header"><div><h2>ผลกลางของห้องปฏิบัติการ</h2><div class="small muted">ผู้ปฏิบัติทั้งสองคนร่วมกันสรุปและต้องกดยืนยันคนละหนึ่งครั้ง</div></div>${consensus ? `<span class="badge">${esc(consensus.status)} · v${consensus.version}</span>` : ''}</div>
+    return `<div class="card"><div class="card-header"><div><h2>ผลสรุปกลางของห้องปฏิบัติการ</h2><div class="small muted">ผู้ปฏิบัติทั้งสองคนร่วมกันสรุปและต้องกดยืนยันคนละหนึ่งครั้ง</div></div>${consensus ? `<span class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, consensus.status))} · ฉบับที่ ${consensus.version}</span>` : ''}</div>
       ${practitioner || canReview() ? `<form id="consensus-form">${resultForm(consensus?.result_payload, 'consensus', !editable && !canReview())}</form>
       <div class="modal-footer">
         ${editable ? `<button class="btn btn-secondary" id="save-consensus">บันทึกผลกลาง</button><button class="btn btn-primary" id="confirm-consensus">ยืนยันผลกลางของฉัน</button>` : ''}
         ${canReview() && consensus ? `<button class="btn btn-outline" id="print-consensus">พิมพ์ผลกลาง</button>` : ''}
       </div>
-      <div class="notice">ผู้ปฏิบัติยืนยันแล้ว ${(approvals || []).length}/2 คน</div>` : `<div class="notice">เฉพาะผู้ปฏิบัติจริง ผู้ตรวจ QM แพทย์ และ Viewer ที่ได้รับสิทธิ์</div>`}
+      <div class="notice">ผู้ปฏิบัติยืนยันแล้ว ${(approvals || []).length}/2 คน</div>` : `<div class="notice">เฉพาะผู้ปฏิบัติจริง ผู้ทบทวนผล ผู้จัดการคุณภาพ แพทย์ และผู้ตรวจติดตามที่ได้รับสิทธิ์</div>`}
     </div>`;
   }
 
@@ -747,13 +874,13 @@
       <div class="card"><h2>ลำดับการรับรอง</h2>
         <div class="timeline">${['practitioner_confirm','qm_review','physician_approval','closure_acknowledgement'].map((stage) => {
           const found = (approvals || []).filter((a) => a.stage === stage);
-          return `<div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><strong>${esc(stage)}</strong><br>${found.length ? found.map((a) => `${esc(a.ec_profiles?.full_name || '')} — ${esc(a.decision)} (${fmtDate(a.signed_at,true)})`).join('<br>') : '<span class="muted">ยังไม่มีการรับรอง</span>'}</div></div>`;
+          return `<div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><strong>${esc(labelFrom(APPROVAL_STAGE_LABELS, stage))}</strong><br>${found.length ? found.map((a) => `${esc(a.ec_profiles?.full_name || '')} — ${esc(labelFrom(DECISION_LABELS, a.decision))} (${fmtDate(a.signed_at,true)})`).join('<br>') : '<span class="muted">ยังไม่มีการรับรอง</span>'}</div></div>`;
         }).join('')}</div>
       </div>
       <div class="card"><h2>ดำเนินการ</h2>
-        ${hasRole('qm','admin') && consensus ? `<div class="form-grid"><div class="field"><label>หมายเหตุ QM</label><textarea class="textarea" id="qm-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="qm-approve">QM อนุมัติ</button><button class="btn btn-warning" id="qm-return">ส่งกลับแก้ไข</button></div></div>` : ''}
-        ${isPhysician() && consensus ? `<hr style="border:0;border-top:1px solid var(--line);margin:20px 0"><div class="form-grid"><div class="field"><label>หมายเหตุแพทย์</label><textarea class="textarea" id="physician-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="physician-approve">แพทย์อนุมัติขั้นสุดท้าย</button><button class="btn btn-warning" id="physician-return">ส่งกลับ QM</button></div></div>` : ''}
-        ${!hasRole('qm','admin','physician') ? `<div class="notice">หน้านี้แสดงสถานะการรับรอง ผู้มี Role ที่เกี่ยวข้องเท่านั้นที่กดอนุมัติได้</div>` : ''}
+        ${hasRole('qm','admin') && consensus ? `<div class="form-grid"><div class="field"><label>หมายเหตุผู้จัดการคุณภาพ</label><textarea class="textarea" id="qm-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="qm-approve">ผู้จัดการคุณภาพอนุมัติ</button><button class="btn btn-warning" id="qm-return">ส่งกลับแก้ไข</button></div></div>` : ''}
+        ${isPhysician() && consensus ? `<hr style="border:0;border-top:1px solid var(--line);margin:20px 0"><div class="form-grid"><div class="field"><label>หมายเหตุแพทย์</label><textarea class="textarea" id="physician-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="physician-approve">แพทย์อนุมัติขั้นสุดท้าย</button><button class="btn btn-warning" id="physician-return">ส่งกลับผู้จัดการคุณภาพ</button></div></div>` : ''}
+        ${!hasRole('qm','admin','physician') ? `<div class="notice">หน้านี้แสดงสถานะการรับรอง ผู้ที่ได้รับบทบาทเกี่ยวข้องเท่านั้นที่กดอนุมัติได้</div>` : ''}
       </div>
     </div>`;
   }
@@ -774,15 +901,15 @@
         <div class="field"><label>ผลสรุป</label><select class="select" name="outcome"><option value="pending">รอผล</option><option value="pass" ${official?.outcome==='pass'?'selected':''}>ผ่าน</option><option value="fail" ${official?.outcome==='fail'?'selected':''}>ไม่ผ่าน</option><option value="partial" ${official?.outcome==='partial'?'selected':''}>ผ่านบางส่วน</option></select></div>
         <div class="field" style="grid-column:1/-1"><label>สรุปผล / รายการที่ผิด</label><textarea class="textarea" name="summary">${esc(official?.summary || '')}</textarea></div>
         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="published" ${official?.published_to_staff?'checked':''}> เปิดผลและเฉลยให้บุคลากร</label>
-      </form><div class="modal-footer"><button class="btn btn-primary" id="save-official">บันทึกผลประเมิน</button></div>` : official ? `<div class="grid cols-3"><div><strong>คะแนน</strong><div class="stat-value">${official.score ?? '-'}</div></div><div><strong>ผล</strong><p>${esc(official.outcome || '-')}</p></div><div><strong>เปิดให้ Staff</strong><p>${official.published_to_staff ? 'เปิดแล้ว' : 'ยังไม่เปิด'}</p></div></div><p>${esc(official.summary || '')}</p>` : empty('ยังไม่ได้รับผลประเมินอย่างเป็นทางการ')}
+      </form><div class="modal-footer"><button class="btn btn-primary" id="save-official">บันทึกผลประเมิน</button></div>` : official ? `<div class="grid cols-3"><div><strong>คะแนน</strong><div class="stat-value">${official.score ?? '-'}</div></div><div><strong>ผล</strong><p>${esc(labelFrom(OFFICIAL_OUTCOME_LABELS, official.outcome))}</p></div><div><strong>เปิดให้บุคลากร</strong><p>${official.published_to_staff ? 'เปิดแล้ว' : 'ยังไม่เปิด'}</p></div></div><p>${esc(official.summary || '')}</p>` : empty('ยังไม่ได้รับผลประเมินอย่างเป็นทางการ')}
     </div>`;
   }
 
   async function roundCapa(round) {
     const { data: rows, error } = await state.supabase.from('ec_corrective_actions').select('*, ec_profiles!ec_corrective_actions_responsible_user_id_fkey(full_name)').eq('round_id', round.id).order('created_at');
     if (error) throw error;
-    return `<div class="card"><div class="card-header"><div><h2>Corrective Action / การทบทวน</h2><div class="small muted">วิเคราะห์สาเหตุ แก้ไข ป้องกัน และตรวจประสิทธิผล</div></div>${canReview() ? `<button class="btn btn-primary" id="add-capa">＋ เปิด CAPA</button>` : ''}</div>
-      ${(rows || []).length ? `<div class="table-wrap"><table><thead><tr><th>ปัญหา</th><th>ผู้รับผิดชอบ</th><th>กำหนด</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>${rows.map((r) => `<tr><td><strong>${esc(r.issue_description)}</strong><br><span class="small muted">${esc(r.root_cause || 'ยังไม่ระบุสาเหตุ')}</span></td><td>${esc(r.ec_profiles?.full_name || '-')}</td><td>${fmtDate(r.due_date)}</td><td><span class="badge">${esc(r.status)}</span></td><td><button class="btn btn-outline btn-sm" data-edit-capa="${r.id}">เปิด</button></td></tr>`).join('')}</tbody></table></div>` : empty('ไม่มี CAPA ในรอบนี้')}
+    return `<div class="card"><div class="card-header"><div><h2>การแก้ไขและป้องกัน</h2><div class="small muted">วิเคราะห์สาเหตุ แก้ไข ป้องกัน และตรวจประสิทธิผล</div></div>${canReview() ? `<button class="btn btn-primary" id="add-capa">＋ เปิดรายการแก้ไข</button>` : ''}</div>
+      ${(rows || []).length ? `<div class="table-wrap"><table><thead><tr><th>ปัญหา</th><th>ผู้รับผิดชอบ</th><th>กำหนด</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>${rows.map((r) => `<tr><td><strong>${esc(r.issue_description)}</strong><br><span class="small muted">${esc(r.root_cause || 'ยังไม่ระบุสาเหตุ')}</span></td><td>${esc(r.ec_profiles?.full_name || '-')}</td><td>${fmtDate(r.due_date)}</td><td><span class="badge">${esc(labelFrom(CAPA_STATUS_LABELS, r.status))}</span></td><td><button class="btn btn-outline btn-sm" data-edit-capa="${r.id}">เปิด</button></td></tr>`).join('')}</tbody></table></div>` : empty('ไม่มีรายการแก้ไขและป้องกันในรอบนี้')}
     </div>`;
   }
 
@@ -794,11 +921,11 @@
     ]);
     const name = (id) => directory.find((p) => p.id === id)?.full_name || id;
     return `<div class="grid cols-2">
-      <div class="card"><div class="card-header"><div><h2>ข้อสอบ</h2><div class="small muted">เผยแพร่คำถามหลังห้องส่งผล CAP และก่อนเปิดเฉลย</div></div>${canManage() ? `<button class="btn btn-primary" id="add-question">＋ เพิ่มคำถาม</button>` : ''}</div>
-        ${(questions || []).length ? questions.map((q) => `<div style="padding:12px 0;border-bottom:1px solid var(--line)"><span class="badge ${q.published?'success':'warning'}">${q.published?'เผยแพร่':'ฉบับร่าง'}</span> <strong>${q.question_order}. ${esc(q.prompt)}</strong><br><span class="small muted">${esc(q.question_type)} · ${q.points} คะแนน ${q.is_critical?'· Critical':''}</span>${canManage()?`<div style="margin-top:7px"><button class="btn btn-outline btn-sm" data-edit-question="${q.id}">แก้ไข</button></div>`:''}</div>`).join('') : empty('ยังไม่มีคำถาม')}
+      <div class="card"><div class="card-header"><div><h2>ข้อสอบ</h2><div class="small muted">เผยแพร่คำถามหลังห้องส่งผลให้ผู้ให้บริการ และก่อนเปิดเฉลย</div></div>${canManage() ? `<button class="btn btn-primary" id="add-question">＋ เพิ่มคำถาม</button>` : ''}</div>
+        ${(questions || []).length ? questions.map((q) => `<div style="padding:12px 0;border-bottom:1px solid var(--line)"><span class="badge ${q.published?'success':'warning'}">${q.published?'เผยแพร่':'ฉบับร่าง'}</span> <strong>${q.question_order}. ${esc(q.prompt)}</strong><br><span class="small muted">${esc(labelFrom(QUESTION_TYPE_LABELS, q.question_type))} · ${q.points} คะแนน ${q.is_critical?'· ข้อสำคัญ':''}</span>${canManage()?`<div style="margin-top:7px"><button class="btn btn-outline btn-sm" data-edit-question="${q.id}">แก้ไข</button></div>`:''}</div>`).join('') : empty('ยังไม่มีคำถาม')}
       </div>
-      <div class="card"><div class="card-header"><div><h2>การมอบหมาย</h2><div class="small muted">ผู้ปฏิบัติจริง = Practical คนอื่น = Quiz</div></div>${canManage()?`<button class="btn btn-primary" id="assign-all-competency">สร้าง Assignment</button>`:''}</div>
-        ${(assignments || []).length ? `<div class="table-wrap"><table><thead><tr><th>ชื่อ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th></tr></thead><tbody>${assignments.map((a)=>`<tr><td>${esc(name(a.user_id))}</td><td>${esc(a.assignment_type)}</td><td>${assignmentBadge(a.status)}</td><td>${a.score ?? '-'}</td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่ได้สร้าง Assignment')}
+      <div class="card"><div class="card-header"><div><h2>การมอบหมาย</h2><div class="small muted">ผู้ปฏิบัติจริงประเมินจากการทำงาน ส่วนบุคลากรคนอื่นทำแบบทดสอบ</div></div>${canManage()?`<button class="btn btn-primary" id="assign-all-competency">สร้างรายการประเมิน</button>`:''}</div>
+        ${(assignments || []).length ? `<div class="table-wrap"><table><thead><tr><th>ชื่อ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th></tr></thead><tbody>${assignments.map((a)=>`<tr><td>${esc(name(a.user_id))}</td><td>${esc(labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${assignmentBadge(a.status)}</td><td>${a.score ?? '-'}</td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่ได้สร้างรายการประเมิน')}
       </div>
     </div>`;
   }
@@ -819,9 +946,9 @@
   function bindDocuments(round) {
     document.getElementById('upload-doc-btn')?.addEventListener('click', () => {
       showModal('อัปโหลดเอกสาร/ภาพ', `<form id="doc-form" class="form-grid">
-        <div class="field"><label>ประเภท</label><select class="select" name="category">${['source_document','instruction','specimen_image','raw_result_image','submission_form','submission_evidence','official_result','corrective_action','closure_report','other'].map(x=>`<option>${x}</option>`).join('')}</select></div>
+        <div class="field"><label>ประเภท</label><select class="select" name="category">${Object.entries(DOCUMENT_CATEGORY_LABELS).map(([value,label])=>`<option value="${value}">${esc(label)}</option>`).join('')}</select></div>
         <div class="field"><label>ชื่อเอกสาร</label><input class="input" name="title" required></div>
-        <div class="field"><label>การมองเห็น</label><select class="select" name="visibility"><option value="restricted">เฉพาะผู้ตรวจ/QM/แพทย์</option><option value="assigned">ผู้ได้รับมอบหมาย</option><option value="staff">บุคลากรทุกคน</option></select></div>
+        <div class="field"><label>ผู้ที่เปิดดูได้</label><select class="select" name="visibility"><option value="restricted">เฉพาะผู้ทบทวน ผู้จัดการคุณภาพ และแพทย์</option><option value="assigned">ผู้ได้รับมอบหมาย</option><option value="staff">บุคลากรทุกคน</option></select></div>
         <div class="field"><label>ไฟล์ PDF/JPG/PNG/WebP ไม่เกิน 20 MB</label><input class="input" type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp" required></div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="upload-doc-save">อัปโหลด</button>`);
       document.getElementById('upload-doc-save').addEventListener('click', async () => {
@@ -832,15 +959,15 @@
         const category = String(fd.get('category')); const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g,'_');
         const path = `${round.id}/${category}/${crypto.randomUUID()}_${safeName}`;
         const upload = await state.supabase.storage.from(cfg.PRIVATE_BUCKET).upload(path, file, { upsert: false, contentType: file.type });
-        if (upload.error) return toast(upload.error.message, 'danger');
+        if (upload.error) return toast(friendlyError(upload.error), 'danger');
         const ins = await state.supabase.from('ec_round_documents').insert({ round_id: round.id, category, title: String(fd.get('title')), file_name: file.name, storage_path: path, mime_type: file.type, file_size: file.size, visibility: String(fd.get('visibility')), uploaded_by: state.user.id });
-        if (ins.error) return toast(ins.error.message, 'danger');
+        if (ins.error) return toast(friendlyError(ins.error), 'danger');
         closeModal(); toast('อัปโหลดเรียบร้อย', 'success'); route();
       });
     });
     document.querySelectorAll('[data-open-doc]').forEach((b) => b.addEventListener('click', async () => {
       const { data, error } = await state.supabase.storage.from(cfg.PRIVATE_BUCKET).createSignedUrl(b.dataset.path, 300);
-      if (error) return toast(error.message, 'danger');
+      if (error) return toast(friendlyError(error), 'danger');
       window.open(data.signedUrl, '_blank', 'noopener');
     }));
   }
@@ -855,7 +982,7 @@
       showModal('กำหนดผู้รับผิดชอบ', `<form id="assignment-form" class="form-grid cols-2">
         <div class="field"><label>ผู้ปฏิบัติคนที่ 1</label><select class="select" name="p1">${opts(find('practitioner',1))}</select></div>
         <div class="field"><label>ผู้ปฏิบัติคนที่ 2</label><select class="select" name="p2">${opts(find('practitioner',2))}</select></div>
-        <div class="field"><label>Reviewer</label><select class="select" name="reviewer">${opts(find('reviewer'))}</select></div>
+        <div class="field"><label>ผู้ทบทวนผล</label><select class="select" name="reviewer">${opts(find('reviewer'))}</select></div>
         <div class="field"><label>แพทย์ผู้อนุมัติ</label><select class="select" name="physician">${opts(find('physician'))}</select></div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-assignments">บันทึก</button>`);
       document.getElementById('save-assignments').addEventListener('click', async () => {
@@ -866,7 +993,7 @@
         const rows=[{round_id:round.id,user_id:p1,assignment_role:'practitioner',practitioner_slot:1,assigned_by:state.user.id},{round_id:round.id,user_id:p2,assignment_role:'practitioner',practitioner_slot:2,assigned_by:state.user.id}];
         if(reviewer) rows.push({round_id:round.id,user_id:reviewer,assignment_role:'reviewer',practitioner_slot:null,assigned_by:state.user.id});
         if(physician) rows.push({round_id:round.id,user_id:physician,assignment_role:'physician',practitioner_slot:null,assigned_by:state.user.id});
-        const {error}=await state.supabase.from('ec_round_assignments').insert(rows); if(error)return toast(error.message,'danger');
+        const {error}=await state.supabase.from('ec_round_assignments').insert(rows); if(error)return toast(friendlyError(error), 'danger');
         closeModal();toast('บันทึกผู้รับผิดชอบแล้ว','success');route();
       });
     });
@@ -879,71 +1006,71 @@
       const {data: existing}=await state.supabase.from('ec_individual_results').select('id,status').eq('round_id',round.id).eq('user_id',state.user.id).maybeSingle();
       const row={round_id:round.id,user_id:state.user.id,result_payload:payload,status:submit?'submitted':'draft',started_at:new Date().toISOString(),submitted_at:submit?new Date().toISOString():null};
       const res=existing?await state.supabase.from('ec_individual_results').update(row).eq('id',existing.id):await state.supabase.from('ec_individual_results').insert(row);
-      if(res.error)return toast(res.error.message,'danger'); toast(submit?'ส่งผลแล้ว':'บันทึกร่างแล้ว','success'); route();
+      if(res.error)return toast(friendlyError(res.error), 'danger'); toast(submit?'ส่งผลแล้ว':'บันทึกร่างแล้ว','success'); route();
     };
     document.getElementById('save-individual')?.addEventListener('click',()=>save(false));
     document.getElementById('submit-individual')?.addEventListener('click',()=>{ if(confirm('ยืนยันส่งผลรายบุคคลหรือไม่ หลังส่งจะแก้ไขเองไม่ได้')) save(true); });
-    document.querySelectorAll('[data-view-individual]').forEach((b)=>b.addEventListener('click',async()=>{const {data,error}=await state.supabase.from('ec_individual_results').select('*,ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('id',b.dataset.viewIndividual).single();if(error)return toast(error.message,'danger');showModal(`ผลของ ${data.ec_profiles?.full_name||''}`,resultForm(data.result_payload,'view',true),'',true);}));
-    document.querySelectorAll('[data-return-individual]').forEach((b)=>b.addEventListener('click',async()=>{const reason=prompt('เหตุผลที่ส่งกลับแก้ไข');if(!reason)return;const {error}=await state.supabase.from('ec_individual_results').update({status:'returned'}).eq('id',b.dataset.returnIndividual);if(error)return toast(error.message,'danger');toast('ส่งกลับแก้ไขแล้ว','success');route();}));
+    document.querySelectorAll('[data-view-individual]').forEach((b)=>b.addEventListener('click',async()=>{const {data,error}=await state.supabase.from('ec_individual_results').select('*,ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('id',b.dataset.viewIndividual).single();if(error)return toast(friendlyError(error), 'danger');showModal(`ผลของ ${data.ec_profiles?.full_name||''}`,resultForm(data.result_payload,'view',true),'',true);}));
+    document.querySelectorAll('[data-return-individual]').forEach((b)=>b.addEventListener('click',async()=>{const reason=prompt('เหตุผลที่ส่งกลับแก้ไข');if(!reason)return;const {error}=await state.supabase.from('ec_individual_results').update({status:'returned'}).eq('id',b.dataset.returnIndividual);if(error)return toast(friendlyError(error), 'danger');toast('ส่งกลับแก้ไขแล้ว','success');route();}));
   }
 
   function bindConsensus(round) {
-    document.getElementById('save-consensus')?.addEventListener('click',async()=>{const payload=collectResultPayload(document.getElementById('consensus-form'),'consensus');const {data:existing}=await state.supabase.from('ec_consensus_results').select('id').eq('round_id',round.id).maybeSingle();const row={round_id:round.id,result_payload:payload,status:'awaiting_practitioner_confirmations',prepared_by:state.user.id};const res=existing?await state.supabase.from('ec_consensus_results').update(row).eq('id',existing.id):await state.supabase.from('ec_consensus_results').insert(row);if(res.error)return toast(res.error.message,'danger');toast('บันทึกผลกลางแล้ว','success');route();});
-    document.getElementById('confirm-consensus')?.addEventListener('click',async()=>{const note=prompt('หมายเหตุการยืนยัน (เว้นว่างได้)')||'';const {error}=await state.supabase.rpc('ec_confirm_consensus',{p_round_id:round.id,p_note:note});if(error)return toast(error.message,'danger');toast('ยืนยันผลกลางแล้ว','success');route();});
+    document.getElementById('save-consensus')?.addEventListener('click',async()=>{const payload=collectResultPayload(document.getElementById('consensus-form'),'consensus');const {data:existing}=await state.supabase.from('ec_consensus_results').select('id').eq('round_id',round.id).maybeSingle();const row={round_id:round.id,result_payload:payload,status:'awaiting_practitioner_confirmations',prepared_by:state.user.id};const res=existing?await state.supabase.from('ec_consensus_results').update(row).eq('id',existing.id):await state.supabase.from('ec_consensus_results').insert(row);if(res.error)return toast(friendlyError(res.error), 'danger');toast('บันทึกผลกลางแล้ว','success');route();});
+    document.getElementById('confirm-consensus')?.addEventListener('click',async()=>{const note=prompt('หมายเหตุการยืนยัน (เว้นว่างได้)')||'';const {error}=await state.supabase.rpc('ec_confirm_consensus',{p_round_id:round.id,p_note:note});if(error)return toast(friendlyError(error), 'danger');toast('ยืนยันผลกลางแล้ว','success');route();});
     document.getElementById('print-consensus')?.addEventListener('click',()=>window.print());
   }
 
   function bindApproval(round) {
-    const upsertApproval=async(stage,decision,note)=>{const {data:consensus}=await state.supabase.from('ec_consensus_results').select('version').eq('round_id',round.id).single();const {error}=await state.supabase.from('ec_approvals').upsert({round_id:round.id,stage,approver_id:state.user.id,decision,note,result_version:consensus?.version},{onConflict:'round_id,stage,approver_id'});if(error)return toast(error.message,'danger');return true;};
-    document.getElementById('qm-approve')?.addEventListener('click',async()=>{const note=document.getElementById('qm-note').value; if(await upsertApproval('qm_review','approved',note)){await state.supabase.from('ec_consensus_results').update({status:'qm_approved'}).eq('round_id',round.id);await state.supabase.from('ec_eqa_rounds').update({status:'awaiting_physician_approval',updated_by:state.user.id}).eq('id',round.id);toast('QM อนุมัติแล้ว','success');route();}});
+    const upsertApproval=async(stage,decision,note)=>{const {data:consensus}=await state.supabase.from('ec_consensus_results').select('version').eq('round_id',round.id).single();const {error}=await state.supabase.from('ec_approvals').upsert({round_id:round.id,stage,approver_id:state.user.id,decision,note,result_version:consensus?.version},{onConflict:'round_id,stage,approver_id'});if(error)return toast(friendlyError(error), 'danger');return true;};
+    document.getElementById('qm-approve')?.addEventListener('click',async()=>{const note=document.getElementById('qm-note').value; if(await upsertApproval('qm_review','approved',note)){await state.supabase.from('ec_consensus_results').update({status:'qm_approved'}).eq('round_id',round.id);await state.supabase.from('ec_eqa_rounds').update({status:'awaiting_physician_approval',updated_by:state.user.id}).eq('id',round.id);toast('ผู้จัดการคุณภาพอนุมัติแล้ว','success');route();}});
     document.getElementById('qm-return')?.addEventListener('click',async()=>{const note=document.getElementById('qm-note').value;if(!note)return toast('กรุณาระบุเหตุผล','danger');if(await upsertApproval('qm_review','returned',note)){await state.supabase.from('ec_consensus_results').update({status:'returned'}).eq('round_id',round.id);await state.supabase.from('ec_eqa_rounds').update({status:'returned_for_revision',updated_by:state.user.id}).eq('id',round.id);route();}});
     document.getElementById('physician-approve')?.addEventListener('click',async()=>{const note=document.getElementById('physician-note').value;if(await upsertApproval('physician_approval','approved',note)){await state.supabase.from('ec_consensus_results').update({status:'physician_approved'}).eq('round_id',round.id);await state.supabase.from('ec_eqa_rounds').update({status:'physician_approved',updated_by:state.user.id}).eq('id',round.id);toast('แพทย์อนุมัติแล้ว','success');route();}});
     document.getElementById('physician-return')?.addEventListener('click',async()=>{const note=document.getElementById('physician-note').value;if(!note)return toast('กรุณาระบุเหตุผล','danger');if(await upsertApproval('physician_approval','returned',note)){await state.supabase.from('ec_eqa_rounds').update({status:'awaiting_qm_approval',updated_by:state.user.id}).eq('id',round.id);route();}});
   }
 
   function bindSubmission(round) {
-    document.getElementById('add-submission')?.addEventListener('click',()=>{showModal('บันทึกหลักฐานการส่งผล',`<form id="submission-form" class="form-grid"><div class="field"><label>วันเวลา</label><input class="input" type="datetime-local" name="submitted_at" required value="${new Date().toISOString().slice(0,16)}"></div><div class="field"><label>เลขอ้างอิง</label><input class="input" name="reference"></div><div class="field"><label>หมายเหตุ</label><textarea class="textarea" name="note"></textarea></div></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-submission">บันทึก</button>`);document.getElementById('save-submission').addEventListener('click',async()=>{const f=document.getElementById('submission-form');if(!f.reportValidity())return;const fd=new FormData(f);const {error}=await state.supabase.from('ec_submission_evidence').insert({round_id:round.id,submitted_at:new Date(String(fd.get('submitted_at'))).toISOString(),submitted_by:state.user.id,provider_reference:String(fd.get('reference')||'')||null,note:String(fd.get('note')||'')||null});if(error)return toast(error.message,'danger');await state.supabase.from('ec_eqa_rounds').update({status:'submitted_to_provider',updated_by:state.user.id,competency_open_at:new Date().toISOString()}).eq('id',round.id);closeModal();toast('บันทึกการส่งผลแล้ว','success');route();});});
+    document.getElementById('add-submission')?.addEventListener('click',()=>{showModal('บันทึกหลักฐานการส่งผล',`<form id="submission-form" class="form-grid"><div class="field"><label>วันเวลา</label><input class="input" type="datetime-local" name="submitted_at" required value="${new Date().toISOString().slice(0,16)}"></div><div class="field"><label>เลขอ้างอิง</label><input class="input" name="reference"></div><div class="field"><label>หมายเหตุ</label><textarea class="textarea" name="note"></textarea></div></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-submission">บันทึก</button>`);document.getElementById('save-submission').addEventListener('click',async()=>{const f=document.getElementById('submission-form');if(!f.reportValidity())return;const fd=new FormData(f);const {error}=await state.supabase.from('ec_submission_evidence').insert({round_id:round.id,submitted_at:new Date(String(fd.get('submitted_at'))).toISOString(),submitted_by:state.user.id,provider_reference:String(fd.get('reference')||'')||null,note:String(fd.get('note')||'')||null});if(error)return toast(friendlyError(error), 'danger');await state.supabase.from('ec_eqa_rounds').update({status:'submitted_to_provider',updated_by:state.user.id,competency_open_at:new Date().toISOString()}).eq('id',round.id);closeModal();toast('บันทึกการส่งผลแล้ว','success');route();});});
   }
 
   function bindOfficial(round) {
-    document.getElementById('save-official')?.addEventListener('click',async()=>{const fd=new FormData(document.getElementById('official-form'));const payload={round_id:round.id,score:fd.get('score')?Number(fd.get('score')):null,outcome:String(fd.get('outcome')),summary:String(fd.get('summary')||'')||null,published_to_staff:fd.get('published')==='on',recorded_by:state.user.id,received_at:new Date().toISOString()};const {error}=await state.supabase.from('ec_official_results').upsert(payload,{onConflict:'round_id'});if(error)return toast(error.message,'danger');await state.supabase.from('ec_eqa_rounds').update({status:'official_result_received',answer_released_at:payload.published_to_staff?new Date().toISOString():null,updated_by:state.user.id}).eq('id',round.id);toast('บันทึกผลอย่างเป็นทางการแล้ว','success');route();});
+    document.getElementById('save-official')?.addEventListener('click',async()=>{const fd=new FormData(document.getElementById('official-form'));const payload={round_id:round.id,score:fd.get('score')?Number(fd.get('score')):null,outcome:String(fd.get('outcome')),summary:String(fd.get('summary')||'')||null,published_to_staff:fd.get('published')==='on',recorded_by:state.user.id,received_at:new Date().toISOString()};const {error}=await state.supabase.from('ec_official_results').upsert(payload,{onConflict:'round_id'});if(error)return toast(friendlyError(error), 'danger');await state.supabase.from('ec_eqa_rounds').update({status:'official_result_received',answer_released_at:payload.published_to_staff?new Date().toISOString():null,updated_by:state.user.id}).eq('id',round.id);toast('บันทึกผลอย่างเป็นทางการแล้ว','success');route();});
   }
 
   function bindCapa(round) {
-    const open=(row={})=>{showModal(row.id?'แก้ไข CAPA':'เปิด CAPA',`<form id="capa-form" class="form-grid cols-2"><div class="field" style="grid-column:1/-1"><label>ปัญหาที่พบ</label><textarea class="textarea" name="issue" required>${esc(row.issue_description||'')}</textarea></div><div class="field"><label>สาเหตุ</label><textarea class="textarea" name="root">${esc(row.root_cause||'')}</textarea></div><div class="field"><label>ผลกระทบ</label><textarea class="textarea" name="impact">${esc(row.impact_assessment||'')}</textarea></div><div class="field"><label>การแก้ไขทันที</label><textarea class="textarea" name="correction">${esc(row.immediate_correction||'')}</textarea></div><div class="field"><label>การป้องกัน</label><textarea class="textarea" name="preventive">${esc(row.preventive_action||'')}</textarea></div><div class="field"><label>กำหนดเสร็จ</label><input class="input" type="date" name="due" value="${fmtDateInput(row.due_date)}"></div><div class="field"><label>สถานะ</label><select class="select" name="status">${['open','in_progress','awaiting_effectiveness_review','effective','ineffective','closed','cancelled'].map(s=>`<option ${row.status===s?'selected':''}>${s}</option>`).join('')}</select></div><input type="hidden" name="id" value="${esc(row.id||'')}"></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-capa">บันทึก</button>`,true);document.getElementById('save-capa').addEventListener('click',async()=>{const f=document.getElementById('capa-form');if(!f.reportValidity())return;const fd=new FormData(f);const id=String(fd.get('id')||'');const p={round_id:round.id,issue_description:String(fd.get('issue')),root_cause:String(fd.get('root')||'')||null,impact_assessment:String(fd.get('impact')||'')||null,immediate_correction:String(fd.get('correction')||'')||null,preventive_action:String(fd.get('preventive')||'')||null,due_date:fd.get('due')||null,status:String(fd.get('status')),updated_by:state.user.id};const res=id?await state.supabase.from('ec_corrective_actions').update(p).eq('id',id):await state.supabase.from('ec_corrective_actions').insert({...p,created_by:state.user.id});if(res.error)return toast(res.error.message,'danger');closeModal();toast('บันทึก CAPA แล้ว','success');route();});};
+    const open=(row={})=>{showModal(row.id?'แก้ไขรายการแก้ไขและป้องกัน':'เปิดรายการแก้ไขและป้องกัน',`<form id="capa-form" class="form-grid cols-2"><div class="field" style="grid-column:1/-1"><label>ปัญหาที่พบ</label><textarea class="textarea" name="issue" required>${esc(row.issue_description||'')}</textarea></div><div class="field"><label>สาเหตุ</label><textarea class="textarea" name="root">${esc(row.root_cause||'')}</textarea></div><div class="field"><label>ผลกระทบ</label><textarea class="textarea" name="impact">${esc(row.impact_assessment||'')}</textarea></div><div class="field"><label>การแก้ไขทันที</label><textarea class="textarea" name="correction">${esc(row.immediate_correction||'')}</textarea></div><div class="field"><label>การป้องกัน</label><textarea class="textarea" name="preventive">${esc(row.preventive_action||'')}</textarea></div><div class="field"><label>กำหนดเสร็จ</label><input class="input" type="date" name="due" value="${fmtDateInput(row.due_date)}"></div><div class="field"><label>สถานะ</label><select class="select" name="status">${Object.entries(CAPA_STATUS_LABELS).map(([value,label])=>`<option value="${value}" ${row.status===value?'selected':''}>${esc(label)}</option>`).join('')}</select></div><input type="hidden" name="id" value="${esc(row.id||'')}"></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-capa">บันทึก</button>`,true);document.getElementById('save-capa').addEventListener('click',async()=>{const f=document.getElementById('capa-form');if(!f.reportValidity())return;const fd=new FormData(f);const id=String(fd.get('id')||'');const p={round_id:round.id,issue_description:String(fd.get('issue')),root_cause:String(fd.get('root')||'')||null,impact_assessment:String(fd.get('impact')||'')||null,immediate_correction:String(fd.get('correction')||'')||null,preventive_action:String(fd.get('preventive')||'')||null,due_date:fd.get('due')||null,status:String(fd.get('status')),updated_by:state.user.id};const res=id?await state.supabase.from('ec_corrective_actions').update(p).eq('id',id):await state.supabase.from('ec_corrective_actions').insert({...p,created_by:state.user.id});if(res.error)return toast(friendlyError(res.error), 'danger');closeModal();toast('บันทึกรายการแก้ไขและป้องกันแล้ว','success');route();});};
     document.getElementById('add-capa')?.addEventListener('click',()=>open());
-    document.querySelectorAll('[data-edit-capa]').forEach(b=>b.addEventListener('click',async()=>{const {data,error}=await state.supabase.from('ec_corrective_actions').select('*').eq('id',b.dataset.editCapa).single();if(error)return toast(error.message,'danger');open(data);}));
+    document.querySelectorAll('[data-edit-capa]').forEach(b=>b.addEventListener('click',async()=>{const {data,error}=await state.supabase.from('ec_corrective_actions').select('*').eq('id',b.dataset.editCapa).single();if(error)return toast(friendlyError(error), 'danger');open(data);}));
   }
 
   function bindCompetencyAdmin(round) {
-    const openQuestion=async(row=null)=>{let choices=[];let key=null;if(row?.id){const [{data:choiceData},{data:keyData}]=await Promise.all([state.supabase.from('ec_question_choices').select('*').eq('question_id',row.id).order('choice_order'),state.supabase.from('ec_question_answer_keys').select('*').eq('question_id',row.id).maybeSingle()]);choices=choiceData||[];key=keyData||null;}const correctIndex=choices.findIndex(c=>(key?.correct_choice_ids||[]).includes(c.id));showModal(row?'แก้ไขคำถาม':'เพิ่มคำถาม',`<form id="question-form" class="form-grid cols-2"><input type="hidden" name="id" value="${esc(row?.id||'')}"><div class="field"><label>ลำดับ</label><input class="input" type="number" name="order" required value="${esc(row?.question_order||1)}"></div><div class="field"><label>หัวข้อ</label><input class="input" name="section" value="${esc(row?.section||'')}"></div><div class="field"><label>ประเภท</label><select class="select" name="type">${['single_choice','multiple_choice','text','numeric','image_interpretation'].map(t=>`<option ${row?.question_type===t?'selected':''}>${t}</option>`).join('')}</select></div><div class="field"><label>คะแนน</label><input class="input" type="number" step="0.1" name="points" value="${esc(row?.points||1)}"></div><div class="field" style="grid-column:1/-1"><label>คำถาม</label><textarea class="textarea" name="prompt" required>${esc(row?.prompt||'')}</textarea></div><div class="field" style="grid-column:1/-1"><label>ตัวเลือก (หนึ่งบรรทัดต่อหนึ่งตัวเลือก)</label><textarea class="textarea" name="choices">${esc(choices.map(c=>c.choice_text).join('\n'))}</textarea><div class="help">ใช้สำหรับ single_choice</div></div><div class="field"><label>ลำดับตัวเลือกที่ถูก</label><input class="input" type="number" name="correct" min="1" value="${correctIndex>=0?correctIndex+1:''}"></div><div class="field"><label>คำอธิบายเฉลย</label><input class="input" name="explanation" value="${esc(key?.explanation||'')}"></div><label><input type="checkbox" name="critical" ${row?.is_critical?'checked':''}> Critical</label><label><input type="checkbox" name="published" ${row?.published?'checked':''}> เผยแพร่คำถาม</label></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-question">บันทึก</button>`,true);document.getElementById('save-question').addEventListener('click',async()=>{const f=document.getElementById('question-form');if(!f.reportValidity())return;const fd=new FormData(f);const id=String(fd.get('id')||'');const p={round_id:round.id,question_order:Number(fd.get('order')),section:String(fd.get('section')||'')||null,question_type:String(fd.get('type')),prompt:String(fd.get('prompt')),points:Number(fd.get('points')||1),is_critical:fd.get('critical')==='on',published:fd.get('published')==='on',updated_by:state.user.id};let qres=id?await state.supabase.from('ec_questions').update(p).eq('id',id).select().single():await state.supabase.from('ec_questions').insert({...p,created_by:state.user.id}).select().single();if(qres.error)return toast(qres.error.message,'danger');const qid=qres.data.id;await state.supabase.from('ec_question_choices').delete().eq('question_id',qid);const lines=String(fd.get('choices')||'').split('\n').map(x=>x.trim()).filter(Boolean);const correct=Number(fd.get('correct')||0);let correctIds=[];if(lines.length){const {data:inserted,error}=await state.supabase.from('ec_question_choices').insert(lines.map((text,i)=>({question_id:qid,choice_order:i+1,choice_text:text}))).select();if(error)return toast(error.message,'danger');if(correct>0&&inserted?.[correct-1])correctIds=[inserted[correct-1].id];}const keyRes=await state.supabase.from('ec_question_answer_keys').upsert({question_id:qid,correct_choice_ids:correctIds,answer_key_json:null,explanation:String(fd.get('explanation')||'')||null,updated_by:state.user.id},{onConflict:'question_id'});if(keyRes.error)return toast(keyRes.error.message,'danger');closeModal();toast('บันทึกคำถามแล้ว','success');route();});};
+    const openQuestion=async(row=null)=>{let choices=[];let key=null;if(row?.id){const [{data:choiceData},{data:keyData}]=await Promise.all([state.supabase.from('ec_question_choices').select('*').eq('question_id',row.id).order('choice_order'),state.supabase.from('ec_question_answer_keys').select('*').eq('question_id',row.id).maybeSingle()]);choices=choiceData||[];key=keyData||null;}const correctIndex=choices.findIndex(c=>(key?.correct_choice_ids||[]).includes(c.id));showModal(row?'แก้ไขคำถาม':'เพิ่มคำถาม',`<form id="question-form" class="form-grid cols-2"><input type="hidden" name="id" value="${esc(row?.id||'')}"><div class="field"><label>ลำดับ</label><input class="input" type="number" name="order" required value="${esc(row?.question_order||1)}"></div><div class="field"><label>หัวข้อ</label><input class="input" name="section" value="${esc(row?.section||'')}"></div><div class="field"><label>ประเภท</label><select class="select" name="type">${Object.entries(QUESTION_TYPE_LABELS).map(([value,label])=>`<option value="${value}" ${row?.question_type===value?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field"><label>คะแนน</label><input class="input" type="number" step="0.1" name="points" value="${esc(row?.points||1)}"></div><div class="field" style="grid-column:1/-1"><label>คำถาม</label><textarea class="textarea" name="prompt" required>${esc(row?.prompt||'')}</textarea></div><div class="field" style="grid-column:1/-1"><label>ตัวเลือก (หนึ่งบรรทัดต่อหนึ่งตัวเลือก)</label><textarea class="textarea" name="choices">${esc(choices.map(c=>c.choice_text).join('\n'))}</textarea><div class="help">ใช้เมื่อเลือกประเภท “เลือกคำตอบเดียว”</div></div><div class="field"><label>ลำดับตัวเลือกที่ถูก</label><input class="input" type="number" name="correct" min="1" value="${correctIndex>=0?correctIndex+1:''}"></div><div class="field"><label>คำอธิบายเฉลย</label><input class="input" name="explanation" value="${esc(key?.explanation||'')}"></div><label><input type="checkbox" name="critical" ${row?.is_critical?'checked':''}> ข้อสำคัญ</label><label><input type="checkbox" name="published" ${row?.published?'checked':''}> เผยแพร่คำถาม</label></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-question">บันทึก</button>`,true);document.getElementById('save-question').addEventListener('click',async()=>{const f=document.getElementById('question-form');if(!f.reportValidity())return;const fd=new FormData(f);const id=String(fd.get('id')||'');const p={round_id:round.id,question_order:Number(fd.get('order')),section:String(fd.get('section')||'')||null,question_type:String(fd.get('type')),prompt:String(fd.get('prompt')),points:Number(fd.get('points')||1),is_critical:fd.get('critical')==='on',published:fd.get('published')==='on',updated_by:state.user.id};let qres=id?await state.supabase.from('ec_questions').update(p).eq('id',id).select().single():await state.supabase.from('ec_questions').insert({...p,created_by:state.user.id}).select().single();if(qres.error)return toast(friendlyError(qres.error), 'danger');const qid=qres.data.id;await state.supabase.from('ec_question_choices').delete().eq('question_id',qid);const lines=String(fd.get('choices')||'').split('\n').map(x=>x.trim()).filter(Boolean);const correct=Number(fd.get('correct')||0);let correctIds=[];if(lines.length){const {data:inserted,error}=await state.supabase.from('ec_question_choices').insert(lines.map((text,i)=>({question_id:qid,choice_order:i+1,choice_text:text}))).select();if(error)return toast(friendlyError(error), 'danger');if(correct>0&&inserted?.[correct-1])correctIds=[inserted[correct-1].id];}const keyRes=await state.supabase.from('ec_question_answer_keys').upsert({question_id:qid,correct_choice_ids:correctIds,answer_key_json:null,explanation:String(fd.get('explanation')||'')||null,updated_by:state.user.id},{onConflict:'question_id'});if(keyRes.error)return toast(friendlyError(keyRes.error), 'danger');closeModal();toast('บันทึกคำถามแล้ว','success');route();});};
     document.getElementById('add-question')?.addEventListener('click',()=>openQuestion());
-    document.querySelectorAll('[data-edit-question]').forEach(b=>b.addEventListener('click',async()=>{const {data,error}=await state.supabase.from('ec_questions').select('*').eq('id',b.dataset.editQuestion).single();if(error)return toast(error.message,'danger');openQuestion(data);}));
-    document.getElementById('assign-all-competency')?.addEventListener('click',async()=>{if(!confirm('สร้าง Assignment ให้บุคลากรที่เปิดใช้งานทั้งหมดหรือไม่'))return;let directory;try{directory=await loadDirectory();}catch(error){return toast(error.message,'danger');}const {data:practitioners,error:practitionerError}=await state.supabase.from('ec_round_assignments').select('user_id').eq('round_id',round.id).eq('assignment_role','practitioner').eq('active',true);if(practitionerError)return toast(practitionerError.message,'danger');const practitionerIds=new Set((practitioners||[]).map(x=>x.user_id));const rows=directory.map(p=>({round_id:round.id,user_id:p.id,assignment_type:practitionerIds.has(p.id)?'practical':'quiz',assigned_by:state.user.id}));if(!rows.length)return toast('ไม่พบรายชื่อบุคลากรที่เปิดใช้งาน','warning');const {error}=await state.supabase.from('ec_competency_assignments').upsert(rows,{onConflict:'round_id,user_id',ignoreDuplicates:true});if(error)return toast(error.message,'danger');toast('สร้าง Assignment แล้ว','success');route();});
+    document.querySelectorAll('[data-edit-question]').forEach(b=>b.addEventListener('click',async()=>{const {data,error}=await state.supabase.from('ec_questions').select('*').eq('id',b.dataset.editQuestion).single();if(error)return toast(friendlyError(error), 'danger');openQuestion(data);}));
+    document.getElementById('assign-all-competency')?.addEventListener('click',async()=>{if(!confirm('สร้างรายการประเมิน ให้บุคลากรที่เปิดใช้งานทั้งหมดหรือไม่'))return;let directory;try{directory=await loadDirectory();}catch(error){return toast(friendlyError(error), 'danger');}const {data:practitioners,error:practitionerError}=await state.supabase.from('ec_round_assignments').select('user_id').eq('round_id',round.id).eq('assignment_role','practitioner').eq('active',true);if(practitionerError)return toast(friendlyError(practitionerError), 'danger');const practitionerIds=new Set((practitioners||[]).map(x=>x.user_id));const rows=directory.map(p=>({round_id:round.id,user_id:p.id,assignment_type:practitionerIds.has(p.id)?'practical':'quiz',assigned_by:state.user.id}));if(!rows.length)return toast('ไม่พบรายชื่อบุคลากรที่เปิดใช้งาน','warning');const {error}=await state.supabase.from('ec_competency_assignments').upsert(rows,{onConflict:'round_id,user_id',ignoreDuplicates:true});if(error)return toast(friendlyError(error), 'danger');toast('สร้างรายการประเมิน แล้ว','success');route();});
   }
 
   async function renderMyCompetency() {
     const { data: assignments, error } = await state.supabase.from('ec_competency_assignments').select('*, ec_eqa_rounds(*)').eq('user_id', state.user.id).order('created_at', { ascending: false });
     if (error) return renderError(error);
-    const content=`<section class="page"><div class="page-header"><div><h1>Competency ของฉัน</h1><p>คำตอบของคุณถูกเก็บแยกและส่งแล้วจะล็อก</p></div></div><div class="card">${(assignments||[]).length?`<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${assignments.map(a=>`<tr><td><strong>${esc(a.ec_eqa_rounds?.provider)} ${esc(a.ec_eqa_rounds?.round_code)}</strong></td><td>${esc(a.assignment_type)}</td><td>${assignmentBadge(a.status)}</td><td>${a.score??'-'}</td><td><button class="btn btn-primary btn-sm" data-open-assignment="${a.id}">เปิด</button></td></tr>`).join('')}</tbody></table></div>`:empty('ยังไม่มี Competency')}</div></section>`;
-    appEl.innerHTML=shell(content,'Competency ของฉัน');bindShell();document.querySelectorAll('[data-open-assignment]').forEach(b=>b.addEventListener('click',()=>navigate(`assignment/${b.dataset.openAssignment}`)));
+    const content=`<section class="page"><div class="page-header"><div><h1>การประเมินของฉัน</h1><p>คำตอบของคุณถูกเก็บแยกและส่งแล้วจะล็อก</p></div></div><div class="card">${(assignments||[]).length?`<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${assignments.map(a=>`<tr><td><strong>${esc(a.ec_eqa_rounds?.provider)} ${esc(a.ec_eqa_rounds?.round_code)}</strong></td><td>${esc(labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${assignmentBadge(a.status)}</td><td>${a.score??'-'}</td><td><button class="btn btn-primary btn-sm" data-open-assignment="${a.id}">เปิด</button></td></tr>`).join('')}</tbody></table></div>`:empty('ยังไม่มีรายการประเมิน')}</div></section>`;
+    appEl.innerHTML=shell(content,'การประเมินของฉัน');bindShell();document.querySelectorAll('[data-open-assignment]').forEach(b=>b.addEventListener('click',()=>navigate(`assignment/${b.dataset.openAssignment}`)));
   }
 
   async function renderAssignment(id) {
     const {data:a,error}=await state.supabase.from('ec_competency_assignments').select('*,ec_eqa_rounds(*)').eq('id',id).single();if(error)return renderError(error);
     if(a.assignment_type==='practical'){
-      const content=`<section class="page"><div class="page-header"><div><h1>Practical Competency</h1><p>${esc(a.ec_eqa_rounds?.provider)} ${esc(a.ec_eqa_rounds?.round_code)}</p></div><button class="btn btn-outline" id="back-my">กลับ</button></div><div class="card"><h2>การประเมินผู้ปฏิบัติจริง</h2><p>ผล Practical เชื่อมจากผล EQA รายบุคคล วิธีตรวจ การแปลผล การบันทึก และการแก้ปัญหา</p>${assignmentBadge(a.status)}<div style="height:12px"></div><button class="btn btn-primary" id="open-round-practical">เปิดรอบ EQA</button></div></section>`;appEl.innerHTML=shell(content,'Practical Competency');bindShell();document.getElementById('back-my').onclick=()=>navigate('my-competency');document.getElementById('open-round-practical').onclick=()=>navigate(`round/${a.round_id}/individual`);return;
+      const content=`<section class="page"><div class="page-header"><div><h1>การประเมินจากการปฏิบัติจริง</h1><p>${esc(a.ec_eqa_rounds?.provider)} ${esc(a.ec_eqa_rounds?.round_code)}</p></div><button class="btn btn-outline" id="back-my">กลับ</button></div><div class="card"><h2>การประเมินผู้ปฏิบัติจริง</h2><p>ผลการประเมินเชื่อมจากผล EQA รายบุคคล วิธีตรวจ การแปลผล การบันทึก และการแก้ปัญหา</p>${assignmentBadge(a.status)}<div style="height:12px"></div><button class="btn btn-primary" id="open-round-practical">เปิดรอบ EQA</button></div></section>`;appEl.innerHTML=shell(content,'การประเมินจากการปฏิบัติจริง');bindShell();document.getElementById('back-my').onclick=()=>navigate('my-competency');document.getElementById('open-round-practical').onclick=()=>navigate(`round/${a.round_id}/individual`);return;
     }
     const [{data:questions},{data:choices},{data:answers}]=await Promise.all([state.supabase.from('ec_questions_public').select('*').eq('round_id',a.round_id).order('question_order'),state.supabase.from('ec_question_choices_public').select('*'),state.supabase.from('ec_competency_answers').select('*').eq('assignment_id',id)]);
     const ansMap=new Map((answers||[]).map(x=>[x.question_id,x]));const editable=['not_started','in_progress'].includes(a.status);
-    const qHtml=(questions||[]).map(q=>{const ans=ansMap.get(q.id)?.answer_payload||{};const cs=(choices||[]).filter(c=>c.question_id===q.id);let input='';if(q.question_type==='single_choice')input=cs.map(c=>`<label style="display:flex;gap:9px;align-items:flex-start;padding:8px 0"><input type="radio" name="q_${q.id}" value="${c.id}" ${ans.choice_id===c.id?'checked':''} ${editable?'':'disabled'}>${esc(c.choice_text)}</label>`).join('');else input=`<textarea class="textarea" name="q_${q.id}" ${editable?'':'disabled'}>${esc(ans.text||'')}</textarea>`;return `<div class="card"><span class="badge">${esc(q.section||'')}</span>${q.is_critical?'<span class="badge danger">Critical</span>':''}<h3>${q.question_order}. ${esc(q.prompt)}</h3>${input}</div>`;}).join('');
-    const content=`<section class="page"><div class="page-header"><div><h1>แบบทดสอบ</h1><p>${esc(a.ec_eqa_rounds?.provider)} ${esc(a.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(a.status)}<button class="btn btn-outline" id="back-my">กลับ</button></div></div><form id="quiz-form" class="grid">${qHtml||empty('QM ยังไม่ได้เผยแพร่คำถาม')}</form>${editable&&questions?.length?`<div class="modal-footer"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>`:''}</section>`;
-    appEl.innerHTML=shell(content,'แบบทดสอบ');bindShell();document.getElementById('back-my').onclick=()=>navigate('my-competency');if(editable){await state.supabase.rpc('ec_start_competency',{p_assignment_id:id});const save=async()=>{const rows=[];(questions||[]).forEach(q=>{let payload={};if(q.question_type==='single_choice'){const x=document.querySelector(`input[name="q_${q.id}"]:checked`);payload=x?{choice_id:x.value}:{};}else payload={text:String(document.querySelector(`[name="q_${q.id}"]`)?.value||'').trim()};rows.push({assignment_id:id,question_id:q.id,answer_payload:payload});});const {error}=await state.supabase.from('ec_competency_answers').upsert(rows,{onConflict:'assignment_id,question_id'});if(error)throw error;};document.getElementById('save-quiz').onclick=async()=>{try{await save();toast('บันทึกร่างแล้ว','success');}catch(e){toast(e.message,'danger');}};document.getElementById('submit-quiz').onclick=async()=>{if(!confirm('ยืนยันส่งคำตอบหรือไม่ หลังส่งจะแก้ไขไม่ได้'))return;try{await save();const {error}=await state.supabase.rpc('ec_submit_competency',{p_assignment_id:id});if(error)throw error;toast('ส่งคำตอบแล้ว','success');navigate('my-competency');}catch(e){toast(e.message,'danger');}};}
+    const qHtml=(questions||[]).map(q=>{const ans=ansMap.get(q.id)?.answer_payload||{};const cs=(choices||[]).filter(c=>c.question_id===q.id);let input='';if(q.question_type==='single_choice')input=cs.map(c=>`<label style="display:flex;gap:9px;align-items:flex-start;padding:8px 0"><input type="radio" name="q_${q.id}" value="${c.id}" ${ans.choice_id===c.id?'checked':''} ${editable?'':'disabled'}>${esc(c.choice_text)}</label>`).join('');else input=`<textarea class="textarea" name="q_${q.id}" ${editable?'':'disabled'}>${esc(ans.text||'')}</textarea>`;return `<div class="card"><span class="badge">${esc(q.section||'')}</span>${q.is_critical?'<span class="badge danger">ข้อสำคัญ</span>':''}<h3>${q.question_order}. ${esc(q.prompt)}</h3>${input}</div>`;}).join('');
+    const content=`<section class="page"><div class="page-header"><div><h1>แบบทดสอบ</h1><p>${esc(a.ec_eqa_rounds?.provider)} ${esc(a.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(a.status)}<button class="btn btn-outline" id="back-my">กลับ</button></div></div><form id="quiz-form" class="grid">${qHtml||empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form>${editable&&questions?.length?`<div class="modal-footer"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>`:''}</section>`;
+    appEl.innerHTML=shell(content,'แบบทดสอบ');bindShell();document.getElementById('back-my').onclick=()=>navigate('my-competency');if(editable){await state.supabase.rpc('ec_start_competency',{p_assignment_id:id});const save=async()=>{const rows=[];(questions||[]).forEach(q=>{let payload={};if(q.question_type==='single_choice'){const x=document.querySelector(`input[name="q_${q.id}"]:checked`);payload=x?{choice_id:x.value}:{};}else payload={text:String(document.querySelector(`[name="q_${q.id}"]`)?.value||'').trim()};rows.push({assignment_id:id,question_id:q.id,answer_payload:payload});});const {error}=await state.supabase.from('ec_competency_answers').upsert(rows,{onConflict:'assignment_id,question_id'});if(error)throw error;};document.getElementById('save-quiz').onclick=async()=>{try{await save();toast('บันทึกร่างแล้ว','success');}catch(e){toast(friendlyError(e), 'danger');}};document.getElementById('submit-quiz').onclick=async()=>{if(!confirm('ยืนยันส่งคำตอบหรือไม่ หลังส่งจะแก้ไขไม่ได้'))return;try{await save();const {error}=await state.supabase.rpc('ec_submit_competency',{p_assignment_id:id});if(error)throw error;toast('ส่งคำตอบแล้ว','success');navigate('my-competency');}catch(e){toast(friendlyError(e), 'danger');}};}
   }
 
   async function renderReports() {
     const {data:rounds,error}=await state.supabase.from('ec_eqa_rounds').select('*').order('survey_year',{ascending:false});if(error)return renderError(error);
-    const content=`<section class="page"><div class="page-header"><div><h1>รายงาน / ทะเบียน EQA</h1><p>ใช้ Browser Print แล้วเลือก Save as PDF</p></div><button class="btn btn-primary no-print" id="print-report">พิมพ์ / Save PDF</button></div><div class="print-only"><h1>ทะเบียน EQA ประจำปี</h1><p>${esc(cfg.ORGANIZATION_NAME)}</p></div><div class="card"><div class="table-wrap"><table><thead><tr><th>ปี</th><th>ผู้ให้บริการ / รอบ</th><th>โปรแกรม</th><th>วันครบกำหนด</th><th>สถานะ</th><th>เลขเอกสาร</th></tr></thead><tbody>${(rounds||[]).map(r=>`<tr><td>${r.survey_year}</td><td>${esc(r.provider)} ${esc(r.round_code)}</td><td>${esc(r.program_name)}</td><td>${fmtDate(r.due_date)}</td><td>${STATUS_LABELS[r.status]||r.status}</td><td>${esc(r.document_number||'-')} Rev.${esc(r.document_revision||'1')}</td></tr>`).join('')}</tbody></table></div><div class="small muted" style="margin-top:12px">พิมพ์จากระบบวันที่ ${fmtDate(new Date(),true)}</div></div></section>`;appEl.innerHTML=shell(content,'รายงาน');bindShell();document.getElementById('print-report').onclick=()=>window.print();
+    const content=`<section class="page"><div class="page-header"><div><h1>รายงาน / ทะเบียน EQA</h1><p>กดปุ่มพิมพ์ แล้วเลือกบันทึกเป็นไฟล์ PDF</p></div><button class="btn btn-primary no-print" id="print-report">พิมพ์ / บันทึกเป็น PDF</button></div><div class="print-only"><h1>ทะเบียน EQA ประจำปี</h1><p>${esc(cfg.ORGANIZATION_NAME)}</p></div><div class="card"><div class="table-wrap"><table><thead><tr><th>ปี</th><th>ผู้ให้บริการ / รอบ</th><th>โปรแกรม</th><th>วันครบกำหนด</th><th>สถานะ</th><th>เลขเอกสาร</th></tr></thead><tbody>${(rounds||[]).map(r=>`<tr><td>${r.survey_year}</td><td>${esc(r.provider)} ${esc(r.round_code)}</td><td>${esc(r.program_name)}</td><td>${fmtDate(r.due_date)}</td><td>${STATUS_LABELS[r.status]||'ไม่ทราบสถานะ'}</td><td>${esc(r.document_number||'-')} ฉบับแก้ไขที่ ${esc(r.document_revision||'1')}</td></tr>`).join('')}</tbody></table></div><div class="small muted" style="margin-top:12px">พิมพ์จากระบบวันที่ ${fmtDate(new Date(),true)}</div></div></section>`;appEl.innerHTML=shell(content,'รายงาน');bindShell();document.getElementById('print-report').onclick=()=>window.print();
   }
 
   async function invokeAdminUserAction(body) {
@@ -956,8 +1083,8 @@
   async function renderUsers() {
     if (!hasRole('admin')) {
       const content = `<section class="page">
-        <div class="page-header"><div><h1>ผู้ใช้งานและสิทธิ์</h1><p>ขณะนี้อยู่ในโหมด ${esc(ROLE_LABELS[state.activeRole] || state.activeRole)}</p></div></div>
-        <div class="notice warning">หน้านี้จัดการได้เฉพาะโหมดผู้ดูแลระบบ (Admin) กรุณาเลือกโหมดการทำงานจากเมนูด้านซ้าย</div>
+        <div class="page-header"><div><h1>ผู้ใช้งานและสิทธิ์</h1><p>ขณะนี้อยู่ในโหมด ${esc(ROLE_LABELS[state.activeRole] || 'ไม่ระบุบทบาท')}</p></div></div>
+        <div class="notice warning">หน้านี้จัดการได้เฉพาะโหมดผู้ดูแลระบบ กรุณาเลือกโหมดการทำงานจากเมนูด้านซ้าย</div>
       </section>`;
       appEl.innerHTML = shell(content, 'ผู้ใช้งาน');
       bindShell();
@@ -981,7 +1108,7 @@
       <div class="page-header">
         <div>
           <h1>ผู้ใช้งานและสิทธิ์</h1>
-          <p>กำหนดได้ทั้งบทบาทที่ผู้ใช้ทำงานได้ และสถานะเปิด/ปิดบัญชี โดยระบบไม่แสดงรหัสผ่านปัจจุบันให้ Admin เห็น</p>
+          <p>กำหนดได้ทั้งบทบาทที่ผู้ใช้ทำงานได้ และสถานะเปิด/ปิดบัญชี โดยระบบไม่แสดงรหัสผ่านปัจจุบันให้ผู้ดูแลระบบเห็น</p>
         </div>
         <div class="header-actions"><button class="btn btn-primary" id="create-user">＋ สร้างผู้ใช้</button></div>
       </div>
@@ -999,17 +1126,17 @@
       <div class="card">
         <div class="table-wrap">
           <table style="min-width:980px">
-            <thead><tr><th>ชื่อ</th><th>Username / Email</th><th>รหัสพนักงาน</th><th>บทบาทที่ได้รับ</th><th>สถานะบัญชี</th><th>จัดการ</th></tr></thead>
+            <thead><tr><th>ชื่อ</th><th>ชื่อผู้ใช้ / อีเมล</th><th>รหัสพนักงาน</th><th>บทบาทที่ได้รับ</th><th>สถานะบัญชี</th><th>จัดการ</th></tr></thead>
             <tbody>${(profiles || []).map((profile) => {
               const userRoles = roleMap.get(profile.id) || [];
               return `<tr>
                 <td><strong>${esc(profile.full_name)}</strong><br><span class="small muted">${esc(profile.position_title || '-')}</span></td>
                 <td>${esc(profile.username)}<br><span class="small muted">${esc(profile.email)}</span></td>
                 <td>${esc(profile.employee_id)}</td>
-                <td><div class="role-badges">${userRoles.map((role) => `<span class="badge ${role === 'admin' ? 'info' : ''}">${esc(ROLE_LABELS[role] || role)}</span>`).join('')}</div></td>
+                <td><div class="role-badges">${userRoles.map((role) => `<span class="badge ${role === 'admin' ? 'info' : ''}">${esc(ROLE_LABELS[role] || 'บทบาทอื่น')}</span>`).join('')}</div></td>
                 <td>${profile.active ? '<span class="badge success">เปิดใช้งาน</span>' : '<span class="badge danger">ปิดใช้งาน</span>'}</td>
                 <td><div class="table-actions">
-                  <button class="btn btn-primary btn-sm" data-manage-user="${profile.id}">กำหนด Role / สถานะ</button>
+                  <button class="btn btn-primary btn-sm" data-manage-user="${profile.id}">กำหนดบทบาท / สถานะ</button>
                   <button class="btn btn-warning btn-sm" data-reset-user="${profile.id}">รีเซ็ตรหัสผ่าน</button>
                 </div></td>
               </tr>`;
@@ -1028,7 +1155,7 @@
       if (!target) return;
       const currentRoles = roleMap.get(target.id) || [];
       const isSelf = target.id === state.user.id;
-      showModal('กำหนด Role และสถานะบัญชี', `
+      showModal('กำหนดบทบาทและสถานะบัญชี', `
         <form id="manage-user-form" class="form-grid">
           <div class="notice"><strong>${esc(target.full_name)}</strong><br><span class="small">${esc(target.email)} · รหัสพนักงาน ${esc(target.employee_id)}</span></div>
           <div class="field">
@@ -1051,7 +1178,7 @@
           </div>
         </form>`, `
         <button class="btn btn-outline" data-close-modal>ยกเลิก</button>
-        <button class="btn btn-primary" id="save-user-access">บันทึก Role และสถานะ</button>`, true);
+        <button class="btn btn-primary" id="save-user-access">บันทึกบทบาทและสถานะ</button>`, true);
 
       document.getElementById('save-user-access').onclick = async () => {
         const form = document.getElementById('manage-user-form');
@@ -1067,10 +1194,10 @@
           }
           if (isSelf) await loadIdentity();
           closeModal();
-          toast('บันทึก Role และสถานะแล้ว', 'success');
+          toast('บันทึกบทบาทและสถานะแล้ว', 'success');
           await route();
         } catch (err) {
-          toast(err.message || String(err), 'danger');
+          toast(friendlyError(err), 'danger');
         } finally {
           setBusy(false);
         }
@@ -1084,7 +1211,7 @@
         await invokeAdminUserAction({ action: 'reset_password', user_id: button.dataset.resetUser, reason });
         toast('รีเซ็ตรหัสผ่านเป็น CNMI@รหัสพนักงานแล้ว', 'success');
       } catch (err) {
-        toast(err.message || String(err), 'danger');
+        toast(friendlyError(err), 'danger');
       }
     }));
 
@@ -1095,7 +1222,7 @@
         toast('อนุมัติคำขอแล้ว', 'success');
         await route();
       } catch (err) {
-        toast(err.message || String(err), 'danger');
+        toast(friendlyError(err), 'danger');
       }
     }));
 
@@ -1107,7 +1234,7 @@
         toast('ไม่อนุมัติคำขอแล้ว', 'success');
         await route();
       } catch (err) {
-        toast(err.message || String(err), 'danger');
+        toast(friendlyError(err), 'danger');
       }
     }));
   }
@@ -1117,8 +1244,8 @@
       <form id="create-user-form" class="form-grid cols-2">
         <div class="field"><label>ชื่อ-สกุล</label><input class="input" name="full_name" required></div>
         <div class="field"><label>รหัสพนักงาน</label><input class="input" name="employee_id" required></div>
-        <div class="field"><label>อีเมล Mahidol</label><input class="input" type="email" name="email" required placeholder="name@mahidol.ac.th"></div>
-        <div class="field"><label>Username</label><input class="input" name="username" placeholder="เว้นว่าง = ส่วนหน้าอีเมล"></div>
+        <div class="field"><label>อีเมลมหิดล</label><input class="input" type="email" name="email" required placeholder="name@mahidol.ac.th"></div>
+        <div class="field"><label>ชื่อผู้ใช้</label><input class="input" name="username" placeholder="เว้นว่าง = ส่วนหน้าอีเมล"></div>
         <div class="field"><label>ตำแหน่งงาน</label><input class="input" name="position_title"></div>
         <div class="field"><label>สถานะเริ่มต้น</label><select class="select" name="active"><option value="true">เปิดใช้งาน</option><option value="false">ปิดใช้งานไว้ก่อน</option></select></div>
         <div class="field" style="grid-column:1/-1">
@@ -1158,18 +1285,18 @@
         toast(`สร้างบัญชีแล้ว รหัสเริ่มต้นคือ CNMI@รหัสพนักงาน${active ? '' : ' และปิดใช้งานไว้ก่อน'}`, 'success');
         await route();
       } catch (err) {
-        toast(err.message || String(err), 'danger');
+        toast(friendlyError(err), 'danger');
       } finally {
         setBusy(false);
       }
     };
   }
 
-  async function renderAudit(){if(!hasRole('admin','qm','viewer')){const content=`<section class="page"><div class="notice warning">ไม่มีสิทธิ์ดู Audit Log</div></section>`;appEl.innerHTML=shell(content,'Audit Log');bindShell();return;}const {data,error}=await state.supabase.from('ec_audit_logs').select('*').order('occurred_at',{ascending:false}).limit(300);if(error)return renderError(error);const content=`<section class="page"><div class="page-header"><div><h1>Audit Log</h1><p>บันทึกผู้ดำเนินการ วันเวลา ค่าก่อนและหลัง</p></div></div><div class="card"><div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>Action</th><th>ตาราง</th><th>Record</th><th>เหตุผล</th></tr></thead><tbody>${(data||[]).map(x=>`<tr><td>${fmtDate(x.occurred_at,true)}</td><td>${esc(x.action)}</td><td>${esc(x.table_name||'-')}</td><td><code>${esc(x.record_id||'-')}</code></td><td>${esc(x.reason||'-')}</td></tr>`).join('')}</tbody></table></div></div></section>`;appEl.innerHTML=shell(content,'Audit Log');bindShell();}
+  async function renderAudit(){if(!hasRole('admin','qm','viewer')){const content=`<section class="page"><div class="notice warning">บัญชีนี้ไม่มีสิทธิ์ดูประวัติการใช้งาน</div></section>`;appEl.innerHTML=shell(content,'ประวัติการใช้งาน');bindShell();return;}const {data,error}=await state.supabase.from('ec_audit_logs').select('*').order('occurred_at',{ascending:false}).limit(300);if(error)return renderError(error);const content=`<section class="page"><div class="page-header"><div><h1>ประวัติการใช้งาน</h1><p>ตรวจสอบว่าใครทำรายการอะไร เมื่อใด และแก้ไขข้อมูลส่วนใด</p></div></div><div class="card"><div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>รายการที่ทำ</th><th>ส่วนของระบบ</th><th>รหัสรายการ</th><th>เหตุผล</th></tr></thead><tbody>${(data||[]).map(x=>`<tr><td>${fmtDate(x.occurred_at,true)}</td><td>${esc(labelFrom(AUDIT_ACTION_LABELS,x.action,'รายการอื่น'))}</td><td>${esc(labelFrom(AUDIT_TABLE_LABELS,x.table_name,'ส่วนอื่นของระบบ'))}</td><td><code>${esc(x.record_id||'-')}</code></td><td>${esc(x.reason||'-')}</td></tr>`).join('')}</tbody></table></div></div></section>`;appEl.innerHTML=shell(content,'ประวัติการใช้งาน');bindShell();}
 
-  async function renderSettings(){const {data:factors}=await state.supabase.auth.mfa.listFactors();const totp=factors?.totp||[];const content=`<section class="page"><div class="page-header"><div><h1>ตั้งค่าของฉัน</h1><p>เปลี่ยนรหัสผ่านและส่งคำขอเปลี่ยนชื่อ/อีเมล</p></div></div><div class="grid cols-2"><div class="card"><h2>เปลี่ยนรหัสผ่าน</h2><form id="password-form" class="form-grid"><div class="field"><label>รหัสผ่านใหม่</label><input class="input" type="password" name="password" minlength="8" required></div><div class="field"><label>ยืนยัน</label><input class="input" type="password" name="confirm" minlength="8" required></div><button class="btn btn-primary">บันทึกรหัสผ่าน</button></form></div><div class="card"><h2>ข้อมูลส่วนตัว</h2><p><strong>${esc(state.profile.full_name)}</strong><br>${esc(state.profile.email)}<br>Username: ${esc(state.profile.username)}</p><button class="btn btn-outline" id="request-profile-change">ส่งคำขอเปลี่ยนชื่อ/อีเมล</button></div><div class="card"><h2>MFA สำหรับ Admin / QM / Physician</h2><p class="muted">TOTP ช่วยเพิ่มความปลอดภัยในการอนุมัติ</p>${totp.length?`<div class="notice success">มี TOTP Factor แล้ว ${totp.length} รายการ</div>`:`<button class="btn btn-primary" id="enroll-mfa">ตั้งค่า TOTP</button>`}</div></div></section>`;appEl.innerHTML=shell(content,'ตั้งค่า');bindShell();document.getElementById('password-form').onsubmit=async(e)=>{e.preventDefault();const fd=new FormData(e.currentTarget);const p=String(fd.get('password'));if(p!==String(fd.get('confirm')))return toast('รหัสผ่านไม่ตรงกัน','danger');const {error}=await state.supabase.auth.updateUser({password:p});if(error)return toast(error.message,'danger');toast('เปลี่ยนรหัสผ่านแล้ว','success');e.currentTarget.reset();};document.getElementById('request-profile-change').onclick=()=>{showModal('ขอเปลี่ยนข้อมูลส่วนตัว',`<form id="profile-change-form" class="form-grid"><div class="field"><label>ชื่อ-สกุลใหม่</label><input class="input" name="full_name" value="${esc(state.profile.full_name)}"></div><div class="field"><label>อีเมลใหม่</label><input class="input" type="email" name="email" value="${esc(state.profile.email)}"></div><div class="field"><label>Username ใหม่</label><input class="input" name="username" value="${esc(state.profile.username)}"></div><div class="field"><label>เหตุผล</label><textarea class="textarea" name="reason" required></textarea></div></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-profile-request">ส่งคำขอ</button>`);document.getElementById('save-profile-request').onclick=async()=>{const f=document.getElementById('profile-change-form');if(!f.reportValidity())return;const fd=new FormData(f);const {error}=await state.supabase.rpc('ec_request_profile_change',{p_full_name:String(fd.get('full_name')),p_email:String(fd.get('email')),p_username:String(fd.get('username')),p_reason:String(fd.get('reason'))});if(error)return toast(error.message,'danger');closeModal();toast('ส่งคำขอให้ Admin แล้ว','success');};};document.getElementById('enroll-mfa')?.addEventListener('click',async()=>{const {data,error}=await state.supabase.auth.mfa.enroll({factorType:'totp',friendlyName:'CNMI EQA'});if(error)return toast(error.message,'danger');showModal('ตั้งค่า TOTP',`<div style="text-align:center">${data.totp.qr_code}<p>Secret: <code>${esc(data.totp.secret)}</code></p></div><form id="mfa-verify-form" class="form-grid"><div class="field"><label>รหัส 6 หลักจากแอป Authenticator</label><input class="input" name="code" inputmode="numeric" required></div></form>`,`<button class="btn btn-primary" id="verify-mfa">ยืนยัน</button>`);document.getElementById('verify-mfa').onclick=async()=>{const code=new FormData(document.getElementById('mfa-verify-form')).get('code');const ch=await state.supabase.auth.mfa.challenge({factorId:data.id});if(ch.error)return toast(ch.error.message,'danger');const vr=await state.supabase.auth.mfa.verify({factorId:data.id,challengeId:ch.data.id,code:String(code)});if(vr.error)return toast(vr.error.message,'danger');closeModal();toast('เปิด MFA แล้ว','success');route();};});}
+  async function renderSettings(){const {data:factors}=await state.supabase.auth.mfa.listFactors();const totp=factors?.totp||[];const content=`<section class="page"><div class="page-header"><div><h1>ตั้งค่าของฉัน</h1><p>เปลี่ยนรหัสผ่านและส่งคำขอเปลี่ยนชื่อ/อีเมล</p></div></div><div class="grid cols-2"><div class="card"><h2>เปลี่ยนรหัสผ่าน</h2><form id="password-form" class="form-grid"><div class="field"><label>รหัสผ่านใหม่</label><input class="input" type="password" name="password" minlength="8" required></div><div class="field"><label>ยืนยัน</label><input class="input" type="password" name="confirm" minlength="8" required></div><button class="btn btn-primary">บันทึกรหัสผ่าน</button></form></div><div class="card"><h2>ข้อมูลส่วนตัว</h2><p><strong>${esc(state.profile.full_name)}</strong><br>${esc(state.profile.email)}<br>ชื่อผู้ใช้: ${esc(state.profile.username)}</p><button class="btn btn-outline" id="request-profile-change">ส่งคำขอเปลี่ยนชื่อ/อีเมล</button></div><div class="card"><h2>การยืนยันตัวตนสองขั้นตอน สำหรับผู้ดูแลระบบ ผู้จัดการคุณภาพ และแพทย์</h2><p class="muted">รหัสยืนยันจากแอปช่วยเพิ่มความปลอดภัยในการอนุมัติ</p>${totp.length?`<div class="notice success">ตั้งค่ารหัสยืนยันไว้แล้ว ${totp.length} รายการ</div>`:`<button class="btn btn-primary" id="enroll-mfa">ตั้งค่ารหัสยืนยันสองขั้นตอน</button>`}</div></div></section>`;appEl.innerHTML=shell(content,'ตั้งค่า');bindShell();document.getElementById('password-form').onsubmit=async(e)=>{e.preventDefault();const fd=new FormData(e.currentTarget);const p=String(fd.get('password'));if(p!==String(fd.get('confirm')))return toast('รหัสผ่านไม่ตรงกัน','danger');const {error}=await state.supabase.auth.updateUser({password:p});if(error)return toast(friendlyError(error), 'danger');toast('เปลี่ยนรหัสผ่านแล้ว','success');e.currentTarget.reset();};document.getElementById('request-profile-change').onclick=()=>{showModal('ขอเปลี่ยนข้อมูลส่วนตัว',`<form id="profile-change-form" class="form-grid"><div class="field"><label>ชื่อ-สกุลใหม่</label><input class="input" name="full_name" value="${esc(state.profile.full_name)}"></div><div class="field"><label>อีเมลใหม่</label><input class="input" type="email" name="email" value="${esc(state.profile.email)}"></div><div class="field"><label>ชื่อผู้ใช้ใหม่</label><input class="input" name="username" value="${esc(state.profile.username)}"></div><div class="field"><label>เหตุผล</label><textarea class="textarea" name="reason" required></textarea></div></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-profile-request">ส่งคำขอ</button>`);document.getElementById('save-profile-request').onclick=async()=>{const f=document.getElementById('profile-change-form');if(!f.reportValidity())return;const fd=new FormData(f);const {error}=await state.supabase.rpc('ec_request_profile_change',{p_full_name:String(fd.get('full_name')),p_email:String(fd.get('email')),p_username:String(fd.get('username')),p_reason:String(fd.get('reason'))});if(error)return toast(friendlyError(error), 'danger');closeModal();toast('ส่งคำขอให้ผู้ดูแลระบบแล้ว','success');};};document.getElementById('enroll-mfa')?.addEventListener('click',async()=>{const {data,error}=await state.supabase.auth.mfa.enroll({factorType:'totp',friendlyName:'CNMI EQA'});if(error)return toast(friendlyError(error), 'danger');showModal('ตั้งค่ารหัสยืนยันสองขั้นตอน',`<div style="text-align:center">${data.totp.qr_code}<p>รหัสตั้งค่า: <code>${esc(data.totp.secret)}</code></p></div><form id="mfa-verify-form" class="form-grid"><div class="field"><label>รหัส 6 หลักจากแอปสร้างรหัสยืนยัน</label><input class="input" name="code" inputmode="numeric" required></div></form>`,`<button class="btn btn-primary" id="verify-mfa">ยืนยัน</button>`);document.getElementById('verify-mfa').onclick=async()=>{const code=new FormData(document.getElementById('mfa-verify-form')).get('code');const ch=await state.supabase.auth.mfa.challenge({factorId:data.id});if(ch.error)return toast(friendlyError(ch.error), 'danger');const vr=await state.supabase.auth.mfa.verify({factorId:data.id,challengeId:ch.data.id,code:String(code)});if(vr.error)return toast(friendlyError(vr.error), 'danger');closeModal();toast('เปิดการยืนยันตัวตนสองขั้นตอนแล้ว','success');route();};});}
 
-  function renderError(error){const content=`<section class="page"><div class="notice danger"><strong>เกิดข้อผิดพลาด</strong><br>${esc(error?.message||error)}</div></section>`;appEl.innerHTML=shell(content,'ข้อผิดพลาด');bindShell();}
+  function renderError(error){const content=`<section class="page"><div class="notice danger"><strong>ระบบดำเนินการไม่สำเร็จ</strong><br>${esc(friendlyError(error))}</div></section>`;appEl.innerHTML=shell(content,'ข้อผิดพลาด');bindShell();}
 
   async function route(){
     if(!state.user){renderLogin();return;}
@@ -1191,7 +1318,7 @@
 
   async function init(){
     if(!configReady()){renderSetup();return;}
-    if(!window.supabase?.createClient){appEl.innerHTML='<div class="boot-screen"><div class="notice danger">โหลด Supabase library ไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ต</div></div>';return;}
+    if(!window.supabase?.createClient){appEl.innerHTML='<div class="boot-screen"><div class="notice danger">โหลดส่วนเชื่อมต่อฐานข้อมูลไม่สำเร็จ กรุณาตรวจอินเทอร์เน็ต</div></div>';return;}
     state.supabase=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
     await loadIdentity();
     state.supabase.auth.onAuthStateChange(async(event,session)=>{
