@@ -289,7 +289,7 @@
         <aside class="sidebar" id="sidebar">
           <div class="sidebar-brand">
             <div class="brand-mark">CNMI</div>
-            <div><strong>EQA & Competency</strong><div class="small muted">v${esc(cfg.VERSION || '2.0.3')}</div></div>
+            <div><strong>EQA & Competency</strong></div>
           </div>
           <div class="nav-section">งานของฉัน</div>
           ${navItem('dashboard', '⌂', 'ภาพรวม', route)}
@@ -943,7 +943,7 @@
 
   async function renderReports() {
     const {data:rounds,error}=await state.supabase.from('ec_eqa_rounds').select('*').order('survey_year',{ascending:false});if(error)return renderError(error);
-    const content=`<section class="page"><div class="page-header"><div><h1>รายงาน / ทะเบียน EQA</h1><p>ใช้ Browser Print แล้วเลือก Save as PDF</p></div><button class="btn btn-primary no-print" id="print-report">พิมพ์ / Save PDF</button></div><div class="print-only"><h1>ทะเบียน EQA ประจำปี</h1><p>${esc(cfg.ORGANIZATION_NAME)}</p></div><div class="card"><div class="table-wrap"><table><thead><tr><th>ปี</th><th>ผู้ให้บริการ / รอบ</th><th>โปรแกรม</th><th>วันครบกำหนด</th><th>สถานะ</th><th>เลขเอกสาร</th></tr></thead><tbody>${(rounds||[]).map(r=>`<tr><td>${r.survey_year}</td><td>${esc(r.provider)} ${esc(r.round_code)}</td><td>${esc(r.program_name)}</td><td>${fmtDate(r.due_date)}</td><td>${STATUS_LABELS[r.status]||r.status}</td><td>${esc(r.document_number||'-')} Rev.${esc(r.document_revision||'1')}</td></tr>`).join('')}</tbody></table></div><div class="small muted" style="margin-top:12px">พิมพ์จากระบบวันที่ ${fmtDate(new Date(),true)} · เวอร์ชันระบบ ${esc(cfg.VERSION)}</div></div></section>`;appEl.innerHTML=shell(content,'รายงาน');bindShell();document.getElementById('print-report').onclick=()=>window.print();
+    const content=`<section class="page"><div class="page-header"><div><h1>รายงาน / ทะเบียน EQA</h1><p>ใช้ Browser Print แล้วเลือก Save as PDF</p></div><button class="btn btn-primary no-print" id="print-report">พิมพ์ / Save PDF</button></div><div class="print-only"><h1>ทะเบียน EQA ประจำปี</h1><p>${esc(cfg.ORGANIZATION_NAME)}</p></div><div class="card"><div class="table-wrap"><table><thead><tr><th>ปี</th><th>ผู้ให้บริการ / รอบ</th><th>โปรแกรม</th><th>วันครบกำหนด</th><th>สถานะ</th><th>เลขเอกสาร</th></tr></thead><tbody>${(rounds||[]).map(r=>`<tr><td>${r.survey_year}</td><td>${esc(r.provider)} ${esc(r.round_code)}</td><td>${esc(r.program_name)}</td><td>${fmtDate(r.due_date)}</td><td>${STATUS_LABELS[r.status]||r.status}</td><td>${esc(r.document_number||'-')} Rev.${esc(r.document_revision||'1')}</td></tr>`).join('')}</tbody></table></div><div class="small muted" style="margin-top:12px">พิมพ์จากระบบวันที่ ${fmtDate(new Date(),true)}</div></div></section>`;appEl.innerHTML=shell(content,'รายงาน');bindShell();document.getElementById('print-report').onclick=()=>window.print();
   }
 
   async function invokeAdminUserAction(body) {
