@@ -29,9 +29,9 @@
   };
   const ROLE_HELP = {
     staff: 'รับ EQA เข้าระบบ ปฏิบัติงานตามที่ได้รับมอบหมาย และทำการประเมินความสามารถ',
-    reviewer: 'ตรวจทานผลของผู้ปฏิบัติและผลกลาง ก่อนส่งให้ผู้จัดการคุณภาพอนุมัติ',
+    reviewer: 'ตรวจเทียบผลรายบุคคล ตรวจสรุปผลห้องปฏิบัติการที่ระบบสร้าง และส่งให้ผู้จัดการคุณภาพรับรอง',
     qm: 'บริหารรอบ EQA และอนุมัติด้านคุณภาพหลังผู้ทบทวนตรวจแล้ว',
-    physician: 'อนุมัติผล EQA ขั้นสุดท้าย ไม่ต้องทำแบบทดสอบบุคลากร',
+    physician: 'รับทราบสรุปผลห้องปฏิบัติการหลังผู้จัดการคุณภาพรับรอง ไม่ต้องทำแบบทดสอบบุคลากร',
     admin: 'จัดการผู้ใช้งาน สิทธิ์ และการตั้งค่าระบบ',
     viewer: 'อ่านรายงานและประวัติการใช้งานโดยไม่แก้ไขข้อมูล'
   };
@@ -39,12 +39,12 @@
   const STATUS_LABELS = {
     preparing: 'เตรียมดำเนินการ',
     in_progress: 'กำลังดำเนินการ',
-    awaiting_review: 'รอตรวจทาน',
+    awaiting_review: 'ระบบสรุปแล้ว รอผู้ทบทวน',
     returned_for_revision: 'ส่งกลับแก้ไข',
     awaiting_qm_approval: 'รอผู้จัดการคุณภาพอนุมัติ',
     qm_approved: 'ผู้จัดการคุณภาพอนุมัติแล้ว',
-    awaiting_physician_approval: 'รอแพทย์อนุมัติ',
-    physician_approved: 'แพทย์อนุมัติแล้ว',
+    awaiting_physician_approval: 'รอแพทย์รับทราบ',
+    physician_approved: 'แพทย์รับทราบแล้ว',
     submitted_to_provider: 'ส่งผลแล้ว',
     official_result_received: 'ได้รับผลประเมินแล้ว',
     closed: 'ปิดรอบ',
@@ -90,26 +90,26 @@
   const ASSIGNMENT_ROLE_LABELS = {
     practitioner: 'ผู้ปฏิบัติจริง',
     reviewer: 'ผู้ทบทวนผล',
-    physician: 'แพทย์ผู้อนุมัติ'
+    physician: 'แพทย์ผู้รับทราบ'
   };
   const RESULT_STATUS_LABELS = {
     draft: 'ฉบับร่าง',
     submitted: 'ส่งแล้ว',
     returned: 'ส่งกลับแก้ไข',
     resubmitted: 'ส่งใหม่แล้ว',
-    awaiting_practitioner_confirmations: 'รอผู้ปฏิบัติทั้งสองคนยืนยัน',
-    practitioners_confirmed: 'ผู้ปฏิบัติยืนยันครบ รอผู้ทบทวน',
+    awaiting_practitioner_confirmations: 'กำลังจัดทำสรุปผลห้องปฏิบัติการ',
+    practitioners_confirmed: 'ระบบสรุปผลแล้ว รอผู้ทบทวน',
     awaiting_qm_review: 'ผู้ทบทวนผ่านแล้ว รอผู้จัดการคุณภาพ',
-    qm_approved: 'ผู้จัดการคุณภาพอนุมัติแล้ว รอแพทย์',
-    awaiting_physician_approval: 'รอแพทย์อนุมัติ',
-    physician_approved: 'แพทย์อนุมัติแล้ว',
+    qm_approved: 'ผู้จัดการคุณภาพรับรองแล้ว รอแพทย์รับทราบ',
+    awaiting_physician_approval: 'รอแพทย์รับทราบ',
+    physician_approved: 'แพทย์รับทราบแล้ว',
     locked: 'ล็อกข้อมูลแล้ว'
   };
   const APPROVAL_STAGE_LABELS = {
     practitioner_confirm: 'ผู้ปฏิบัติทั้งสองคนยืนยันผลกลาง',
     reviewer_review: 'ผู้ทบทวนตรวจผลของผู้ปฏิบัติและผลกลาง',
     qm_review: 'ผู้จัดการคุณภาพตรวจและอนุมัติ',
-    physician_approval: 'แพทย์อนุมัติขั้นสุดท้าย',
+    physician_approval: 'แพทย์รับทราบสรุปผลห้องปฏิบัติการ',
     closure_acknowledgement: 'แพทย์รับทราบการปิดรอบ',
     historical_practitioner_confirm: 'ผู้ปฏิบัติยืนยันข้อมูลย้อนหลัง',
     historical_reviewer_review: 'ผู้ทบทวนตรวจข้อมูลย้อนหลัง',
@@ -166,7 +166,7 @@
     ec_round_documents: 'เอกสารและภาพ',
     ec_round_assignments: 'ผู้รับผิดชอบในรอบ',
     ec_individual_results: 'ผลรายบุคคล',
-    ec_consensus_results: 'ผลกลางของห้อง',
+    ec_consensus_results: 'สรุปผลห้องปฏิบัติการ',
     ec_approvals: 'การตรวจและอนุมัติ',
     ec_submission_evidence: 'หลักฐานการส่งผล',
     ec_official_results: 'ผลประเมินอย่างเป็นทางการ',
@@ -493,6 +493,8 @@
           ${navItem('users', '♙', 'ผู้ใช้งานและสิทธิ์', route)}
           ${navItem('audit', '◷', 'ประวัติการใช้งาน', route)}
           ${navItem('settings', '⚙', 'ตั้งค่าของฉัน', route)}
+          <div class="nav-section">ช่วยเหลือ</div>
+          ${navItem('help', '?', 'คู่มือการใช้งาน', route)}
           <div class="sidebar-footer">
             <div class="user-mini">
               <div class="user-name-row">
@@ -500,11 +502,10 @@
                 <span class="badge info">ออนไลน์</span>
               </div>
               <div class="role-switcher">
-                <label for="active-role-select">โหมดการทำงาน</label>
+                <label for="active-role-select">ใช้งานในบทบาท</label>
                 <select class="role-select" id="active-role-select" data-role-switch ${state.roles.length <= 1 ? 'disabled' : ''}>
                   ${roleOptions()}
                 </select>
-                <div class="role-hint">เลือกบทบาทที่กำลังปฏิบัติงาน ระบบจะเปิดปุ่มตามโหมดนี้ โดยไม่เปลี่ยนสิทธิ์จริงที่ผู้ดูแลระบบกำหนด</div>
               </div>
               <div class="small muted">สิทธิ์ที่ได้รับทั้งหมด</div>
               <div class="user-role-list">${assignedRoleBadges || '<span class="badge">ยังไม่ได้รับบทบาท</span>'}</div>
@@ -957,7 +958,7 @@
 
   const ROUND_TABS = [
     ['overview', '1. ข้อมูลรอบ'], ['documents', '2. เอกสาร/ภาพ'], ['assignments', '3. ผู้รับผิดชอบ'],
-    ['individual', '4. ผลรายบุคคล'], ['consensus', '5. ผลกลางของห้อง'], ['approval', '6. ตรวจ/อนุมัติ'],
+    ['individual', '4. ผลรายบุคคล'], ['consensus', '5. สรุปผลห้องแลป'], ['approval', '6. ตรวจ/รับรอง'],
     ['submission', '7. หลักฐานการส่ง'], ['official', '8. ผลประเมินกลับ'], ['capa', '9. การแก้ไขและป้องกัน'], ['competency', '10. การประเมินความสามารถ']
   ];
 
@@ -1071,8 +1072,8 @@
       </div>
       <div class="card"><h2>ขั้นตอนของรอบนี้</h2>
         <div class="notice">1) ผู้ปฏิบัติจริง 2 คนบันทึกผลแยกกัน และจะยังไม่เห็นคำตอบของอีกคนจนกว่าทั้งคู่ส่งผล</div>
-        <div style="height:10px"></div><div class="notice">2) เมื่อส่งครบ ทั้งสองคนเปรียบเทียบผล ร่วมกันเลือกผลกลาง และกดยืนยันคนละหนึ่งครั้ง</div>
-        <div style="height:10px"></div><div class="notice">3) ส่งให้ผู้ทบทวนตรวจ → ผู้จัดการคุณภาพอนุมัติ → แพทย์อนุมัติขั้นสุดท้าย</div>
+        <div style="height:10px"></div><div class="notice">2) เมื่อผู้ปฏิบัติทั้งสองคนส่งผลครบ ระบบจะเทียบและสร้างสรุปผลห้องปฏิบัติการให้อัตโนมัติ ค่าที่ตรงกันจะถูกเติมให้ทันที ส่วนค่าที่ต่างกันจะรอผู้ทบทวนตัดสิน</div>
+        <div style="height:10px"></div><div class="notice">3) ผู้ทบทวนตรวจและกดส่ง → ผู้จัดการคุณภาพรับรอง → แพทย์รับทราบ โดยผู้ปฏิบัติไม่ต้องมานั่งทำผลกลางซ้ำ</div>
         <div style="height:10px"></div><div class="notice">4) แพทย์ไม่ต้องทำแบบทดสอบบุคลากร ส่วนเจ้าหน้าที่คนอื่นทำการประเมินหลังห้องส่งผลแล้วและก่อนเปิดเฉลย</div>
         ${round.notes ? `<div style="height:14px"></div><h3>หมายเหตุ</h3><p>${esc(round.notes)}</p>` : ''}
       </div>
@@ -1100,9 +1101,8 @@
     if (error) throw error;
     const uploadAllowed = canManage() || canReview() || round.receiver_id === state.user.id || await isAssigned(round.id);
     return `<div class="card">
-      <div class="card-header"><div><h2>เอกสารและภาพ</h2><div class="small muted">ไฟล์เก็บไว้ในพื้นที่ส่วนตัวของระบบ ไม่ได้เก็บไว้ใน GitHub</div></div>
-      <div class="table-actions">${canManage() ? `<button class="btn btn-success" id="go-auto-competency">สร้าง Competency จากไฟล์</button>` : ''}${uploadAllowed ? `<button class="btn btn-primary" id="upload-doc-btn">＋ อัปโหลดไฟล์</button>` : ''}</div></div>
-      ${canManage() ? `<div class="notice info"><strong>ไฟล์ที่ใช้สร้างข้อสอบอัตโนมัติ</strong><br>ภาพผลทดสอบดิบ · คู่มือหรือคำแนะนำ · เอกสารต้นฉบับจากผู้ให้บริการ<br><span class="small">เมื่ออัปโหลดรายงานผลประเมินอย่างเป็นทางการแล้ว ระบบจะสร้างเฉลยและสรุปเพิ่มได้</span></div><div style="height:12px"></div>` : ''}
+      <div class="card-header"><div><h2>เอกสารและภาพ</h2></div>
+      <div class="table-actions">${canManage() ? `<button class="btn btn-success" id="go-auto-competency">สร้างจากไฟล์</button>` : ''}${uploadAllowed ? `<button class="btn btn-primary" id="upload-doc-btn">＋ อัปโหลดไฟล์</button>` : ''}</div></div>
       ${(docs || []).length ? `<div class="table-wrap"><table><thead><tr><th>ประเภท</th><th>ชื่อ</th><th>ผู้ที่เปิดดูได้</th><th>วันที่อัปโหลด</th><th>จัดการ</th></tr></thead><tbody>
         ${(docs || []).map((d) => {
           const canEditDocument = canManage() || d.uploaded_by === state.user.id;
@@ -1302,9 +1302,30 @@
   function resultComparison(rows, consensus) {
     if (!rows || rows.length < 2) return '';
     const [first, second] = rows;
-    return `<div class="table-wrap"><table style="min-width:850px"><thead><tr><th>ตัวอย่าง</th><th>${esc(first.ec_profiles?.full_name || 'ผู้ปฏิบัติคนที่ 1')}</th><th>${esc(second.ec_profiles?.full_name || 'ผู้ปฏิบัติคนที่ 2')}</th><th>ผลกลางที่บันทึกไว้</th></tr></thead><tbody>
+    return `<div class="table-wrap"><table style="min-width:850px"><thead><tr><th>ตัวอย่าง</th><th>${esc(first.ec_profiles?.full_name || 'ผู้ปฏิบัติคนที่ 1')}</th><th>${esc(second.ec_profiles?.full_name || 'ผู้ปฏิบัติคนที่ 2')}</th><th>สรุปผลห้องปฏิบัติการ</th></tr></thead><tbody>
       ${RESULT_SPECIMENS.map((specimen) => `<tr><td><strong>${esc(specimen)}</strong></td><td>${resultSummary(first.result_payload, specimen)}</td><td>${resultSummary(second.result_payload, specimen)}</td><td>${resultSummary(consensus?.result_payload, specimen)}</td></tr>`).join('')}
     </tbody></table></div>`;
+  }
+
+  function autoLabSummaryPanel(consensus) {
+    if (!consensus?.auto_generated) return '';
+    const summary = consensus.comparison_summary || {};
+    const differences = Array.isArray(summary.differences) ? summary.differences : [];
+    const unresolved = Number(summary.reviewer_unresolved_count ?? summary.unresolved_count ?? differences.length ?? 0);
+    const matched = Number(summary.matched_count || 0);
+    const different = Number(summary.different_count || 0);
+    const missing = Number(summary.missing_one_count || 0);
+    const rows = differences.map((item) => `<tr>
+      <td>${esc(item.specimen || '-')}</td>
+      <td>${esc(item.label || item.field || '-')}</td>
+      <td>${esc(item.first_value || '-')}</td>
+      <td>${esc(item.second_value || '-')}</td>
+    </tr>`).join('');
+    return `<div class="notice ${unresolved ? 'warning' : 'success'}">
+      <strong>ระบบเทียบผลให้อัตโนมัติแล้ว</strong><br>
+      ค่าที่ตรงกัน ${matched} รายการ · ค่าที่ต่างกัน ${different} รายการ · ขาดข้อมูลหนึ่งคน ${missing} รายการ
+      ${unresolved ? `<br><strong>ผู้ทบทวนต้องตรวจและเลือกผลสรุปอีก ${unresolved} รายการก่อนส่งให้ผู้จัดการคุณภาพ</strong>` : '<br>ค่าที่ต่างกันได้รับการตรวจครบแล้ว'}
+    </div>${rows ? `<div style="height:12px"></div><div class="table-wrap"><table><thead><tr><th>ตัวอย่าง</th><th>รายการ</th><th>ผู้ปฏิบัติคนที่ 1</th><th>ผู้ปฏิบัติคนที่ 2</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}`;
   }
 
   async function roundHistoricalConsensus(round) {
@@ -1375,27 +1396,33 @@
 
   async function roundConsensus(round) {
     if (isHistoricalRound(round)) return roundHistoricalConsensus(round);
-    const [{ data: consensus }, { data: approvals }, { data: individualRows }, { data: assignmentRows }] = await Promise.all([
+    const [{ data: consensus }, { data: individualRows }, { data: assignmentRows }] = await Promise.all([
       state.supabase.from('ec_consensus_results').select('*').eq('round_id', round.id).maybeSingle(),
-      state.supabase.from('ec_approvals').select('*').eq('round_id', round.id).eq('stage', 'practitioner_confirm'),
       state.supabase.from('ec_individual_results').select('*, ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('round_id', round.id).order('submitted_at'),
-      state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('assignment_role', 'practitioner').eq('active', true)
+      state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true)
     ]);
     const practitioner = await isPractitioner(round.id);
+    const practitionerAssignments = (assignmentRows || []).filter((row) => row.assignment_role === 'practitioner');
+    const assignedReviewer = (assignmentRows || []).find((row) => row.assignment_role === 'reviewer');
     const submittedIds = new Set((individualRows || []).filter((row) => ['submitted','resubmitted','locked'].includes(row.status)).map((row) => row.user_id));
-    const pairComplete = (assignmentRows || []).length === 2 && (assignmentRows || []).every((row) => submittedIds.has(row.user_id));
-    const currentVersionApprovals = (approvals || []).filter((a) => !consensus || a.result_version === consensus.version);
-    const editable = practitioner && pairComplete && (!consensus || ['draft','returned','awaiting_practitioner_confirmations'].includes(consensus.status));
+    const pairComplete = practitionerAssignments.length === 2 && practitionerAssignments.every((row) => submittedIds.has(row.user_id));
+    const isAssignedReviewer = Boolean(assignedReviewer && assignedReviewer.user_id === state.user.id);
+    const reviewerCanEdit = Boolean(consensus && hasRole('reviewer') && isAssignedReviewer && ['practitioners_confirmed','returned'].includes(consensus.status));
     const canSeeComparison = pairComplete && (practitioner || canReview() || hasRole('physician','viewer'));
-    return `<div class="card"><div class="card-header"><div><h2>เปรียบเทียบและจัดทำผลกลางของห้องปฏิบัติการ</h2><div class="small muted">เปิดเมื่อผู้ปฏิบัติทั้งสองคนส่งผลแล้ว จากนั้นทั้งสองคนร่วมกันเลือกผลกลางและยืนยันคนละหนึ่งครั้ง</div></div>${consensus ? `<span class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, consensus.status))} · ฉบับที่ ${consensus.version}</span>` : ''}</div>
-      ${!pairComplete ? `<div class="notice warning">ยังจัดทำผลกลางไม่ได้ ต้องรอผู้ปฏิบัติจริงทั้ง 2 คนกด “ยืนยันและส่งผล” ให้ครบก่อน</div>` : ''}
+    const sentForward = consensus && ['awaiting_qm_review','qm_approved','awaiting_physician_approval','physician_approved','submitted','locked'].includes(consensus.status);
+    return `<div class="card"><div class="card-header"><div><h2>สรุปผลห้องปฏิบัติการ</h2><div class="small muted">เมื่อผู้ปฏิบัติทั้งสองคนส่งผลครบ ระบบจะเทียบผลและเติมค่าที่ตรงกันให้อัตโนมัติ ผู้ทบทวนตรวจเฉพาะค่าที่ต่างกันแล้วส่งให้ผู้จัดการคุณภาพ</div></div>${consensus ? `<span class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, consensus.status))} · ฉบับที่ ${consensus.version}</span>` : ''}</div>
+      ${!pairComplete ? `<div class="notice warning">ยังสร้างสรุปไม่ได้ ต้องรอผู้ปฏิบัติจริงทั้ง 2 คนกด “ยืนยันและส่งผล” ให้ครบก่อน</div>` : ''}
+      ${pairComplete && !consensus ? `<div class="notice warning">ผู้ปฏิบัติส่งครบแล้ว ระบบกำลังสร้างสรุปผลห้องปฏิบัติการ กรุณารีเฟรชหน้านี้อีกครั้ง</div>` : ''}
       ${canSeeComparison ? `<h3>เปรียบเทียบผลของผู้ปฏิบัติ</h3>${resultComparison((individualRows || []).filter((row) => submittedIds.has(row.user_id)), consensus)}<div style="height:18px"></div>` : ''}
-      ${pairComplete && (practitioner || canReview() || hasRole('physician','viewer')) ? `<h3>ผลกลางของห้อง</h3><form id="consensus-form">${resultForm(consensus?.result_payload, 'consensus', !editable)}</form>
-      <div class="modal-footer">
-        ${editable ? `<button class="btn btn-secondary" id="save-consensus">บันทึกผลกลาง</button><button class="btn btn-primary" id="confirm-consensus">ยืนยันผลกลางของฉัน</button>` : ''}
-        ${canReview() && consensus ? `<button class="btn btn-outline" id="print-consensus">พิมพ์ผลกลาง</button>` : ''}
-      </div>
-      <div class="notice">ผู้ปฏิบัติยืนยันผลกลางฉบับปัจจุบันแล้ว ${currentVersionApprovals.length}/2 คน เมื่อครบระบบจะส่งต่อให้ผู้ทบทวนโดยอัตโนมัติ</div>` : `<div class="notice">หน้านี้ใช้สำหรับผู้ปฏิบัติจริงและผู้มีหน้าที่ตรวจรับรองเท่านั้น</div>`}
+      ${consensus && canSeeComparison ? `${autoLabSummaryPanel(consensus)}<div style="height:18px"></div><h3>สรุปผลที่ใช้ส่งต่อ</h3><form id="consensus-form">${resultForm(consensus.result_payload, 'consensus', !reviewerCanEdit)}</form>
+        ${reviewerCanEdit ? `<div class="field"><label>หมายเหตุผู้ทบทวน</label><textarea class="textarea" id="reviewer-summary-note" placeholder="ระบุเหตุผลเมื่อเลือกผลสรุปต่างจากผู้ปฏิบัติ หรือหมายเหตุเพิ่มเติม">${esc(consensus.reviewer_note || '')}</textarea></div>` : consensus.reviewer_note ? `<div class="notice"><strong>หมายเหตุผู้ทบทวน:</strong> ${esc(consensus.reviewer_note)}</div>` : ''}
+        <div class="modal-footer">
+          ${reviewerCanEdit ? `<button class="btn btn-secondary" id="save-reviewer-summary">บันทึกร่างสรุป</button><button class="btn btn-primary" id="finalize-reviewer-summary">ตรวจเสร็จและส่งให้ผู้จัดการคุณภาพ</button>` : ''}
+          ${canReview() ? `<button class="btn btn-outline" id="print-consensus">พิมพ์สรุปผล</button>` : ''}
+          ${sentForward ? `<button class="btn btn-outline" id="go-approval-from-summary">ดูขั้นตรวจ/รับรอง</button>` : ''}
+        </div>` : pairComplete ? `<div class="notice">หน้านี้เปิดให้ผู้ปฏิบัติ ผู้ทบทวน ผู้จัดการคุณภาพ แพทย์ และผู้มีสิทธิ์ดูรายงานเท่านั้น</div>` : ''}
+      ${hasRole('reviewer') && assignedReviewer && !isAssignedReviewer ? `<div class="notice warning">รอบนี้มอบหมายผู้ทบทวนเป็นบุคคลอื่น คุณเปิดดูได้แต่แก้หรือส่งสรุปไม่ได้</div>` : ''}
+      ${practitioner && consensus ? `<div class="notice success">ผู้ปฏิบัติไม่ต้องจัดทำผลกลางซ้ำ ระบบนำผลของทั้งสองคนมาเทียบให้แล้ว</div>` : ''}
     </div>`;
   }
 
@@ -1408,24 +1435,24 @@
     ]);
     const assignedReviewer = (assignments || []).find((a) => a.assignment_role === 'reviewer');
     const isAssignedReviewer = Boolean(assignedReviewer && assignedReviewer.user_id === state.user.id);
-    const reviewerCanAct = consensus && hasRole('reviewer') && isAssignedReviewer && ['practitioners_confirmed'].includes(consensus.status);
+    const reviewerCanAct = consensus && hasRole('reviewer') && isAssignedReviewer && ['practitioners_confirmed','returned'].includes(consensus.status);
     const qmCanAct = consensus && hasRole('qm') && ['awaiting_qm_review'].includes(consensus.status);
     const physicianCanAct = consensus && hasRole('physician') && ['qm_approved','awaiting_physician_approval'].includes(consensus.status);
-    const stages = ['practitioner_confirm','reviewer_review','qm_review','physician_approval','closure_acknowledgement'];
+    const stages = ['reviewer_review','qm_review','physician_approval'];
     return `<div class="grid cols-2">
-      <div class="card"><h2>ลำดับการตรวจและอนุมัติ</h2>
+      <div class="card"><h2>ลำดับการตรวจ รับรอง และรับทราบ</h2>
         <div class="timeline">${stages.map((stage) => {
           const found = (approvals || []).filter((a) => a.stage === stage);
-          return `<div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><strong>${esc(labelFrom(APPROVAL_STAGE_LABELS, stage))}</strong><br>${found.length ? found.map((a) => `${esc(a.ec_profiles?.full_name || '')} — ${esc(labelFrom(DECISION_LABELS, a.decision))} (${fmtDate(a.signed_at,true)})${a.note ? `<br><span class="small muted">${esc(a.note)}</span>` : ''}`).join('<br>') : '<span class="muted">ยังไม่มีการรับรอง</span>'}</div></div>`;
+          return `<div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><strong>${esc(labelFrom(APPROVAL_STAGE_LABELS, stage))}</strong><br>${found.length ? found.map((a) => `${esc(a.ec_profiles?.full_name || '')} — ${esc(labelFrom(DECISION_LABELS, a.decision))} (${fmtDate(a.signed_at,true)})${a.note ? `<br><span class="small muted">${esc(a.note)}</span>` : ''}`).join('<br>') : '<span class="muted">ยังไม่มีการดำเนินการ</span>'}</div></div>`;
         }).join('')}</div>
       </div>
       <div class="card"><h2>ดำเนินการตามลำดับ</h2>
-        ${!consensus ? `<div class="notice warning">ยังไม่มีผลกลางของห้อง</div>` : ''}
-        ${reviewerCanAct ? `<div class="form-grid"><div class="notice">ผู้ทบทวนตรวจได้ แต่แก้คำตอบเดิมของผู้ปฏิบัติไม่ได้ หากพบข้อผิดพลาดให้ส่งกลับทั้งชุดพร้อมเหตุผล</div><div class="field"><label>ข้อคิดเห็นของผู้ทบทวน</label><textarea class="textarea" id="reviewer-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="reviewer-approve">ผ่านการทบทวนและส่งให้ผู้จัดการคุณภาพ</button><button class="btn btn-warning" id="reviewer-return">ส่งกลับผู้ปฏิบัติแก้ไข</button></div></div>` : ''}
-        ${qmCanAct ? `<div class="form-grid"><div class="notice">ผู้ทบทวนตรวจผ่านแล้ว ผู้จัดการคุณภาพจึงสามารถอนุมัติได้</div><div class="field"><label>หมายเหตุผู้จัดการคุณภาพ</label><textarea class="textarea" id="qm-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="qm-approve">ผู้จัดการคุณภาพอนุมัติ</button><button class="btn btn-warning" id="qm-return">ส่งกลับแก้ไข</button></div></div>` : ''}
-        ${physicianCanAct ? `<div class="form-grid"><div class="notice">ผู้จัดการคุณภาพอนุมัติแล้ว แพทย์จึงสามารถรับรองขั้นสุดท้ายได้</div><div class="field"><label>หมายเหตุแพทย์</label><textarea class="textarea" id="physician-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="physician-approve">แพทย์อนุมัติขั้นสุดท้าย</button><button class="btn btn-warning" id="physician-return">ส่งกลับผู้จัดการคุณภาพ</button></div></div>` : ''}
+        ${!consensus ? `<div class="notice warning">ยังไม่มีสรุปผลห้องปฏิบัติการ</div>` : ''}
+        ${reviewerCanAct ? `<div class="form-grid"><div class="notice">ระบบสร้างสรุปจากผลผู้ปฏิบัติทั้งสองคนแล้ว ผู้ทบทวนต้องตรวจค่าที่ต่างกันในหัวข้อ 5 ก่อนส่งต่อ</div><div class="table-actions"><button class="btn btn-primary" id="go-reviewer-summary">ไปตรวจสรุปผลห้องแลป</button></div></div>` : ''}
+        ${qmCanAct ? `<div class="form-grid"><div class="notice">ผู้ทบทวนตรวจสรุปและส่งมาแล้ว ผู้จัดการคุณภาพจึงสามารถรับรองได้</div><div class="field"><label>หมายเหตุผู้จัดการคุณภาพ</label><textarea class="textarea" id="qm-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="qm-approve">ผู้จัดการคุณภาพรับรอง</button><button class="btn btn-warning" id="qm-return">ส่งกลับให้ผู้ทบทวนแก้สรุป</button></div></div>` : ''}
+        ${physicianCanAct ? `<div class="form-grid"><div class="notice">ผู้จัดการคุณภาพรับรองแล้ว แพทย์ตรวจดูและกดรับทราบ</div><div class="field"><label>หมายเหตุแพทย์</label><textarea class="textarea" id="physician-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="physician-acknowledge">แพทย์รับทราบ</button><button class="btn btn-warning" id="physician-return">ส่งกลับผู้จัดการคุณภาพ</button></div></div>` : ''}
         ${consensus && !reviewerCanAct && !qmCanAct && !physicianCanAct ? `<div class="notice">สถานะปัจจุบัน: ${esc(labelFrom(RESULT_STATUS_LABELS, consensus.status, consensus.status))}<br>ระบบจะเปิดปุ่มให้เฉพาะผู้มีหน้าที่ในลำดับปัจจุบันเท่านั้น</div>` : ''}
-        ${hasRole('reviewer') && assignedReviewer && !isAssignedReviewer ? `<div class="notice warning">รอบนี้มอบหมายผู้ทบทวนคนอื่น คุณเปิดดูได้แต่ไม่สามารถกดผ่านหรือส่งกลับได้</div>` : ''}
+        ${hasRole('reviewer') && assignedReviewer && !isAssignedReviewer ? `<div class="notice warning">รอบนี้มอบหมายผู้ทบทวนคนอื่น คุณเปิดดูได้แต่ไม่สามารถส่งสรุปได้</div>` : ''}
       </div>
     </div>`;
   }
@@ -1516,21 +1543,21 @@
       return '<span class="small muted">รอตามลำดับงาน</span>';
     };
 
-    const aiNotice = canManage() ? `<div class="notice info">
-      <strong>สร้างจากไฟล์อัตโนมัติ</strong><br>
-      ระบบใช้เฉพาะ “ภาพผลทดสอบดิบ”, “คู่มือหรือคำแนะนำ” และ “เอกสารต้นฉบับจากผู้ให้บริการ” เพื่อสร้างข้อสอบฉบับร่าง
-      ${officialDocs.length ? ' และพบรายงานผลประเมินอย่างเป็นทางการแล้ว จึงสามารถสร้างเฉลยและสรุปได้' : ' ส่วนเฉลยจะสร้างเมื่ออัปโหลดรายงานผลประเมินอย่างเป็นทางการ'}
-      <div class="small" style="margin-top:6px">ไฟล์ต้นทาง ${sourceDocs.length} รายการ · รายงานผลอย่างเป็นทางการ ${officialDocs.length} รายการ</div>
-    </div><div style="height:12px"></div>` : '';
+    const aiNotice = canManage() ? `<div class="compact-status">
+      <span>ไฟล์ต้นทาง <strong>${sourceDocs.length}</strong></span>
+      <span>รายงานผล <strong>${officialDocs.length}</strong></span>
+      <span>ข้อสอบ <strong>${(questions || []).length}</strong></span>
+      <button class="text-link" type="button" data-nav="help">ดูคู่มือ</button>
+    </div>` : '';
 
     return `<div class="grid cols-2">
       <div class="card">
-        <div class="card-header"><div><h2>ข้อสอบ</h2><div class="small muted">AI สร้างเป็นฉบับร่างก่อน ผู้จัดการคุณภาพตรวจแล้วค่อยเผยแพร่</div></div></div>
+        <div class="card-header"><div><h2>ข้อสอบ</h2></div></div>
         ${aiNotice}
         ${canManage() ? `<div class="table-actions" style="margin-bottom:14px;flex-wrap:wrap">
-          <button class="btn btn-primary" id="ai-generate-questions" ${sourceDocs.length ? '' : 'disabled'}>สร้างข้อสอบอัตโนมัติจากไฟล์</button>
-          <button class="btn btn-success" id="ai-generate-answers" ${officialDocs.length && (questions || []).length ? '' : 'disabled'}>สร้างเฉลยและสรุปจากรายงานผล</button>
-          <button class="btn btn-outline" id="publish-all-questions" ${(questions || []).length ? '' : 'disabled'}>เผยแพร่ข้อสอบทั้งหมด</button>
+          <button class="btn btn-primary" id="ai-generate-questions" ${sourceDocs.length ? '' : 'disabled'}>สร้างข้อสอบจากไฟล์</button>
+          <button class="btn btn-success" id="ai-generate-answers" ${officialDocs.length && (questions || []).length ? '' : 'disabled'}>สร้างเฉลยจากรายงาน</button>
+          <button class="btn btn-outline" id="publish-all-questions" ${(questions || []).length ? '' : 'disabled'}>เผยแพร่ทั้งหมด</button>
           <button class="btn btn-outline" id="add-question">＋ เพิ่มเอง</button>
         </div>` : ''}
         ${latestRun ? `<div class="small muted" style="margin-bottom:10px">การสร้างล่าสุด: ${latestRun.generation_type === 'questions' ? 'ข้อสอบ' : 'เฉลยและสรุป'} · ${latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' ? 'ไม่สำเร็จ' : 'กำลังประมวลผล'} · ${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}</div>` : ''}
@@ -1548,11 +1575,11 @@
         }).join('') : empty('ยังไม่มีคำถาม')}
       </div>
       <div class="card">
-        <div class="card-header"><div><h2>การมอบหมายและตรวจประเมิน</h2><div class="small muted">ผู้ปฏิบัติจริงประเมินจากการทำงาน เจ้าหน้าที่คนอื่นทำแบบทดสอบ</div></div>${canCreateCompetency?`<button class="btn btn-primary" id="assign-all-competency">สร้างรายการประเมิน</button>`:''}</div>
+        <div class="card-header"><div><h2>การมอบหมายและตรวจประเมิน</h2></div>${canCreateCompetency?`<button class="btn btn-primary" id="assign-all-competency">สร้างรายการประเมิน</button>`:''}</div>
         <div class="notice ${closePassed ? 'danger' : 'info'}"><strong>${closePassed ? 'ปิดรับคำตอบแล้ว' : 'ช่วงเวลาทำ Competency'}</strong><br>${esc(windowText)}${canManage() ? `<div style="margin-top:8px"><button class="btn btn-outline btn-sm" id="set-competency-window">กำหนด/แก้ไขวันเปิด–ปิด</button></div>` : ''}</div>
         <div style="height:12px"></div>
         ${isHistoricalRound(round) && round.historical_review_status !== 'qm_certified' ? `<div class="notice warning">ต้องให้ผู้ปฏิบัติ ผู้ทบทวน และผู้จัดการคุณภาพรับรองข้อมูลย้อนหลังให้ครบก่อน จึงจะสร้างรายการประเมินได้</div><div style="height:12px"></div>` : ''}
-        ${isHistoricalRound(round) && round.historical_review_status === 'qm_certified' ? `<div class="notice">รอบย้อนหลัง: สร้างข้อสอบและเฉลยจากไฟล์ได้ทันที แล้วกำหนดวันที่ปิดรับคำตอบของน้อง ๆ ก่อนสร้างรายการประเมิน</div><div style="height:12px"></div>` : ''}
+        ${isHistoricalRound(round) && round.historical_review_status === 'qm_certified' && !round.competency_close_at ? `<div class="notice warning">กรุณากำหนดวันปิด Competency ก่อนสร้างรายการประเมิน</div><div style="height:12px"></div>` : ''}
         ${(assignments || []).length ? `<div class="table-wrap"><table style="min-width:760px"><thead><tr><th>ชื่อ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${assignments.map((a)=>`<tr><td>${esc(name(a.user_id))}</td><td>${esc(labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${assignmentBadge(a.status)}</td><td>${a.score ?? '-'}</td><td><div class="table-actions">${actionFor(a)}</div></td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่ได้สร้างรายการประเมิน')}
       </div>
     </div>`;
@@ -1788,11 +1815,11 @@
       const reviewers = directory.filter((p) => personHasRole(p, 'reviewer'));
       const physicians = directory.filter((p) => personHasRole(p, 'physician'));
       showModal('กำหนดผู้รับผิดชอบ', `<form id="assignment-form" class="form-grid cols-2">
-        <div class="notice" style="grid-column:1/-1">ลำดับการทำงาน: ผู้ปฏิบัติ 2 คน → ผู้ทบทวน → ผู้จัดการคุณภาพ → แพทย์</div>
+        <div class="notice" style="grid-column:1/-1">ลำดับการทำงาน: ผู้ปฏิบัติ 2 คนส่งผล → ระบบสร้างสรุปอัตโนมัติ → ผู้ทบทวนตรวจ/ส่ง → ผู้จัดการคุณภาพรับรอง → แพทย์รับทราบ</div>
         <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 1</label><select class="select" name="p1" required>${options(practitioners, find('practitioner',1))}</select></div>
         <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 2</label><select class="select" name="p2" required>${options(practitioners, find('practitioner',2))}</select></div>
         <div class="field"><label>ผู้ทบทวนผล</label><select class="select" name="reviewer" required>${options(reviewers, find('reviewer'))}</select><div class="help">ต้องเป็นคนละคนกับผู้ปฏิบัติทั้งสองคน</div></div>
-        <div class="field"><label>แพทย์ผู้อนุมัติที่คาดไว้</label><select class="select" name="physician">${options(physicians, find('physician'), 'ยังไม่ระบุ — แพทย์ผู้รับรองคนใดก็ได้สามารถอนุมัติ')}</select><div class="help">แพทย์ไม่ต้องมีบทบาทเจ้าหน้าที่และไม่ถูกมอบหมายแบบทดสอบ</div></div>
+        <div class="field"><label>แพทย์ผู้รับทราบที่คาดไว้</label><select class="select" name="physician">${options(physicians, find('physician'), 'ยังไม่ระบุ — แพทย์ผู้รับรองคนใดก็ได้สามารถรับทราบ')}</select><div class="help">แพทย์ไม่ต้องมีบทบาทเจ้าหน้าที่และไม่ถูกมอบหมายแบบทดสอบ</div></div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-assignments">บันทึก</button>`);
       document.getElementById('save-assignments').addEventListener('click', async () => {
         const form = document.getElementById('assignment-form');
@@ -1830,40 +1857,58 @@
   }
 
   function bindConsensus(round) {
-    document.getElementById('save-consensus')?.addEventListener('click',async()=>{
-      const payload=collectResultPayload(document.getElementById('consensus-form'),'consensus');
-      const {data:existing}=await state.supabase.from('ec_consensus_results').select('id').eq('round_id',round.id).maybeSingle();
-      const row={round_id:round.id,result_payload:payload,status:'awaiting_practitioner_confirmations',prepared_by:state.user.id};
-      const res=existing?await state.supabase.from('ec_consensus_results').update(row).eq('id',existing.id):await state.supabase.from('ec_consensus_results').insert(row);
-      if(res.error)return toast(friendlyError(res.error), 'danger');
-      toast('บันทึกผลกลางแล้ว กรุณาให้ผู้ปฏิบัติทั้งสองคนกดยืนยัน','success');route();
+    const reviewerPayload = () => collectResultPayload(document.getElementById('consensus-form'), 'consensus');
+    const reviewerNote = () => String(document.getElementById('reviewer-summary-note')?.value || '').trim();
+
+    document.getElementById('save-reviewer-summary')?.addEventListener('click', async () => {
+      setBusy(true);
+      const { error } = await state.supabase.rpc('ec_reviewer_save_lab_summary', {
+        p_round_id: round.id,
+        p_result_payload: reviewerPayload(),
+        p_note: reviewerNote() || null
+      });
+      setBusy(false);
+      if (error) return toast(friendlyError(error), 'danger');
+      toast('บันทึกร่างสรุปผลห้องปฏิบัติการแล้ว', 'success'); route();
     });
-    document.getElementById('confirm-consensus')?.addEventListener('click',async()=>{
-      if(!confirm('ยืนยันผลกลางฉบับนี้หรือไม่ การยืนยันจะบันทึกชื่อและวันเวลา')) return;
-      const note=prompt('หมายเหตุการยืนยัน (เว้นว่างได้)')||'';
-      const {error}=await state.supabase.rpc('ec_confirm_consensus',{p_round_id:round.id,p_note:note});
-      if(error)return toast(friendlyError(error), 'danger');
-      toast('ยืนยันผลกลางแล้ว','success');route();
+
+    document.getElementById('finalize-reviewer-summary')?.addEventListener('click', async () => {
+      if (!confirm('ยืนยันว่าตรวจค่าที่ต่างกันครบแล้ว และส่งสรุปผลให้ผู้จัดการคุณภาพหรือไม่')) return;
+      setBusy(true);
+      const { data, error } = await state.supabase.rpc('ec_reviewer_finalize_lab_summary', {
+        p_round_id: round.id,
+        p_result_payload: reviewerPayload(),
+        p_note: reviewerNote() || null
+      });
+      setBusy(false);
+      if (error) return toast(friendlyError(error), 'danger');
+      const unresolved = Number(data?.unresolved_count || 0);
+      if (unresolved > 0) return toast(`ยังมีรายการที่ต้องตรวจ ${unresolved} รายการ`, 'warning');
+      toast('ส่งสรุปผลให้ผู้จัดการคุณภาพแล้ว', 'success'); navigate(`round/${round.id}/approval`);
     });
-    document.getElementById('print-consensus')?.addEventListener('click',()=>window.print());
+
+    document.getElementById('print-consensus')?.addEventListener('click', () => window.print());
+    document.getElementById('go-approval-from-summary')?.addEventListener('click', () => navigate(`round/${round.id}/approval`));
   }
 
     function bindApproval(round) {
     const decide = async (rpcName, decision, note) => {
       const { error } = await state.supabase.rpc(rpcName, { p_round_id: round.id, p_decision: decision, p_note: note || null });
       if (error) return toast(friendlyError(error), 'danger');
-      toast(decision === 'approved' ? 'บันทึกการอนุมัติแล้ว' : 'ส่งกลับแก้ไขแล้ว', 'success');
+      const message = decision === 'returned'
+        ? 'ส่งกลับแก้ไขแล้ว'
+        : decision === 'acknowledged'
+          ? 'แพทย์รับทราบแล้ว'
+          : 'บันทึกการรับรองแล้ว';
+      toast(message, 'success');
       route();
     };
-    document.getElementById('reviewer-approve')?.addEventListener('click', () => decide('ec_reviewer_decide_consensus','approved',document.getElementById('reviewer-note').value));
-    document.getElementById('reviewer-return')?.addEventListener('click', () => {
-      const note=document.getElementById('reviewer-note').value.trim(); if(!note)return toast('กรุณาระบุเหตุผลที่ส่งกลับ','warning'); decide('ec_reviewer_decide_consensus','returned',note);
-    });
+    document.getElementById('go-reviewer-summary')?.addEventListener('click', () => navigate(`round/${round.id}/consensus`));
     document.getElementById('qm-approve')?.addEventListener('click', () => decide('ec_qm_decide_consensus','approved',document.getElementById('qm-note').value));
     document.getElementById('qm-return')?.addEventListener('click', () => {
       const note=document.getElementById('qm-note').value.trim(); if(!note)return toast('กรุณาระบุเหตุผลที่ส่งกลับ','warning'); decide('ec_qm_decide_consensus','returned',note);
     });
-    document.getElementById('physician-approve')?.addEventListener('click', () => decide('ec_physician_decide_consensus','approved',document.getElementById('physician-note').value));
+    document.getElementById('physician-acknowledge')?.addEventListener('click', () => decide('ec_physician_decide_consensus','acknowledged',document.getElementById('physician-note').value));
     document.getElementById('physician-return')?.addEventListener('click', () => {
       const note=document.getElementById('physician-note').value.trim(); if(!note)return toast('กรุณาระบุเหตุผลที่ส่งกลับ','warning'); decide('ec_physician_decide_consensus','returned',note);
     });
@@ -2495,7 +2540,44 @@
 
   async function renderAudit(){if(!hasRole('admin','qm','viewer')){const content=`<section class="page"><div class="notice warning">บัญชีนี้ไม่มีสิทธิ์ดูประวัติการใช้งาน</div></section>`;appEl.innerHTML=shell(content,'ประวัติการใช้งาน');bindShell();return;}const {data,error}=await state.supabase.from('ec_audit_logs').select('*').order('occurred_at',{ascending:false}).limit(300);if(error)return renderError(error);const content=`<section class="page"><div class="page-header"><div><h1>ประวัติการใช้งาน</h1><p>ตรวจสอบว่าใครทำรายการอะไร เมื่อใด และแก้ไขข้อมูลส่วนใด</p></div></div><div class="card"><div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>รายการที่ทำ</th><th>ส่วนของระบบ</th><th>รหัสรายการ</th><th>เหตุผล</th></tr></thead><tbody>${(data||[]).map(x=>`<tr><td>${fmtDate(x.occurred_at,true)}</td><td>${esc(labelFrom(AUDIT_ACTION_LABELS,x.action,'รายการอื่น'))}</td><td>${esc(labelFrom(AUDIT_TABLE_LABELS,x.table_name,'ส่วนอื่นของระบบ'))}</td><td><code>${esc(x.record_id||'-')}</code></td><td>${esc(x.reason||'-')}</td></tr>`).join('')}</tbody></table></div></div></section>`;appEl.innerHTML=shell(content,'ประวัติการใช้งาน');bindShell();}
 
-  async function renderSettings(){const {data:factors}=await state.supabase.auth.mfa.listFactors();const totp=factors?.totp||[];const content=`<section class="page"><div class="page-header"><div><h1>ตั้งค่าของฉัน</h1><p>เปลี่ยนรหัสผ่านและส่งคำขอเปลี่ยนชื่อ/อีเมล</p></div></div><div class="grid cols-2"><div class="card"><h2>เปลี่ยนรหัสผ่าน</h2><form id="password-form" class="form-grid"><div class="field"><label>รหัสผ่านใหม่</label><input class="input" type="password" name="password" minlength="8" required></div><div class="field"><label>ยืนยัน</label><input class="input" type="password" name="confirm" minlength="8" required></div><button class="btn btn-primary">บันทึกรหัสผ่าน</button></form></div><div class="card"><h2>ข้อมูลส่วนตัว</h2><p><strong>${esc(state.profile.full_name)}</strong><br>${esc(state.profile.email)}<br>ชื่อผู้ใช้: ${esc(state.profile.username)}</p><button class="btn btn-outline" id="request-profile-change">ส่งคำขอเปลี่ยนชื่อ/อีเมล</button></div><div class="card"><h2>การยืนยันตัวตนสองขั้นตอน สำหรับผู้ดูแลระบบ ผู้จัดการคุณภาพ และแพทย์</h2><p class="muted">รหัสยืนยันจากแอปช่วยเพิ่มความปลอดภัยในการอนุมัติ</p>${totp.length?`<div class="notice success">ตั้งค่ารหัสยืนยันไว้แล้ว ${totp.length} รายการ</div>`:`<button class="btn btn-primary" id="enroll-mfa">ตั้งค่ารหัสยืนยันสองขั้นตอน</button>`}</div></div></section>`;appEl.innerHTML=shell(content,'ตั้งค่า');bindShell();document.getElementById('password-form').onsubmit=async(e)=>{e.preventDefault();const fd=new FormData(e.currentTarget);const p=String(fd.get('password'));if(p!==String(fd.get('confirm')))return toast('รหัสผ่านไม่ตรงกัน','danger');const {error}=await state.supabase.auth.updateUser({password:p});if(error)return toast(friendlyError(error), 'danger');toast('เปลี่ยนรหัสผ่านแล้ว','success');e.currentTarget.reset();};document.getElementById('request-profile-change').onclick=()=>{showModal('ขอเปลี่ยนข้อมูลส่วนตัว',`<form id="profile-change-form" class="form-grid"><div class="field"><label>ชื่อ-สกุลใหม่</label><input class="input" name="full_name" value="${esc(state.profile.full_name)}"></div><div class="field"><label>อีเมลใหม่</label><input class="input" type="email" name="email" value="${esc(state.profile.email)}"></div><div class="field"><label>ชื่อผู้ใช้ใหม่</label><input class="input" name="username" value="${esc(state.profile.username)}"></div><div class="field"><label>เหตุผล</label><textarea class="textarea" name="reason" required></textarea></div></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-profile-request">ส่งคำขอ</button>`);document.getElementById('save-profile-request').onclick=async()=>{const f=document.getElementById('profile-change-form');if(!f.reportValidity())return;const fd=new FormData(f);const {error}=await state.supabase.rpc('ec_request_profile_change',{p_full_name:String(fd.get('full_name')),p_email:String(fd.get('email')),p_username:String(fd.get('username')),p_reason:String(fd.get('reason'))});if(error)return toast(friendlyError(error), 'danger');closeModal();toast('ส่งคำขอให้ผู้ดูแลระบบแล้ว','success');};};document.getElementById('enroll-mfa')?.addEventListener('click',async()=>{const {data,error}=await state.supabase.auth.mfa.enroll({factorType:'totp',friendlyName:'CNMI EQA'});if(error)return toast(friendlyError(error), 'danger');showModal('ตั้งค่ารหัสยืนยันสองขั้นตอน',`<div style="text-align:center">${data.totp.qr_code}<p>รหัสตั้งค่า: <code>${esc(data.totp.secret)}</code></p></div><form id="mfa-verify-form" class="form-grid"><div class="field"><label>รหัส 6 หลักจากแอปสร้างรหัสยืนยัน</label><input class="input" name="code" inputmode="numeric" required></div></form>`,`<button class="btn btn-primary" id="verify-mfa">ยืนยัน</button>`);document.getElementById('verify-mfa').onclick=async()=>{const code=new FormData(document.getElementById('mfa-verify-form')).get('code');const ch=await state.supabase.auth.mfa.challenge({factorId:data.id});if(ch.error)return toast(friendlyError(ch.error), 'danger');const vr=await state.supabase.auth.mfa.verify({factorId:data.id,challengeId:ch.data.id,code:String(code)});if(vr.error)return toast(friendlyError(vr.error), 'danger');closeModal();toast('เปิดการยืนยันตัวตนสองขั้นตอนแล้ว','success');route();};});}
+  async function renderSettings(){
+    const {data:factors}=await state.supabase.auth.mfa.listFactors();
+    const totp=factors?.totp||[];
+    const mfaStatus=totp.length
+      ? `<div class="notice success">เปิดใช้งานแล้ว</div>`
+      : `<button class="btn btn-primary" id="enroll-mfa">ตั้งค่าการยืนยันสองขั้นตอน</button>`;
+    const content=`<section class="page">
+      <div class="page-header"><div><h1>ตั้งค่าของฉัน</h1></div></div>
+      <div class="grid cols-2">
+        <div class="card"><h2>เปลี่ยนรหัสผ่าน</h2><form id="password-form" class="form-grid"><div class="field"><label>รหัสผ่านใหม่</label><input class="input" type="password" name="password" minlength="8" required></div><div class="field"><label>ยืนยันรหัสผ่าน</label><input class="input" type="password" name="confirm" minlength="8" required></div><button class="btn btn-primary">บันทึกรหัสผ่าน</button></form></div>
+        <div class="card"><h2>ข้อมูลส่วนตัว</h2><p><strong>${esc(state.profile.full_name)}</strong><br>${esc(state.profile.email)}<br>ชื่อผู้ใช้: ${esc(state.profile.username)}</p><button class="btn btn-outline" id="request-profile-change">ส่งคำขอแก้ไขข้อมูล</button></div>
+        <div class="card"><h2>การยืนยันตัวตนสองขั้นตอน</h2><p class="muted">ผู้ใช้งานทุกคนสามารถเปิดใช้งานได้</p>${mfaStatus}<div style="margin-top:10px"><button class="text-link" type="button" data-nav="help">ดูวิธีตั้งค่า</button></div></div>
+      </div>
+    </section>`;
+    appEl.innerHTML=shell(content,'ตั้งค่า');
+    bindShell();
+    document.getElementById('password-form').onsubmit=async(e)=>{e.preventDefault();const fd=new FormData(e.currentTarget);const p=String(fd.get('password'));if(p!==String(fd.get('confirm')))return toast('รหัสผ่านไม่ตรงกัน','danger');const {error}=await state.supabase.auth.updateUser({password:p});if(error)return toast(friendlyError(error), 'danger');toast('เปลี่ยนรหัสผ่านแล้ว','success');e.currentTarget.reset();};
+    document.getElementById('request-profile-change').onclick=()=>{showModal('ขอเปลี่ยนข้อมูลส่วนตัว',`<form id="profile-change-form" class="form-grid"><div class="field"><label>ชื่อ-สกุลใหม่</label><input class="input" name="full_name" value="${esc(state.profile.full_name)}"></div><div class="field"><label>อีเมลใหม่</label><input class="input" type="email" name="email" value="${esc(state.profile.email)}"></div><div class="field"><label>ชื่อผู้ใช้ใหม่</label><input class="input" name="username" value="${esc(state.profile.username)}"></div><div class="field"><label>เหตุผล</label><textarea class="textarea" name="reason" required></textarea></div></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-profile-request">ส่งคำขอ</button>`);document.getElementById('save-profile-request').onclick=async()=>{const f=document.getElementById('profile-change-form');if(!f.reportValidity())return;const fd=new FormData(f);const {error}=await state.supabase.rpc('ec_request_profile_change',{p_full_name:String(fd.get('full_name')),p_email:String(fd.get('email')),p_username:String(fd.get('username')),p_reason:String(fd.get('reason'))});if(error)return toast(friendlyError(error), 'danger');closeModal();toast('ส่งคำขอให้ผู้ดูแลระบบแล้ว','success');};};
+    document.getElementById('enroll-mfa')?.addEventListener('click',async()=>{const {data,error}=await state.supabase.auth.mfa.enroll({factorType:'totp',friendlyName:'CNMI EQA'});if(error)return toast(friendlyError(error), 'danger');showModal('ตั้งค่าการยืนยันตัวตนสองขั้นตอน',`<div style="text-align:center">${data.totp.qr_code}<p>รหัสตั้งค่า: <code>${esc(data.totp.secret)}</code></p></div><form id="mfa-verify-form" class="form-grid"><div class="field"><label>รหัส 6 หลักจากแอปยืนยันตัวตน</label><input class="input" name="code" inputmode="numeric" required></div></form>`,`<button class="btn btn-primary" id="verify-mfa">ยืนยัน</button>`);document.getElementById('verify-mfa').onclick=async()=>{const code=new FormData(document.getElementById('mfa-verify-form')).get('code');const ch=await state.supabase.auth.mfa.challenge({factorId:data.id});if(ch.error)return toast(friendlyError(ch.error), 'danger');const vr=await state.supabase.auth.mfa.verify({factorId:data.id,challengeId:ch.data.id,code:String(code)});if(vr.error)return toast(friendlyError(vr.error), 'danger');closeModal();toast('เปิดการยืนยันตัวตนสองขั้นตอนแล้ว','success');route();};});
+  }
+
+  function renderHelp(){
+    const content=`<section class="page">
+      <div class="page-header"><div><h1>คู่มือการใช้งาน</h1><p>รวมคำอธิบายและลำดับงานของระบบไว้ในหน้านี้</p></div></div>
+      <div class="guide-list">
+        <details open><summary>เริ่มต้นใช้งานและเลือกบทบาท</summary><div class="guide-body"><p>เลือกบทบาทจากกล่องด้านล่างของแถบเมนู ระบบจะแสดงปุ่มตามบทบาทที่เลือก โดยไม่เปลี่ยนสิทธิ์จริงของบัญชี</p><p>หากมีหลายบทบาท ให้เลือกบทบาทให้ตรงกับงานที่กำลังทำ เช่น เจ้าหน้าที่ ผู้ทบทวน ผู้จัดการคุณภาพ แพทย์ หรือผู้ดูแลระบบ</p></div></details>
+        <details><summary>ลำดับงานของรอบ EQA</summary><div class="guide-body"><ol><li>บันทึกข้อมูลการรับรอบและกำหนดผู้รับผิดชอบ</li><li>ผู้ปฏิบัติจริงบันทึกผลรายบุคคล</li><li>ระบบเทียบผลและสร้างสรุปผลห้องปฏิบัติการ</li><li>ผู้ทบทวนตรวจและส่งให้ผู้จัดการคุณภาพ</li><li>ผู้จัดการคุณภาพรับรอง และแพทย์รับทราบ</li></ol></div></details>
+        <details><summary>เอกสารและภาพ</summary><div class="guide-body"><p>ไฟล์เก็บในพื้นที่ส่วนตัวของระบบ ไม่ได้เก็บใน GitHub</p><p>ไฟล์ที่ใช้สร้างข้อสอบ ได้แก่ ภาพผลทดสอบดิบ คู่มือหรือคำแนะนำ และเอกสารต้นฉบับจากผู้ให้บริการ</p><p>รายงานผลประเมินอย่างเป็นทางการใช้สร้างเฉลยและสรุปผลภายหลัง</p></div></details>
+        <details><summary>ผลรายบุคคลและสรุปผลห้องปฏิบัติการ</summary><div class="guide-body"><p>ผู้ปฏิบัติแต่ละคนบันทึกผลของตนเองแยกกัน เมื่อส่งครบ ระบบจะเติมค่าที่ตรงกันในสรุปผลห้องให้อัตโนมัติ</p><p>ค่าที่ไม่ตรงกันจะถูกทำเครื่องหมายให้ผู้ทบทวนตรวจและเลือกผลที่ถูกต้องก่อนส่งให้ผู้จัดการคุณภาพ</p></div></details>
+        <details><summary>การตรวจ รับรอง และรับทราบ</summary><div class="guide-body"><p>ผู้ทบทวนตรวจผลห้องและหลักฐาน จากนั้นส่งให้ผู้จัดการคุณภาพรับรอง เมื่อรับรองแล้วแพทย์จึงกดรับทราบได้</p><p>การส่งกลับต้องระบุเหตุผล เพื่อให้ผู้เกี่ยวข้องแก้ไขเฉพาะจุด</p></div></details>
+        <details><summary>การสร้าง Competency จากไฟล์</summary><div class="guide-body"><p>ระบบสร้างข้อสอบเป็นฉบับร่างจากเอกสารต้นทาง ผู้จัดการคุณภาพต้องตรวจคำถาม ตัวเลือก รูปประกอบ และคะแนนก่อนเผยแพร่</p><p>เมื่ออัปโหลดรายงานผลอย่างเป็นทางการแล้ว สามารถสร้างเฉลยและสรุปผลได้</p><p>รอบย้อนหลังต้องกำหนดวันเปิดและวันปิด Competency ก่อนสร้างรายการประเมิน</p></div></details>
+        <details><summary>การยืนยันตัวตนสองขั้นตอน</summary><div class="guide-body"><p>ผู้ใช้งานทุกคนเปิดใช้งานได้จากเมนู ตั้งค่าของฉัน โดยสแกน QR Code ด้วยแอปยืนยันตัวตน แล้วกรอกรหัส 6 หลักเพื่อยืนยัน</p><p>ควรเก็บบัญชีและโทรศัพท์ที่ใช้สร้างรหัสไว้กับเจ้าของบัญชีเท่านั้น</p></div></details>
+        <details><summary>การลบข้อมูล</summary><div class="guide-body"><p>ปุ่มลบที่ระบุว่าเป็นการลบถาวรจะลบข้อมูลจริงและกู้คืนไม่ได้ ควรตรวจชื่อรอบ เอกสาร หรือคำถามก่อนยืนยันทุกครั้ง</p></div></details>
+      </div>
+    </section>`;
+    appEl.innerHTML=shell(content,'คู่มือการใช้งาน');
+    bindShell();
+  }
 
   function renderError(error){const content=`<section class="page"><div class="notice danger"><strong>ระบบดำเนินการไม่สำเร็จ</strong><br>${esc(friendlyError(error))}</div></section>`;appEl.innerHTML=shell(content,'ข้อผิดพลาด');bindShell();}
 
@@ -2513,6 +2595,7 @@
       else if(parts[0]==='users')await renderUsers();
       else if(parts[0]==='audit')await renderAudit();
       else if(parts[0]==='settings')await renderSettings();
+      else if(parts[0]==='help')renderHelp();
       else navigate('dashboard');
     }catch(e){renderError(e);}
   }

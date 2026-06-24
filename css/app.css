@@ -432,3 +432,53 @@ tr:last-child td { border-bottom: 0; }
   table { min-width: 700px; }
   th, td { padding: 10px 11px; }
 }
+
+/* v2.1.2 — compact operational pages and centralized help */
+.compact-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 13px;
+}
+.compact-status strong { color: var(--text); }
+.text-link {
+  border: 0;
+  background: transparent;
+  color: var(--primary-dark);
+  font-weight: 800;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.guide-list { display: grid; gap: 12px; }
+.guide-list details {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(45, 89, 122, .06);
+  overflow: hidden;
+}
+.guide-list summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 16px 18px;
+  font-weight: 800;
+  font-size: 17px;
+}
+.guide-list summary::-webkit-details-marker { display: none; }
+.guide-list summary::after { content: '＋'; float: right; color: var(--primary-dark); }
+.guide-list details[open] summary::after { content: '−'; }
+.guide-body {
+  padding: 0 18px 18px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+.guide-body p { margin: 8px 0; }
+.guide-body ol { margin: 8px 0 0 22px; padding: 0; }
