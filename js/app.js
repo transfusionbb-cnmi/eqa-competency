@@ -51,6 +51,25 @@
     cancelled: 'ยกเลิก'
   };
 
+  const ROUND_MODE_LABELS = {
+    live: 'รอบใหม่ตามขั้นตอนปกติ',
+    historical_import: 'นำเข้าจากรอบที่ดำเนินการแล้ว'
+  };
+  const HISTORICAL_REVIEW_LABELS = {
+    not_applicable: 'ไม่ใช้ขั้นตอนย้อนหลัง',
+    draft: 'กำลังบันทึกข้อมูลย้อนหลัง',
+    awaiting_practitioner_confirmation: 'รอผู้ปฏิบัติทั้งสองคนยืนยัน',
+    awaiting_reviewer: 'รอผู้ทบทวนตรวจสอบ',
+    returned_by_reviewer: 'ผู้ทบทวนส่งกลับแก้ไข',
+    awaiting_qm_certification: 'รอผู้จัดการคุณภาพรับรอง',
+    returned_by_qm: 'ผู้จัดการคุณภาพส่งกลับแก้ไข',
+    qm_certified: 'รับรองข้อมูลแล้ว เปิดการประเมินได้'
+  };
+  const HISTORICAL_CONFIRM_LABELS = {
+    confirmed: 'ยืนยันว่าตรงกับหลักฐานเดิม',
+    disputed: 'แจ้งว่าข้อมูลไม่ตรง'
+  };
+
   const DOCUMENT_CATEGORY_LABELS = {
     source_document: 'เอกสารต้นฉบับจากผู้ให้บริการ',
     instruction: 'คู่มือหรือคำแนะนำ',
@@ -91,7 +110,10 @@
     reviewer_review: 'ผู้ทบทวนตรวจผลของผู้ปฏิบัติและผลกลาง',
     qm_review: 'ผู้จัดการคุณภาพตรวจและอนุมัติ',
     physician_approval: 'แพทย์อนุมัติขั้นสุดท้าย',
-    closure_acknowledgement: 'แพทย์รับทราบการปิดรอบ'
+    closure_acknowledgement: 'แพทย์รับทราบการปิดรอบ',
+    historical_practitioner_confirm: 'ผู้ปฏิบัติยืนยันข้อมูลย้อนหลัง',
+    historical_reviewer_review: 'ผู้ทบทวนตรวจข้อมูลย้อนหลัง',
+    historical_qm_certification: 'ผู้จัดการคุณภาพรับรองข้อมูลย้อนหลัง'
   };
   const DECISION_LABELS = {
     approved: 'อนุมัติ',
@@ -154,7 +176,8 @@
     ec_question_answer_keys: 'เฉลยคำตอบ',
     ec_competency_assignments: 'การมอบหมายการประเมิน',
     ec_competency_answers: 'คำตอบการประเมิน',
-    ec_profile_change_requests: 'คำขอเปลี่ยนข้อมูลส่วนตัว'
+    ec_profile_change_requests: 'คำขอเปลี่ยนข้อมูลส่วนตัว',
+    ec_historical_result_confirmations: 'การยืนยันข้อมูลย้อนหลัง'
   };
   const METHOD_LABELS = {
     abo: 'หมู่เลือด ABO',
@@ -185,7 +208,9 @@
 
   function friendlyError(error) {
     console.error(error);
-    const message = String(error?.message || error || '').toLowerCase();
+    const rawMessage = String(error?.message || error || '');
+    const message = rawMessage.toLowerCase();
+    if (/[ก-๙]/.test(rawMessage)) return rawMessage;
     if (message.includes('invalid login credentials')) return 'ชื่อผู้ใช้ อีเมล หรือรหัสผ่านไม่ถูกต้อง';
     if (message.includes('email not confirmed')) return 'อีเมลนี้ยังไม่ได้รับการยืนยัน กรุณาติดต่อผู้ดูแลระบบ';
     if (message.includes('user already registered') || message.includes('already exists')) return 'ข้อมูลนี้มีอยู่ในระบบแล้ว';
@@ -214,6 +239,13 @@
     return d.toISOString().slice(0, 10);
   }
 
+  function fmtDateTimeInput(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  }
+
   function roleStorageKey() {
     return `cnmi_eqa_active_role_${state.user?.id || 'anonymous'}`;
   }
@@ -231,6 +263,8 @@
   function canReview() { return hasRole('admin', 'qm', 'reviewer'); }
   function isPhysician() { return hasRole('physician'); }
   function canReceiveEqa() { return hasRole('staff', 'qm', 'admin'); }
+  function canImportHistoricalEqa() { return hasRole('admin', 'qm'); }
+  function isHistoricalRound(round) { return round?.round_mode === 'historical_import'; }
   function isCompetencyParticipant() { return hasAssignedRole('staff') && !hasAssignedRole('physician'); }
   function personHasRole(person, role) { return Array.isArray(person?.roles) && person.roles.includes(role); }
   function normalizedRoles(roles) {
@@ -606,7 +640,8 @@
         <div class="page-header">
           <div><h1>ภาพรวม</h1><p>ยินดีต้อนรับ ${esc(state.profile.full_name)}</p></div>
           <div class="header-actions">
-            ${canReceiveEqa() ? `<button class="btn btn-primary" id="receive-eqa-btn">＋ รับ EQA เข้าระบบ</button>` : ''}
+            ${canReceiveEqa() ? `<button class="btn btn-primary" id="receive-eqa-btn">＋ รับ EQA ใหม่เข้าระบบ</button>` : ''}
+            ${canImportHistoricalEqa() ? `<button class="btn btn-secondary" id="historical-eqa-btn">＋ นำเข้ารอบที่ส่งผลแล้ว</button>` : ''}
             ${canManage() ? `<button class="btn btn-outline" id="new-round-btn">สร้างรอบล่วงหน้า</button>` : ''}
           </div>
         </div>
@@ -625,7 +660,7 @@
               <div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content">
                 <button class="btn btn-outline btn-sm" style="float:right" data-open-round="${r.id}">เปิด</button>
                 <strong>${esc(r.provider)} ${esc(r.round_code)}</strong><br>
-                ${statusBadge(r.status)} <span class="small muted">ครบกำหนด ${fmtDate(r.due_date)}</span>
+                ${isHistoricalRound(r) ? '<span class="badge info">ข้อมูลย้อนหลัง</span> ' : ''}${statusBadge(r.status)} <span class="small muted">ครบกำหนด ${fmtDate(r.due_date)}</span>
               </div></div>`).join('')}</div>` : empty('ยังไม่มีรอบ EQA')}
           </div>
           <div class="card">
@@ -643,6 +678,7 @@
     document.querySelectorAll('[data-open-round]').forEach((b) => b.addEventListener('click', () => navigate(`round/${b.dataset.openRound}/overview`)));
     document.getElementById('new-round-btn')?.addEventListener('click', openRoundModal);
     document.getElementById('receive-eqa-btn')?.addEventListener('click', () => openReceiveEqaModal());
+    document.getElementById('historical-eqa-btn')?.addEventListener('click', () => openHistoricalRoundModal());
   }
 
   function empty(text) { return `<div class="empty-state"><div class="empty-icon">○</div>${esc(text)}</div>`; }
@@ -736,6 +772,95 @@
     });
   }
 
+  async function openHistoricalRoundModal(round = null) {
+    if (!canImportHistoricalEqa()) return toast('กรุณาเลือกโหมดผู้ดูแลระบบหรือผู้จัดการคุณภาพ', 'warning');
+    let directory;
+    try { directory = await loadDirectory(); } catch (error) { return toast(friendlyError(error), 'danger'); }
+    const [{ data: currentAssignments }, resultCount] = round?.id
+      ? await Promise.all([
+          state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true),
+          state.supabase.from('ec_individual_results').select('id', { count: 'exact', head: true }).eq('round_id', round.id)
+        ])
+      : [{ data: [] }, { count: 0 }];
+    const assigned = currentAssignments || [];
+    const practitionersLocked = Boolean(resultCount.count);
+    const findAssigned = (role, slot = null) => assigned.find((a) => a.assignment_role === role && (slot ? a.practitioner_slot === slot : true))?.user_id || '';
+    const practitioners = directory.filter((person) => personHasRole(person, 'staff') && !personHasRole(person, 'physician'));
+    const reviewers = directory.filter((person) => personHasRole(person, 'reviewer'));
+    const people = directory.filter((person) => person.active !== false && personHasRole(person, 'staff') && !personHasRole(person, 'physician'));
+    const options = (rows, selected, blank = 'กรุณาเลือก') => `<option value="">${blank}</option>${rows.map((person) => `<option value="${person.id}" ${person.id === selected ? 'selected' : ''}>${esc(person.full_name)}${person.position_title ? ` — ${esc(person.position_title)}` : ''}</option>`).join('')}`;
+    const defaultYear = round?.survey_year || new Date().getFullYear();
+    const convertingExistingRound = Boolean(round?.id && !isHistoricalRound(round));
+    showModal(convertingExistingRound ? 'เปลี่ยนรอบนี้เป็นข้อมูลย้อนหลัง' : (round ? 'แก้ไขข้อมูลรอบที่ดำเนินการแล้ว' : 'นำเข้ารอบ EQA ที่ดำเนินการแล้ว'), `
+      <form id="historical-round-form" class="form-grid cols-2">
+        <div class="notice" style="grid-column:1/-1"><strong>${convertingExistingRound ? 'กำลังเปลี่ยนรอบที่มีอยู่ให้เป็นข้อมูลย้อนหลัง' : 'ใช้สำหรับ EQA ที่ห้องปฏิบัติการตรวจและส่งผลไปแล้ว'}</strong><br><span class="small">ผู้ดูแลระบบหรือผู้จัดการคุณภาพจะกรอกข้อมูลจากหลักฐานเดิมแทนผู้ปฏิบัติ โดยระบบแยกผู้ปฏิบัติจริงออกจากผู้บันทึกข้อมูลเข้าระบบอย่างชัดเจน${convertingExistingRound ? ' เอกสารที่อัปโหลดไว้ในรอบนี้จะยังอยู่เหมือนเดิม' : ''}</span></div>
+        <div class="field"><label>ผู้ให้บริการ</label><input class="input" name="provider" required value="${esc(round?.provider || 'CAP')}"></div>
+        <div class="field"><label>ชื่อโปรแกรม</label><input class="input" name="program_name" required value="${esc(round?.program_name || 'Comprehensive Transfusion Medicine')}"></div>
+        <div class="field"><label>รหัสโปรแกรม</label><input class="input" name="program_code" value="${esc(round?.program_code || 'J')}"></div>
+        <div class="field"><label>ชื่อรอบ</label><input class="input" name="round_code" required value="${esc(round?.round_code || '')}" placeholder="เช่น J-A 2026"></div>
+        <div class="field"><label>เลขชุดตัวอย่าง</label><input class="input" name="kit_number" value="${esc(round?.kit_number || '')}"></div>
+        <div class="field"><label>ปี ค.ศ.</label><input class="input" type="number" name="survey_year" min="2000" max="2200" required value="${esc(defaultYear)}"></div>
+        <div class="field"><label>วันและเวลาที่รับจริง</label><input class="input" type="datetime-local" name="received_at" value="${fmtDateTimeInput(round?.received_at)}"></div>
+        <div class="field"><label>เจ้าหน้าที่ผู้รับจริง</label><select class="select" name="receiver_id">${options(people, round?.receiver_id || '', 'ไม่ทราบหรือไม่มีหลักฐาน')}</select></div>
+        <div class="field"><label>อุณหภูมิตอนรับ (°C)</label><input class="input" type="number" step="0.1" name="received_temperature" value="${esc(round?.received_temperature ?? '')}"></div>
+        <div class="field"><label>วันครบกำหนดส่ง</label><input class="input" type="date" name="due_date" value="${fmtDateInput(round?.due_date)}"></div>
+        <div class="field"><label>วันที่และเวลาที่ส่งผลจริง</label><input class="input" type="datetime-local" name="actual_submitted_at" required value="${fmtDateTimeInput(round?.actual_submitted_at)}"></div>
+        <div class="field"><label>เจ้าหน้าที่ผู้ส่งผลจริง</label><select class="select" name="actual_submitted_by">${options(people, round?.actual_submitted_by || '', 'ไม่ทราบหรือไม่มีหลักฐาน')}</select></div>
+        <div class="field"><label>เลขอ้างอิงการส่งผล</label><input class="input" name="actual_provider_reference" value="${esc(round?.actual_provider_reference || '')}"></div>
+        <div class="field"><label>ระยะปัจจุบันของรอบ</label><select class="select" name="status"><option value="submitted_to_provider" ${round?.status === 'submitted_to_provider' ? 'selected' : ''}>ส่งผลให้ผู้ให้บริการแล้ว</option><option value="official_result_received" ${round?.status === 'official_result_received' ? 'selected' : ''}>ได้รับผลประเมินกลับแล้ว</option></select></div>
+        <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 1</label><select class="select" name="p1" required ${practitionersLocked ? 'disabled' : ''}>${options(practitioners, findAssigned('practitioner', 1))}</select>${practitionersLocked ? '<div class="help">ล็อกแล้ว เพราะมีการกรอกผลย้อนหลัง</div>' : ''}</div>
+        <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 2</label><select class="select" name="p2" required ${practitionersLocked ? 'disabled' : ''}>${options(practitioners, findAssigned('practitioner', 2))}</select>${practitionersLocked ? '<div class="help">ล็อกแล้ว เพราะมีการกรอกผลย้อนหลัง</div>' : ''}</div>
+        <div class="field" style="grid-column:1/-1"><label>ผู้ทบทวนข้อมูลย้อนหลัง</label><select class="select" name="reviewer" required>${options(reviewers, findAssigned('reviewer'))}</select><div class="help">ผู้ทบทวนต้องเป็นคนละคนกับผู้ปฏิบัติทั้งสองคน</div></div>
+        <div class="field"><label>เลขเอกสาร</label><input class="input" name="document_number" value="${esc(round?.document_number || '')}"></div>
+        <div class="field"><label>ผู้บันทึกข้อมูลเข้าระบบ</label><input class="input" value="${esc(state.profile.full_name)}" disabled><div class="help">ระบบบันทึกชื่อและวันเวลาปัจจุบันอัตโนมัติ ไม่ใช้แทนชื่อผู้ปฏิบัติจริง</div></div>
+        <div class="field" style="grid-column:1/-1"><label>แหล่งข้อมูล/หลักฐานที่ใช้กรอกย้อนหลัง</label><textarea class="textarea" name="historical_source_note" required placeholder="เช่น แบบบันทึกผลเดิม สำเนาผลที่ส่ง CAP และภาพหน้าจอหลักฐานการส่ง">${esc(round?.historical_source_note || '')}</textarea></div>
+        <div class="field" style="grid-column:1/-1"><label>หมายเหตุเพิ่มเติม</label><textarea class="textarea" name="notes">${esc(round?.notes || '')}</textarea></div>
+      </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-historical-round">${convertingExistingRound ? 'เปลี่ยนเป็นข้อมูลย้อนหลังและไปกรอกผล' : 'บันทึกและไปกรอกผลย้อนหลัง'}</button>`, true);
+
+    document.getElementById('save-historical-round').addEventListener('click', async () => {
+      const form = document.getElementById('historical-round-form');
+      if (!form.reportValidity()) return;
+      const fd = new FormData(form);
+      const p1 = String(fd.get('p1') || findAssigned('practitioner', 1) || '');
+      const p2 = String(fd.get('p2') || findAssigned('practitioner', 2) || '');
+      const reviewer = String(fd.get('reviewer') || '');
+      if (p1 === p2) return toast('ผู้ปฏิบัติจริงทั้งสองคนต้องเป็นคนละคน', 'warning');
+      if ([p1, p2].includes(reviewer)) return toast('ผู้ทบทวนต้องเป็นคนละคนกับผู้ปฏิบัติจริง', 'warning');
+      const payload = {
+        provider: String(fd.get('provider') || '').trim(),
+        program_name: String(fd.get('program_name') || '').trim(),
+        program_code: String(fd.get('program_code') || '').trim() || null,
+        round_code: String(fd.get('round_code') || '').trim(),
+        kit_number: String(fd.get('kit_number') || '').trim() || null,
+        survey_year: Number(fd.get('survey_year')),
+        received_at: fd.get('received_at') ? new Date(String(fd.get('received_at'))).toISOString() : null,
+        receiver_id: String(fd.get('receiver_id') || '') || null,
+        received_temperature: fd.get('received_temperature') !== '' ? Number(fd.get('received_temperature')) : null,
+        due_date: fd.get('due_date') || null,
+        actual_submitted_at: new Date(String(fd.get('actual_submitted_at'))).toISOString(),
+        actual_submitted_by: String(fd.get('actual_submitted_by') || '') || null,
+        actual_provider_reference: String(fd.get('actual_provider_reference') || '').trim() || null,
+        status: String(fd.get('status')),
+        document_number: String(fd.get('document_number') || '').trim() || null,
+        historical_source_note: String(fd.get('historical_source_note') || '').trim(),
+        notes: String(fd.get('notes') || '').trim() || null
+      };
+      setBusy(true);
+      const { data, error } = await state.supabase.rpc('ec_save_historical_round', {
+        p_round_id: round?.id || null,
+        p_payload: payload,
+        p_practitioner_1: p1,
+        p_practitioner_2: p2,
+        p_reviewer: reviewer
+      });
+      setBusy(false);
+      if (error) return toast(friendlyError(error), 'danger');
+      closeModal();
+      toast('บันทึกรอบย้อนหลังแล้ว ขั้นต่อไปกรอกผลแทนผู้ปฏิบัติทั้งสองคนจากหลักฐานเดิม', 'success', 6500);
+      navigate(`round/${data}/individual`);
+    });
+  }
+
   async function renderRounds() {
     let rounds;
     try { rounds = await loadRounds(); } catch (e) { return renderError(e); }
@@ -743,12 +868,13 @@
       <section class="page">
         <div class="page-header"><div><h1>รอบ EQA</h1><p>เปิดรอบเดียวเพื่อดูหลักฐาน ผล การอนุมัติ การแก้ไขและป้องกัน และการประเมินความสามารถ</p></div>
         <div class="header-actions">
-          ${canReceiveEqa() ? `<button class="btn btn-primary" id="receive-eqa-btn">＋ รับ EQA เข้าระบบ</button>` : ''}
+          ${canReceiveEqa() ? `<button class="btn btn-primary" id="receive-eqa-btn">＋ รับ EQA ใหม่เข้าระบบ</button>` : ''}
+          ${canImportHistoricalEqa() ? `<button class="btn btn-secondary" id="historical-eqa-btn">＋ นำเข้ารอบที่ส่งผลแล้ว</button>` : ''}
           ${canManage() ? `<button class="btn btn-outline" id="new-round-btn">สร้างรอบล่วงหน้า</button>` : ''}
         </div></div>
         <div class="card">
           ${rounds.length ? `<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>โปรแกรม / ชุดตัวอย่าง</th><th>ครบกำหนด</th><th>สถานะ</th><th>จัดการ</th></tr></thead><tbody>
-            ${rounds.map((r) => `<tr><td><strong>${esc(r.provider)} ${esc(r.round_code)}</strong><br><span class="small muted">ปี ${esc(r.survey_year)}</span></td>
+            ${rounds.map((r) => `<tr><td><strong>${esc(r.provider)} ${esc(r.round_code)}</strong> ${isHistoricalRound(r) ? '<span class="badge info">ข้อมูลย้อนหลัง</span>' : ''}<br><span class="small muted">ปี ${esc(r.survey_year)}</span></td>
             <td>${esc(r.program_name)}<br><span class="small muted">${esc(r.program_code || '-')} · ชุดตัวอย่าง ${esc(r.kit_number || '-')}</span></td>
             <td>${fmtDate(r.due_date)}</td><td>${statusBadge(r.status)}</td><td class="table-actions"><button class="btn btn-primary btn-sm" data-open-round="${r.id}">เปิดรอบ</button>${canManage() ? `<button class="btn btn-outline btn-sm" data-edit-round="${r.id}">แก้ไข</button>` : ''}</td></tr>`).join('')}
           </tbody></table></div>` : empty('ยังไม่มีรอบ EQA')}
@@ -757,8 +883,14 @@
     appEl.innerHTML = shell(content, 'รอบ EQA'); bindShell();
     document.getElementById('new-round-btn')?.addEventListener('click', () => openRoundModal());
     document.getElementById('receive-eqa-btn')?.addEventListener('click', () => openReceiveEqaModal());
+    document.getElementById('historical-eqa-btn')?.addEventListener('click', () => openHistoricalRoundModal());
     document.querySelectorAll('[data-open-round]').forEach((b) => b.addEventListener('click', () => navigate(`round/${b.dataset.openRound}/overview`)));
-    document.querySelectorAll('[data-edit-round]').forEach((b) => b.addEventListener('click', () => openRoundModal(rounds.find((r) => r.id === b.dataset.editRound))));
+    document.querySelectorAll('[data-edit-round]').forEach((b) => b.addEventListener('click', () => {
+      const target = rounds.find((r) => r.id === b.dataset.editRound);
+      if (!target) return;
+      if (isHistoricalRound(target)) openHistoricalRoundModal(target);
+      else openRoundModal(target);
+    }));
   }
 
   const ROUND_TABS = [
@@ -772,12 +904,24 @@
   }
 
   function roundStepper(round) {
+    if (isHistoricalRound(round)) {
+      const steps = [
+        ['draft','กรอกข้อมูล'],
+        ['awaiting_practitioner_confirmation','ผู้ปฏิบัติยืนยัน'],
+        ['awaiting_reviewer','ผู้ทบทวน'],
+        ['awaiting_qm_certification','ผู้จัดการคุณภาพ'],
+        ['qm_certified','เปิดการประเมิน']
+      ];
+      const normalized = ['returned_by_reviewer','returned_by_qm'].includes(round.historical_review_status) ? 'draft' : round.historical_review_status;
+      const currentIndex = Math.max(0, steps.findIndex(([status]) => status === normalized));
+      return `<div class="stepper">${steps.map(([status,label],index) => `<div class="step ${index < currentIndex ? 'done' : index === currentIndex ? 'current' : ''}"><div class="step-number">${index+1}</div>${label}</div>`).join('')}</div>`;
+    }
     const steps = [
       ['preparing','เตรียม'], ['in_progress','ดำเนินการ'], ['awaiting_review','ผู้ทบทวน'], ['awaiting_qm_approval','ผู้จัดการคุณภาพ'],
       ['awaiting_physician_approval','แพทย์'], ['submitted_to_provider','ส่งผล'], ['official_result_received','ผลกลับ'], ['closed','ปิดรอบ']
     ];
-    const currentIndex = Math.max(0, steps.findIndex(([s]) => s === round.status));
-    return `<div class="stepper">${steps.map(([s,l],i) => `<div class="step ${i < currentIndex ? 'done' : i === currentIndex ? 'current' : ''}"><div class="step-number">${i+1}</div>${l}</div>`).join('')}</div>`;
+    const currentIndex = Math.max(0, steps.findIndex(([status]) => status === round.status));
+    return `<div class="stepper">${steps.map(([status,label],index) => `<div class="step ${index < currentIndex ? 'done' : index === currentIndex ? 'current' : ''}"><div class="step-number">${index+1}</div>${label}</div>`).join('')}</div>`;
   }
 
   async function getRound(id) {
@@ -807,8 +951,8 @@
     } catch (e) { tabContent = `<div class="notice danger">${esc(friendlyError(e))}</div>`; }
 
     const content = `<section class="page">
-      <div class="page-header"><div><h1>${esc(round.provider)} ${esc(round.round_code)}</h1><p>${esc(round.program_name)} · ชุดตัวอย่าง ${esc(round.kit_number || '-')}</p></div>
-      <div class="header-actions">${statusBadge(round.status)}<button class="btn btn-outline" id="back-rounds">กลับ</button></div></div>
+      <div class="page-header"><div><h1>${esc(round.provider)} ${esc(round.round_code)} ${isHistoricalRound(round) ? '<span class="badge info">ข้อมูลย้อนหลัง</span>' : ''}</h1><p>${esc(round.program_name)} · ชุดตัวอย่าง ${esc(round.kit_number || '-')}</p></div>
+      <div class="header-actions">${isHistoricalRound(round) ? `<span class="badge">${esc(labelFrom(HISTORICAL_REVIEW_LABELS, round.historical_review_status, 'กำลังตรวจข้อมูลย้อนหลัง'))}</span>` : ''}${statusBadge(round.status)}<button class="btn btn-outline" id="back-rounds">กลับ</button></div></div>
       <div class="card">${roundStepper(round)}</div><div style="height:14px"></div>
       ${roundTabs(round.id, tab)}
       ${tabContent}
@@ -821,15 +965,46 @@
 
   async function roundOverview(round) {
     const directory = await loadDirectory();
-    const receiver = round.receiver_id ? directory.find((person) => person.id === round.receiver_id) || null : null;
+    const personName = (id) => directory.find((person) => person.id === id)?.full_name || '-';
+    const receiver = round.receiver_id ? personName(round.receiver_id) : '-';
+    if (isHistoricalRound(round)) {
+      const importedBy = round.historical_imported_by ? personName(round.historical_imported_by) : '-';
+      const submittedBy = round.actual_submitted_by ? personName(round.actual_submitted_by) : '-';
+      return `<div class="grid cols-2">
+        <div class="card"><div class="card-header"><div><h2>ข้อมูลรอบที่ดำเนินการแล้ว</h2><div class="small muted">บันทึกตามหลักฐานจริงในอดีต โดยไม่ย้อนวันเวลาการกรอกข้อมูลเข้าระบบ</div></div>${canImportHistoricalEqa() ? `<button class="btn btn-primary btn-sm" id="edit-historical-round">แก้ไขข้อมูลย้อนหลัง</button>` : ''}</div>
+          <div class="table-wrap"><table><tbody>
+            <tr><th>ประเภทข้อมูล</th><td><span class="badge info">นำเข้าจากรอบที่ดำเนินการแล้ว</span></td></tr>
+            <tr><th>ผู้ให้บริการ</th><td>${esc(round.provider)}</td></tr><tr><th>ชื่อโปรแกรม</th><td>${esc(round.program_name)}</td></tr>
+            <tr><th>รหัสโปรแกรม / รอบ</th><td>${esc(round.program_code || '-')} / ${esc(round.round_code)}</td></tr>
+            <tr><th>เลขชุดตัวอย่าง</th><td>${esc(round.kit_number || '-')}</td></tr><tr><th>วันครบกำหนด</th><td>${fmtDate(round.due_date)}</td></tr>
+            <tr><th>วันและเวลาที่รับจริง</th><td>${fmtDate(round.received_at, true)}</td></tr><tr><th>อุณหภูมิตอนรับ</th><td>${round.received_temperature ?? '-'} °C</td></tr>
+            <tr><th>เจ้าหน้าที่ผู้รับจริง</th><td>${esc(receiver)}</td></tr><tr><th>วันที่ส่งผลจริง</th><td>${fmtDate(round.actual_submitted_at, true)}</td></tr>
+            <tr><th>เจ้าหน้าที่ผู้ส่งผลจริง</th><td>${esc(submittedBy)}</td></tr><tr><th>เลขอ้างอิงการส่ง</th><td>${esc(round.actual_provider_reference || '-')}</td></tr>
+            <tr><th>ผู้บันทึกข้อมูลเข้าระบบ</th><td>${esc(importedBy)}<br><span class="small muted">บันทึกเมื่อ ${fmtDate(round.historical_imported_at, true)}</span></td></tr>
+            <tr><th>สถานะตรวจข้อมูลย้อนหลัง</th><td>${esc(labelFrom(HISTORICAL_REVIEW_LABELS, round.historical_review_status))}</td></tr>
+            <tr><th>เลขเอกสาร</th><td>${esc(round.document_number || '-')} ฉบับแก้ไขที่ ${esc(round.document_revision || '1')}</td></tr>
+          </tbody></table></div>
+          <div style="height:14px"></div><h3>หลักฐานที่ใช้อ้างอิง</h3><p>${esc(round.historical_source_note || 'ยังไม่ระบุ')}</p>
+          ${round.notes ? `<h3>หมายเหตุเพิ่มเติม</h3><p>${esc(round.notes)}</p>` : ''}
+        </div>
+        <div class="card"><h2>ขั้นตอนสำหรับรอบย้อนหลัง</h2>
+          <div class="notice">1) ผู้ดูแลระบบหรือผู้จัดการคุณภาพกรอกผลแทนผู้ปฏิบัติจริงทั้ง 2 คนจากเอกสารเดิม ระบบจะแสดงคำว่า “กรอกแทนผู้ปฏิบัติ” ชัดเจน</div>
+          <div style="height:10px"></div><div class="notice">2) กรอกผลกลางที่ห้องส่งจริง หากไม่มีผลรายบุคคลแยก ให้ระบุว่าไม่มีหลักฐาน ห้ามคาดเดาคำตอบย้อนหลัง</div>
+          <div style="height:10px"></div><div class="notice">3) ผู้ปฏิบัติทั้ง 2 คนตรวจข้อมูลของตนและกดยืนยัน หรือแจ้งว่าข้อมูลไม่ตรง</div>
+          <div style="height:10px"></div><div class="notice">4) ผู้ทบทวนตรวจสอบ → ผู้จัดการคุณภาพรับรองและเปิดการประเมินความสามารถ</div>
+          <div style="height:10px"></div><div class="notice">5) ผู้ปฏิบัติจริงใช้แบบประเมินการปฏิบัติงาน ส่วนเจ้าหน้าที่คนอื่นทำแบบทดสอบ แพทย์ไม่ถูกนำมาทำการประเมิน</div>
+          <div style="height:16px"></div><button class="btn btn-primary" data-go-historical-step="individual">ไปกรอก/ยืนยันผลย้อนหลัง</button>
+        </div>
+      </div>`;
+    }
     return `<div class="grid cols-2">
-      <div class="card"><div class="card-header"><h2>ข้อมูลรอบ EQA</h2><div class="table-actions">${canReceiveEqa() ? `<button class="btn btn-primary btn-sm" id="record-receipt">${round.received_at ? 'แก้ไขข้อมูลการรับ' : 'บันทึกการรับ EQA'}</button>` : ''}${canManage() ? `<button class="btn btn-outline btn-sm" id="edit-current-round">แก้ไขข้อมูลรอบ</button>` : ''}</div></div>
+      <div class="card"><div class="card-header"><h2>ข้อมูลรอบ EQA</h2><div class="table-actions">${canReceiveEqa() ? `<button class="btn btn-primary btn-sm" id="record-receipt">${round.received_at ? 'แก้ไขข้อมูลการรับ' : 'บันทึกการรับ EQA'}</button>` : ''}${canManage() ? `<button class="btn btn-outline btn-sm" id="edit-current-round">แก้ไขข้อมูลรอบ</button>` : ''}${canImportHistoricalEqa() && !['closed','cancelled'].includes(round.status) ? `<button class="btn btn-secondary btn-sm" id="convert-historical-round">ใช้รอบนี้เป็นข้อมูลย้อนหลัง</button>` : ''}</div></div>
         <div class="table-wrap"><table><tbody>
           <tr><th>ผู้ให้บริการ</th><td>${esc(round.provider)}</td></tr><tr><th>ชื่อโปรแกรม</th><td>${esc(round.program_name)}</td></tr>
           <tr><th>รหัสโปรแกรม</th><td>${esc(round.program_code || '-')}</td></tr><tr><th>รอบ</th><td>${esc(round.round_code)}</td></tr>
           <tr><th>เลขชุดตัวอย่าง</th><td>${esc(round.kit_number || '-')}</td></tr><tr><th>วันครบกำหนด</th><td>${fmtDate(round.due_date)}</td></tr>
           <tr><th>วันและเวลาที่รับ</th><td>${fmtDate(round.received_at, true)}</td></tr><tr><th>อุณหภูมิตอนรับ</th><td>${round.received_temperature ?? '-'} °C</td></tr>
-          <tr><th>เจ้าหน้าที่ผู้รับ</th><td>${esc(receiver?.full_name || '-')}</td></tr><tr><th>เลขเอกสาร</th><td>${esc(round.document_number || '-')} ฉบับแก้ไขที่ ${esc(round.document_revision || '1')}</td></tr>
+          <tr><th>เจ้าหน้าที่ผู้รับ</th><td>${esc(receiver)}</td></tr><tr><th>เลขเอกสาร</th><td>${esc(round.document_number || '-')} ฉบับแก้ไขที่ ${esc(round.document_revision || '1')}</td></tr>
         </tbody></table></div>
       </div>
       <div class="card"><h2>ขั้นตอนของรอบนี้</h2>
@@ -861,16 +1036,21 @@
   }
 
   async function roundAssignments(round) {
-    const [{ data: assignments, error }, directory] = await Promise.all([
+    const [{ data: assignments, error }, directory, resultCount] = await Promise.all([
       state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true),
-      loadDirectory()
+      loadDirectory(),
+      isHistoricalRound(round)
+        ? state.supabase.from('ec_individual_results').select('id', { count: 'exact', head: true }).eq('round_id', round.id)
+        : Promise.resolve({ count: 0 })
     ]);
     if (error) throw error;
-    const name = (id) => directory.find((p) => p.id === id)?.full_name || id;
+    const name = (id) => directory.find((person) => person.id === id)?.full_name || id;
+    const canChange = canManage() && (!isHistoricalRound(round) || !resultCount.count);
     return `<div class="card">
-      <div class="card-header"><div><h2>ผู้รับผิดชอบ</h2><div class="small muted">ผู้ปฏิบัติจริง 2 คนต้องเป็นเจ้าหน้าที่ ผู้ทบทวนต้องมีบทบาทผู้ทบทวน และแพทย์ไม่ต้องมีบทบาทเจ้าหน้าที่</div></div>${canManage() ? `<button class="btn btn-primary" id="manage-assignments">กำหนดผู้รับผิดชอบ</button>` : ''}</div>
+      <div class="card-header"><div><h2>ผู้รับผิดชอบ</h2><div class="small muted">ผู้ปฏิบัติจริง 2 คนต้องเป็นเจ้าหน้าที่ ผู้ทบทวนต้องมีบทบาทผู้ทบทวน และแพทย์ไม่ต้องมีบทบาทเจ้าหน้าที่</div></div>${canChange ? `<button class="btn btn-primary" id="manage-assignments">กำหนดผู้รับผิดชอบ</button>` : ''}</div>
+      ${isHistoricalRound(round) && resultCount.count ? `<div class="notice warning">มีการกรอกผลย้อนหลังแล้ว ระบบจึงล็อกชื่อผู้ปฏิบัติจริงเพื่อไม่ให้หลักฐานเปลี่ยนบุคคล หากเลือกผิดให้แก้ก่อนกรอกผลย้อนหลัง</div><div style="height:12px"></div>` : ''}
       ${(assignments || []).length ? `<div class="table-wrap"><table><thead><tr><th>บทบาท</th><th>ชื่อ</th><th>ลำดับผู้ปฏิบัติ</th><th>วันที่มอบหมาย</th></tr></thead><tbody>
-        ${(assignments || []).map((a) => `<tr><td>${esc(labelFrom(ASSIGNMENT_ROLE_LABELS, a.assignment_role))}</td><td>${esc(name(a.user_id))}</td><td>${a.practitioner_slot || '-'}</td><td>${fmtDate(a.assigned_at, true)}</td></tr>`).join('')}
+        ${(assignments || []).map((assignment) => `<tr><td>${esc(labelFrom(ASSIGNMENT_ROLE_LABELS, assignment.assignment_role))}</td><td>${esc(name(assignment.user_id))}</td><td>${assignment.practitioner_slot || '-'}</td><td>${fmtDate(assignment.assigned_at, true)}</td></tr>`).join('')}
       </tbody></table></div>` : empty('ยังไม่ได้มอบหมายผู้ปฏิบัติ ผู้ทบทวนผล หรือแพทย์')}
     </div>`;
   }
@@ -921,7 +1101,95 @@
     return { specimens, methods, reagents: String(fd.get(`${prefix}_reagents`) || '').trim(), instrument: String(fd.get(`${prefix}_instrument`) || '').trim(), overall_note: String(fd.get(`${prefix}_overall_note`) || '').trim() };
   }
 
+  function historicalConfirmationBadge(confirmation) {
+    if (!confirmation) return '<span class="badge warning">รอยืนยัน</span>';
+    const cls = confirmation.decision === 'confirmed' ? 'success' : 'danger';
+    return `<span class="badge ${cls}">${esc(labelFrom(HISTORICAL_CONFIRM_LABELS, confirmation.decision))}</span>`;
+  }
+
+  async function roundHistoricalIndividual(round) {
+    const [{ data: rows, error }, { data: assignments }, { data: confirmations }, { data: consensus }, directory] = await Promise.all([
+      state.supabase.from('ec_individual_results').select('*').eq('round_id', round.id).order('updated_at'),
+      state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('assignment_role', 'practitioner').eq('active', true).order('practitioner_slot'),
+      state.supabase.from('ec_historical_result_confirmations').select('*').eq('round_id', round.id),
+      state.supabase.from('ec_consensus_results').select('id,status').eq('round_id', round.id).maybeSingle(),
+      loadDirectory()
+    ]);
+    if (error) throw error;
+    const name = (id) => directory.find((person) => person.id === id)?.full_name || id;
+    const cards = (assignments || []).map((assignment) => {
+      const row = (rows || []).find((item) => item.user_id === assignment.user_id);
+      const confirmation = row ? (confirmations || []).find((item) => item.individual_result_id === row.id && item.user_id === assignment.user_id) : null;
+      const enteredBy = row?.entered_by ? name(row.entered_by) : '-';
+      const isOwn = assignment.user_id === state.user.id;
+      const mayConfirm = isOwn && hasRole('staff') && row && consensus && round.historical_review_status === 'awaiting_practitioner_confirmation';
+      return `<div class="card" style="box-shadow:none;border:1px solid var(--line)">
+        <div class="card-header"><div><h3>ผู้ปฏิบัติจริง คนที่ ${assignment.practitioner_slot}: ${esc(name(assignment.user_id))}</h3><div class="small muted">ข้อมูลนี้ต้องอ้างอิงหลักฐานเดิม ไม่ใช่การให้ผู้ปฏิบัติทำผลใหม่</div></div>${historicalConfirmationBadge(confirmation)}</div>
+        ${row ? `<div class="grid cols-2">
+          <div><strong>วิธีบันทึก</strong><p><span class="badge info">กรอกแทนผู้ปฏิบัติ</span></p></div>
+          <div><strong>ผู้กรอกข้อมูลแทน</strong><p>${esc(enteredBy)}<br><span class="small muted">${fmtDate(row.entered_at, true)}</span></p></div>
+          <div><strong>วันที่ปฏิบัติจริง</strong><p>${fmtDate(row.performed_at || row.submitted_at, true)}</p></div>
+          <div><strong>หลักฐานผลรายบุคคล</strong><p>${row.no_individual_evidence ? '<span class="badge warning">ไม่มีหลักฐานผลรายบุคคลแยก</span>' : '<span class="badge success">มีหลักฐานเดิมสำหรับกรอกผล</span>'}</p></div>
+        </div>
+        <p><strong>ที่มาของข้อมูล:</strong> ${esc(row.evidence_note || '-')}</p>
+        ${row.no_individual_evidence ? `<div class="notice warning">ไม่ได้สร้างคำตอบย้อนหลังแทนบุคลากร ระบบเก็บเฉพาะว่าบุคคลนี้เป็นผู้ร่วมปฏิบัติจริง</div>` : `<button class="btn btn-outline btn-sm" data-view-individual="${row.id}">ดูผลที่กรอกแทน</button>`}
+        ` : `<div class="notice warning">ยังไม่ได้กรอกข้อมูลย้อนหลังแทนผู้ปฏิบัติคนนี้</div>`}
+        <div class="table-actions" style="margin-top:12px">
+          ${canImportHistoricalEqa() ? `<button class="btn btn-primary btn-sm" data-enter-historical-individual="${assignment.user_id}">${row ? 'แก้ไขข้อมูลที่กรอกแทน' : 'กรอกผลย้อนหลังแทนผู้ปฏิบัติ'}</button>` : ''}
+          ${mayConfirm ? `<button class="btn btn-success btn-sm" data-confirm-historical-result>ยืนยันว่าข้อมูลตรงกับหลักฐานเดิม</button><button class="btn btn-warning btn-sm" data-dispute-historical-result>แจ้งว่าข้อมูลไม่ตรง</button>` : ''}
+        </div>
+        ${confirmation?.note ? `<div class="notice ${confirmation.decision === 'confirmed' ? 'success' : 'warning'}" style="margin-top:12px">หมายเหตุจากผู้ปฏิบัติ: ${esc(confirmation.note)}</div>` : ''}
+      </div>`;
+    }).join('');
+    return `<div class="card">
+      <div class="card-header"><div><h2>ผลย้อนหลังของผู้ปฏิบัติจริง</h2><div class="small muted">ผู้ดูแลระบบหรือผู้จัดการคุณภาพกรอกจากหลักฐานเดิมแทนผู้ปฏิบัติ จากนั้นเจ้าตัวตรวจสอบและยืนยัน</div></div><span class="badge info">ข้อมูลย้อนหลัง</span></div>
+      <div class="notice"><strong>ห้ามให้ผู้ปฏิบัติทำผล EQA ใหม่เพื่อแทนข้อมูลในอดีต</strong> หากไม่มีผลแยกรายบุคคล ให้เลือก “ไม่มีหลักฐานผลรายบุคคล” และเก็บเฉพาะผลกลางที่ห้องส่งจริง</div>
+      <div style="height:14px"></div><div class="grid cols-2">${cards || empty('ยังไม่ได้กำหนดผู้ปฏิบัติจริง')}</div>
+      ${(rows || []).length === 2 ? `<div class="modal-footer"><button class="btn btn-primary" data-go-historical-step="consensus">ขั้นต่อไป: กรอกผลกลางที่ห้องส่งจริง</button></div>` : ''}
+    </div>`;
+  }
+
+  async function openHistoricalIndividualEntry(round, userId) {
+    if (!canImportHistoricalEqa()) return toast('เฉพาะผู้ดูแลระบบหรือผู้จัดการคุณภาพเท่านั้น', 'warning');
+    const [{ data: existing }, directory] = await Promise.all([
+      state.supabase.from('ec_individual_results').select('*').eq('round_id', round.id).eq('user_id', userId).maybeSingle(),
+      loadDirectory()
+    ]);
+    const person = directory.find((item) => item.id === userId);
+    const noEvidence = Boolean(existing?.no_individual_evidence);
+    showModal(`กรอกผลย้อนหลังแทน — ${person?.full_name || ''}`, `
+      <form id="historical-individual-form" class="form-grid">
+        <div class="notice"><strong>ผู้ปฏิบัติจริง:</strong> ${esc(person?.full_name || userId)}<br><strong>ผู้กรอกแทน:</strong> ${esc(state.profile.full_name)}<br><span class="small">ระบบเก็บชื่อผู้กรอกแทนและเวลาปัจจุบันอัตโนมัติ</span></div>
+        <div class="field"><label>วันที่และเวลาที่ปฏิบัติจริง</label><input class="input" type="datetime-local" name="performed_at" required value="${fmtDateTimeInput(existing?.performed_at || round.actual_submitted_at || round.received_at)}"></div>
+        <label style="display:flex;gap:9px;align-items:flex-start"><input type="checkbox" id="no-individual-evidence" name="no_evidence" ${noEvidence ? 'checked' : ''}><span><strong>ไม่มีหลักฐานผลรายบุคคลแยก</strong><br><span class="small muted">เลือกข้อนี้เมื่อมีเพียงผลกลางที่ห้องส่ง ห้ามคาดเดาหรือสร้างผลรายบุคคลย้อนหลัง</span></span></label>
+        <div class="field"><label>แหล่งข้อมูล/หลักฐาน</label><textarea class="textarea" name="evidence_note" required placeholder="เช่น แบบบันทึกผลเดิม ลงชื่อผู้ปฏิบัติ 2 คน หน้า...">${esc(existing?.evidence_note || '')}</textarea></div>
+        <div id="historical-individual-result-fields">${resultForm(existing?.result_payload, 'historicalIndividual', noEvidence)}</div>
+      </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-historical-individual">บันทึกข้อมูลที่กรอกแทน</button>`, true);
+    const checkbox = document.getElementById('no-individual-evidence');
+    const toggle = () => document.querySelectorAll('#historical-individual-result-fields input, #historical-individual-result-fields textarea, #historical-individual-result-fields select').forEach((field) => { field.disabled = checkbox.checked; });
+    checkbox.addEventListener('change', toggle); toggle();
+    document.getElementById('save-historical-individual').addEventListener('click', async () => {
+      const form = document.getElementById('historical-individual-form');
+      if (!form.reportValidity()) return;
+      const fd = new FormData(form);
+      const payload = checkbox.checked ? defaultResultPayload() : collectResultPayload(form, 'historicalIndividual');
+      setBusy(true);
+      const { error } = await state.supabase.rpc('ec_record_historical_individual_result', {
+        p_round_id: round.id,
+        p_user_id: userId,
+        p_result_payload: payload,
+        p_performed_at: new Date(String(fd.get('performed_at'))).toISOString(),
+        p_evidence_note: String(fd.get('evidence_note') || '').trim(),
+        p_no_individual_evidence: checkbox.checked
+      });
+      setBusy(false);
+      if (error) return toast(friendlyError(error), 'danger');
+      closeModal(); toast('บันทึกข้อมูลย้อนหลังแทนผู้ปฏิบัติแล้ว', 'success'); route();
+    });
+  }
+
   async function roundIndividual(round) {
+    if (isHistoricalRound(round)) return roundHistoricalIndividual(round);
     const { data: rows, error } = await state.supabase.from('ec_individual_results').select('*, ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('round_id', round.id).order('updated_at');
     if (error) throw error;
     const own = (rows || []).find((r) => r.user_id === state.user.id);
@@ -957,7 +1225,74 @@
     </tbody></table></div>`;
   }
 
+  async function roundHistoricalConsensus(round) {
+    const [{ data: consensus }, { data: rows }, { data: assignments }, { data: confirmations }, directory] = await Promise.all([
+      state.supabase.from('ec_consensus_results').select('*').eq('round_id', round.id).maybeSingle(),
+      state.supabase.from('ec_individual_results').select('*').eq('round_id', round.id).order('submitted_at'),
+      state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('assignment_role', 'practitioner').eq('active', true).order('practitioner_slot'),
+      state.supabase.from('ec_historical_result_confirmations').select('*').eq('round_id', round.id),
+      loadDirectory()
+    ]);
+    const name = (id) => directory.find((person) => person.id === id)?.full_name || id;
+    const complete = (assignments || []).length === 2 && (assignments || []).every((assignment) => (rows || []).some((row) => row.user_id === assignment.user_id));
+    const canEdit = canImportHistoricalEqa() && round.historical_review_status !== 'qm_certified';
+    const comparisonRows = (assignments || []).map((assignment) => {
+      const row = (rows || []).find((item) => item.user_id === assignment.user_id);
+      return row ? { ...row, ec_profiles: { full_name: name(assignment.user_id) } } : null;
+    }).filter(Boolean);
+    const confirmationRows = (assignments || []).map((assignment) => {
+      const row = (rows || []).find((item) => item.user_id === assignment.user_id);
+      const confirmation = row ? (confirmations || []).find((item) => item.individual_result_id === row.id && item.user_id === assignment.user_id) : null;
+      return `<tr><td>${esc(name(assignment.user_id))}</td><td>${historicalConfirmationBadge(confirmation)}</td><td>${confirmation ? fmtDate(confirmation.confirmed_at, true) : '-'}</td><td>${esc(confirmation?.note || '-')}</td></tr>`;
+    }).join('');
+    return `<div class="card">
+      <div class="card-header"><div><h2>ผลกลางที่ห้องส่งจริง</h2><div class="small muted">กรอกจากแบบส่งผลหรือหลักฐานที่ห้องปฏิบัติการส่งจริง ไม่สร้างผลใหม่ย้อนหลัง</div></div>${consensus ? `<span class="badge info">กรอกแทนจากหลักฐานเดิม</span>` : ''}</div>
+      ${!complete ? `<div class="notice warning">กรุณากรอกข้อมูลย้อนหลังของผู้ปฏิบัติทั้ง 2 คนในหัวข้อ 4 ก่อน แม้ไม่มีผลรายบุคคลแยกก็ต้องระบุไว้ตามจริง</div>` : ''}
+      ${complete && comparisonRows.length === 2 ? `<h3>ข้อมูลของผู้ปฏิบัติที่นำเข้า</h3>${resultComparison(comparisonRows, consensus)}<div style="height:18px"></div>` : ''}
+      ${complete ? `<form id="historical-consensus-form">
+        ${resultForm(consensus?.result_payload, 'historicalConsensus', !canEdit)}
+        <div class="field"><label>แหล่งข้อมูลของผลกลาง</label><textarea class="textarea" name="source_note" ${canEdit ? '' : 'disabled'} required placeholder="เช่น สำเนาแบบส่งผล CAP ลงวันที่...">${esc(consensus?.source_note || '')}</textarea></div>
+      </form>
+      <div class="modal-footer">${canEdit ? `<button class="btn btn-primary" id="save-historical-consensus">บันทึกผลกลางที่ส่งจริง</button>` : ''}</div>` : ''}
+      ${consensus ? `<div class="notice"><strong>ผู้กรอกผลกลางแทน:</strong> ${esc(name(consensus.entered_by || consensus.prepared_by))} · ${fmtDate(consensus.entered_at || consensus.updated_at, true)}<br><span class="small">หลังแก้ผลกลาง ระบบจะล้างการยืนยันเดิมและให้ผู้ปฏิบัติทั้งสองคนตรวจยืนยันใหม่</span></div>
+      <div style="height:14px"></div><h3>การยืนยันของผู้ปฏิบัติจริง</h3><div class="table-wrap"><table><thead><tr><th>ชื่อ</th><th>ผลการยืนยัน</th><th>วันเวลา</th><th>หมายเหตุ</th></tr></thead><tbody>${confirmationRows}</tbody></table></div>` : ''}
+      ${round.historical_review_status === 'awaiting_reviewer' ? `<div class="modal-footer"><button class="btn btn-primary" data-go-historical-step="approval">ผู้ปฏิบัติยืนยันครบแล้ว ไปขั้นผู้ทบทวน</button></div>` : ''}
+    </div>`;
+  }
+
+  async function roundHistoricalApproval(round) {
+    const [{ data: approvals }, { data: assignments }, directory] = await Promise.all([
+      state.supabase.from('ec_approvals').select('*').eq('round_id', round.id).in('stage', ['historical_practitioner_confirm','historical_reviewer_review','historical_qm_certification']).order('signed_at'),
+      state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true),
+      loadDirectory()
+    ]);
+    const name = (id) => directory.find((person) => person.id === id)?.full_name || id;
+    const reviewer = (assignments || []).find((assignment) => assignment.assignment_role === 'reviewer');
+    const isAssignedReviewer = reviewer?.user_id === state.user.id;
+    const reviewerCanAct = hasRole('reviewer') && isAssignedReviewer && round.historical_review_status === 'awaiting_reviewer';
+    const qmCanAct = hasRole('qm') && round.historical_review_status === 'awaiting_qm_certification';
+    const stages = [
+      ['historical_practitioner_confirm','ผู้ปฏิบัติจริงตรวจและยืนยันข้อมูลของตน'],
+      ['historical_reviewer_review','ผู้ทบทวนตรวจข้อมูลและหลักฐานย้อนหลัง'],
+      ['historical_qm_certification','ผู้จัดการคุณภาพรับรองและเปิดการประเมิน']
+    ];
+    return `<div class="grid cols-2">
+      <div class="card"><h2>ลำดับการตรวจข้อมูลย้อนหลัง</h2><div class="timeline">${stages.map(([stage,label]) => {
+        const found = (approvals || []).filter((item) => item.stage === stage);
+        return `<div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><strong>${esc(label)}</strong><br>${found.length ? found.map((item) => `${esc(name(item.approver_id))} — ${esc(labelFrom(DECISION_LABELS, item.decision))} (${fmtDate(item.signed_at, true)})${item.note ? `<br><span class="small muted">${esc(item.note)}</span>` : ''}`).join('<br>') : '<span class="muted">ยังไม่มีการรับรอง</span>'}</div></div>`;
+      }).join('')}</div></div>
+      <div class="card"><h2>ดำเนินการตามลำดับ</h2>
+        <div class="notice">สถานะปัจจุบัน: <strong>${esc(labelFrom(HISTORICAL_REVIEW_LABELS, round.historical_review_status))}</strong></div>
+        ${reviewerCanAct ? `<div class="form-grid"><div class="field"><label>ข้อคิดเห็นของผู้ทบทวน</label><textarea class="textarea" id="historical-reviewer-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="historical-reviewer-approve">ตรวจผ่านและส่งให้ผู้จัดการคุณภาพ</button><button class="btn btn-warning" id="historical-reviewer-return">ส่งกลับให้แก้ข้อมูลย้อนหลัง</button></div></div>` : ''}
+        ${qmCanAct ? `<div class="form-grid"><div class="notice success">ผู้ทบทวนตรวจผ่านแล้ว ผู้จัดการคุณภาพสามารถรับรองและเปิดการประเมินความสามารถได้</div><div class="field"><label>หมายเหตุผู้จัดการคุณภาพ</label><textarea class="textarea" id="historical-qm-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="historical-qm-approve">รับรองข้อมูลและเปิดการประเมิน</button><button class="btn btn-warning" id="historical-qm-return">ส่งกลับแก้ไข</button></div></div>` : ''}
+        ${round.historical_review_status === 'qm_certified' ? `<div class="notice success"><strong>รับรองข้อมูลย้อนหลังแล้ว</strong><br>สามารถไปหัวข้อ 10 เพื่อสร้างรายการประเมิน ผู้ปฏิบัติจริง 2 คนจะได้แบบประเมินการปฏิบัติงาน ส่วนเจ้าหน้าที่คนอื่นจะได้แบบทดสอบ</div><div class="modal-footer"><button class="btn btn-primary" data-go-historical-step="competency">ไปเปิดการประเมินความสามารถ</button></div>` : ''}
+        ${hasRole('reviewer') && reviewer && !isAssignedReviewer ? `<div class="notice warning">รอบนี้มอบหมายผู้ทบทวนเป็น ${esc(name(reviewer.user_id))} คุณเปิดดูได้แต่กดตรวจผ่านไม่ได้</div>` : ''}
+      </div>
+    </div>`;
+  }
+
   async function roundConsensus(round) {
+    if (isHistoricalRound(round)) return roundHistoricalConsensus(round);
     const [{ data: consensus }, { data: approvals }, { data: individualRows }, { data: assignmentRows }] = await Promise.all([
       state.supabase.from('ec_consensus_results').select('*').eq('round_id', round.id).maybeSingle(),
       state.supabase.from('ec_approvals').select('*').eq('round_id', round.id).eq('stage', 'practitioner_confirm'),
@@ -983,6 +1318,7 @@
   }
 
     async function roundApproval(round) {
+    if (isHistoricalRound(round)) return roundHistoricalApproval(round);
     const [{ data: approvals }, { data: consensus }, { data: assignments }] = await Promise.all([
       state.supabase.from('ec_approvals').select('*, ec_profiles!ec_approvals_approver_id_fkey(full_name)').eq('round_id', round.id).order('signed_at'),
       state.supabase.from('ec_consensus_results').select('*').eq('round_id', round.id).maybeSingle(),
@@ -1012,11 +1348,26 @@
     </div>`;
   }
 
-    async function roundSubmission(round) {
-    const { data: rows, error } = await state.supabase.from('ec_submission_evidence').select('*, ec_round_documents(*)').eq('round_id', round.id).order('submitted_at', { ascending: false });
+  async function roundSubmission(round) {
+    const [{ data: rows, error }, directory] = await Promise.all([
+      state.supabase.from('ec_submission_evidence').select('*, ec_round_documents(*)').eq('round_id', round.id).order('submitted_at', { ascending: false }),
+      loadDirectory()
+    ]);
     if (error) throw error;
+    const name = (id) => directory.find((person) => person.id === id)?.full_name || '-';
+    if (isHistoricalRound(round)) {
+      return `<div class="card"><div class="card-header"><div><h2>หลักฐานการส่งผลย้อนหลัง</h2><div class="small muted">แสดงข้อมูลการส่งจริงในอดีต แยกจากผู้ที่นำข้อมูลเข้าระบบภายหลัง</div></div></div>
+        <div class="grid cols-3">
+          <div><strong>วันที่และเวลาที่ส่งจริง</strong><p>${fmtDate(round.actual_submitted_at, true)}</p></div>
+          <div><strong>เจ้าหน้าที่ผู้ส่งผลจริง</strong><p>${esc(name(round.actual_submitted_by))}</p></div>
+          <div><strong>เลขอ้างอิง</strong><p>${esc(round.actual_provider_reference || '-')}</p></div>
+        </div>
+        <div class="notice">ให้อัปโหลดภาพหน้าจอหรือ PDF หลักฐานการส่งในหัวข้อ 2 “เอกสาร/ภาพ” โดยเลือกประเภท “หลักฐานการส่งผล”</div>
+        ${(rows || []).length ? `<div style="height:14px"></div><div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>เลขอ้างอิง</th><th>หมายเหตุ</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${fmtDate(row.submitted_at, true)}</td><td>${esc(row.provider_reference || '-')}</td><td>${esc(row.note || '-')}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      </div>`;
+    }
     return `<div class="card"><div class="card-header"><div><h2>หลักฐานการส่งผล</h2><div class="small muted">บันทึกวันเวลา ผู้ส่ง เลขอ้างอิง และแนบหลักฐาน</div></div>${canManage() ? `<button class="btn btn-primary" id="add-submission">＋ บันทึกการส่ง</button>` : ''}</div>
-      ${(rows || []).length ? `<div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>เลขอ้างอิง</th><th>หมายเหตุ</th></tr></thead><tbody>${rows.map((r) => `<tr><td>${fmtDate(r.submitted_at,true)}</td><td>${esc(r.provider_reference || '-')}</td><td>${esc(r.note || '-')}</td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่มีหลักฐานการส่งผล')}
+      ${(rows || []).length ? `<div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>เลขอ้างอิง</th><th>หมายเหตุ</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${fmtDate(row.submitted_at,true)}</td><td>${esc(row.provider_reference || '-')}</td><td>${esc(row.note || '-')}</td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่มีหลักฐานการส่งผล')}
     </div>`;
   }
 
@@ -1047,6 +1398,7 @@
       loadDirectory()
     ]);
     const name = (id) => directory.find((p) => p.id === id)?.full_name || id;
+    const canCreateCompetency = canManage() && (!isHistoricalRound(round) || round.historical_review_status === 'qm_certified');
     const actionFor = (assignment) => {
       if (hasRole('reviewer')) {
         const canReviewQuiz = assignment.assignment_type === 'quiz' && assignment.status === 'submitted';
@@ -1062,26 +1414,99 @@
       <div class="card"><div class="card-header"><div><h2>ข้อสอบ</h2><div class="small muted">เผยแพร่คำถามหลังห้องส่งผลให้ผู้ให้บริการ และก่อนเปิดเฉลย</div></div>${canManage() ? `<button class="btn btn-primary" id="add-question">＋ เพิ่มคำถาม</button>` : ''}</div>
         ${(questions || []).length ? questions.map((q) => `<div style="padding:12px 0;border-bottom:1px solid var(--line)"><span class="badge ${q.published?'success':'warning'}">${q.published?'เผยแพร่':'ฉบับร่าง'}</span> <strong>${q.question_order}. ${esc(q.prompt)}</strong><br><span class="small muted">${esc(labelFrom(QUESTION_TYPE_LABELS, q.question_type))} · ${q.points} คะแนน ${q.is_critical?'· ข้อสำคัญ':''}</span>${canManage()?`<div style="margin-top:7px"><button class="btn btn-outline btn-sm" data-edit-question="${q.id}">แก้ไข</button></div>`:''}</div>`).join('') : empty('ยังไม่มีคำถาม')}
       </div>
-      <div class="card"><div class="card-header"><div><h2>การมอบหมายและตรวจประเมิน</h2><div class="small muted">ผู้ปฏิบัติจริงประเมินจากการทำงาน เจ้าหน้าที่คนอื่นทำแบบทดสอบ ผู้ทบทวนตรวจด่านแรก แล้วผู้จัดการคุณภาพรับรอง</div></div>${canManage()?`<button class="btn btn-primary" id="assign-all-competency">สร้างรายการประเมิน</button>`:''}</div>
+      <div class="card"><div class="card-header"><div><h2>การมอบหมายและตรวจประเมิน</h2><div class="small muted">ผู้ปฏิบัติจริงประเมินจากการทำงาน เจ้าหน้าที่คนอื่นทำแบบทดสอบ ผู้ทบทวนตรวจด่านแรก แล้วผู้จัดการคุณภาพรับรอง</div></div>${canCreateCompetency?`<button class="btn btn-primary" id="assign-all-competency">สร้างรายการประเมิน</button>`:''}</div>
+        ${isHistoricalRound(round) && round.historical_review_status !== 'qm_certified' ? `<div class="notice warning">ต้องให้ผู้ปฏิบัติทั้งสองคนยืนยัน ผู้ทบทวนตรวจ และผู้จัดการคุณภาพรับรองข้อมูลย้อนหลังให้ครบก่อน จึงจะสร้างรายการประเมินได้</div><div style="height:12px"></div>` : ''}
         ${(assignments || []).length ? `<div class="table-wrap"><table style="min-width:760px"><thead><tr><th>ชื่อ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${assignments.map((a)=>`<tr><td>${esc(name(a.user_id))}</td><td>${esc(labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${assignmentBadge(a.status)}</td><td>${a.score ?? '-'}</td><td><div class="table-actions">${actionFor(a)}</div></td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่ได้สร้างรายการประเมิน')}
       </div>
     </div>`;
   }
 
-    function bindRoundTab(round, tab) {
+  function bindRoundTab(round, tab) {
     if (tab === 'overview') {
       document.getElementById('edit-current-round')?.addEventListener('click', () => openRoundModal(round));
       document.getElementById('record-receipt')?.addEventListener('click', () => openReceiveEqaModal(round));
+      document.getElementById('edit-historical-round')?.addEventListener('click', () => openHistoricalRoundModal(round));
+      document.getElementById('convert-historical-round')?.addEventListener('click', () => {
+        if (!confirm('ใช้เฉพาะกรณีที่รอบนี้ตรวจและส่งผลไปแล้วจริง ระบบจะเปลี่ยนเป็นข้อมูลย้อนหลังและคงเอกสารเดิมไว้ ต้องการดำเนินการต่อหรือไม่')) return;
+        openHistoricalRoundModal(round);
+      });
     }
     if (tab === 'documents') bindDocuments(round);
     if (tab === 'assignments') bindAssignments(round);
-    if (tab === 'individual') bindIndividual(round);
-    if (tab === 'consensus') bindConsensus(round);
-    if (tab === 'approval') bindApproval(round);
+    if (tab === 'individual') {
+      if (isHistoricalRound(round)) bindHistoricalIndividual(round);
+      else bindIndividual(round);
+    }
+    if (tab === 'consensus') {
+      if (isHistoricalRound(round)) bindHistoricalConsensus(round);
+      else bindConsensus(round);
+    }
+    if (tab === 'approval') {
+      if (isHistoricalRound(round)) bindHistoricalApproval(round);
+      else bindApproval(round);
+    }
     if (tab === 'submission') bindSubmission(round);
     if (tab === 'official') bindOfficial(round);
     if (tab === 'capa') bindCapa(round);
     if (tab === 'competency') { bindCompetencyAdmin(round); bindCompetencyReview(round); }
+    document.querySelectorAll('[data-go-historical-step]').forEach((button) => button.addEventListener('click', () => navigate(`round/${round.id}/${button.dataset.goHistoricalStep}`)));
+  }
+
+  function bindHistoricalIndividual(round) {
+    document.querySelectorAll('[data-enter-historical-individual]').forEach((button) => button.addEventListener('click', () => openHistoricalIndividualEntry(round, button.dataset.enterHistoricalIndividual)));
+    document.querySelectorAll('[data-view-individual]').forEach((button) => button.addEventListener('click', async () => {
+      const { data, error } = await state.supabase.from('ec_individual_results').select('*').eq('id', button.dataset.viewIndividual).single();
+      if (error) return toast(friendlyError(error), 'danger');
+      showModal('ผลย้อนหลังที่กรอกแทนผู้ปฏิบัติ', resultForm(data.result_payload, 'viewHistorical', true), '', true);
+    }));
+    document.querySelectorAll('[data-confirm-historical-result]').forEach((button) => button.addEventListener('click', async () => {
+      if (!confirm('ยืนยันว่าข้อมูลที่ผู้ดูแลระบบหรือผู้จัดการคุณภาพกรอกแทน ตรงกับหลักฐานเดิมของคุณหรือไม่')) return;
+      const note = prompt('หมายเหตุเพิ่มเติม (เว้นว่างได้)') || '';
+      const { error } = await state.supabase.rpc('ec_confirm_historical_result', { p_round_id: round.id, p_decision: 'confirmed', p_note: note || null });
+      if (error) return toast(friendlyError(error), 'danger');
+      toast('ยืนยันข้อมูลย้อนหลังแล้ว', 'success'); route();
+    }));
+    document.querySelectorAll('[data-dispute-historical-result]').forEach((button) => button.addEventListener('click', async () => {
+      const note = prompt('กรุณาระบุว่าข้อมูลส่วนใดไม่ตรงกับหลักฐานเดิม');
+      if (!note) return;
+      const { error } = await state.supabase.rpc('ec_confirm_historical_result', { p_round_id: round.id, p_decision: 'disputed', p_note: note });
+      if (error) return toast(friendlyError(error), 'danger');
+      toast('แจ้งข้อมูลไม่ตรงแล้ว ผู้กรอกข้อมูลจะต้องตรวจและแก้ไข', 'warning'); route();
+    }));
+  }
+
+  function bindHistoricalConsensus(round) {
+    document.getElementById('save-historical-consensus')?.addEventListener('click', async () => {
+      const form = document.getElementById('historical-consensus-form');
+      if (!form?.reportValidity()) return;
+      const payload = collectResultPayload(form, 'historicalConsensus');
+      const sourceNote = String(new FormData(form).get('source_note') || '').trim();
+      setBusy(true);
+      const { error } = await state.supabase.rpc('ec_record_historical_consensus', { p_round_id: round.id, p_result_payload: payload, p_source_note: sourceNote });
+      setBusy(false);
+      if (error) return toast(friendlyError(error), 'danger');
+      toast('บันทึกผลกลางที่ห้องส่งจริงแล้ว กรุณาให้ผู้ปฏิบัติทั้งสองคนตรวจและยืนยันข้อมูลของตน', 'success', 6500); route();
+    });
+  }
+
+  function bindHistoricalApproval(round) {
+    const decide = async (rpcName, decision, note) => {
+      const { error } = await state.supabase.rpc(rpcName, { p_round_id: round.id, p_decision: decision, p_note: note || null });
+      if (error) return toast(friendlyError(error), 'danger');
+      toast(decision === 'approved' ? 'บันทึกการรับรองแล้ว' : 'ส่งกลับแก้ไขแล้ว', 'success'); route();
+    };
+    document.getElementById('historical-reviewer-approve')?.addEventListener('click', () => decide('ec_reviewer_decide_historical_import', 'approved', document.getElementById('historical-reviewer-note').value));
+    document.getElementById('historical-reviewer-return')?.addEventListener('click', () => {
+      const note = document.getElementById('historical-reviewer-note').value.trim();
+      if (!note) return toast('กรุณาระบุเหตุผลที่ส่งกลับ', 'warning');
+      decide('ec_reviewer_decide_historical_import', 'returned', note);
+    });
+    document.getElementById('historical-qm-approve')?.addEventListener('click', () => decide('ec_qm_decide_historical_import', 'approved', document.getElementById('historical-qm-note').value));
+    document.getElementById('historical-qm-return')?.addEventListener('click', () => {
+      const note = document.getElementById('historical-qm-note').value.trim();
+      if (!note) return toast('กรุณาระบุเหตุผลที่ส่งกลับ', 'warning');
+      decide('ec_qm_decide_historical_import', 'returned', note);
+    });
   }
 
   function bindDocuments(round) {
@@ -1223,7 +1648,7 @@
     const openQuestion=async(row=null)=>{let choices=[];let key=null;if(row?.id){const [{data:choiceData},{data:keyData}]=await Promise.all([state.supabase.from('ec_question_choices').select('*').eq('question_id',row.id).order('choice_order'),state.supabase.from('ec_question_answer_keys').select('*').eq('question_id',row.id).maybeSingle()]);choices=choiceData||[];key=keyData||null;}const correctIndex=choices.findIndex(c=>(key?.correct_choice_ids||[]).includes(c.id));showModal(row?'แก้ไขคำถาม':'เพิ่มคำถาม',`<form id="question-form" class="form-grid cols-2"><input type="hidden" name="id" value="${esc(row?.id||'')}"><div class="field"><label>ลำดับ</label><input class="input" type="number" name="order" required value="${esc(row?.question_order||1)}"></div><div class="field"><label>หัวข้อ</label><input class="input" name="section" value="${esc(row?.section||'')}"></div><div class="field"><label>ประเภท</label><select class="select" name="type">${Object.entries(QUESTION_TYPE_LABELS).map(([value,label])=>`<option value="${value}" ${row?.question_type===value?'selected':''}>${esc(label)}</option>`).join('')}</select></div><div class="field"><label>คะแนน</label><input class="input" type="number" step="0.1" name="points" value="${esc(row?.points||1)}"></div><div class="field" style="grid-column:1/-1"><label>คำถาม</label><textarea class="textarea" name="prompt" required>${esc(row?.prompt||'')}</textarea></div><div class="field" style="grid-column:1/-1"><label>ตัวเลือก (หนึ่งบรรทัดต่อหนึ่งตัวเลือก)</label><textarea class="textarea" name="choices">${esc(choices.map(c=>c.choice_text).join('\n'))}</textarea><div class="help">ใช้เมื่อเลือกประเภท “เลือกคำตอบเดียว”</div></div><div class="field"><label>ลำดับตัวเลือกที่ถูก</label><input class="input" type="number" name="correct" min="1" value="${correctIndex>=0?correctIndex+1:''}"></div><div class="field"><label>คำอธิบายเฉลย</label><input class="input" name="explanation" value="${esc(key?.explanation||'')}"></div><label><input type="checkbox" name="critical" ${row?.is_critical?'checked':''}> ข้อสำคัญ</label><label><input type="checkbox" name="published" ${row?.published?'checked':''}> เผยแพร่คำถาม</label></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-question">บันทึก</button>`,true);document.getElementById('save-question').addEventListener('click',async()=>{const f=document.getElementById('question-form');if(!f.reportValidity())return;const fd=new FormData(f);const id=String(fd.get('id')||'');const p={round_id:round.id,question_order:Number(fd.get('order')),section:String(fd.get('section')||'')||null,question_type:String(fd.get('type')),prompt:String(fd.get('prompt')),points:Number(fd.get('points')||1),is_critical:fd.get('critical')==='on',published:fd.get('published')==='on',updated_by:state.user.id};let qres=id?await state.supabase.from('ec_questions').update(p).eq('id',id).select().single():await state.supabase.from('ec_questions').insert({...p,created_by:state.user.id}).select().single();if(qres.error)return toast(friendlyError(qres.error), 'danger');const qid=qres.data.id;await state.supabase.from('ec_question_choices').delete().eq('question_id',qid);const lines=String(fd.get('choices')||'').split('\n').map(x=>x.trim()).filter(Boolean);const correct=Number(fd.get('correct')||0);let correctIds=[];if(lines.length){const {data:inserted,error}=await state.supabase.from('ec_question_choices').insert(lines.map((text,i)=>({question_id:qid,choice_order:i+1,choice_text:text}))).select();if(error)return toast(friendlyError(error), 'danger');if(correct>0&&inserted?.[correct-1])correctIds=[inserted[correct-1].id];}const keyRes=await state.supabase.from('ec_question_answer_keys').upsert({question_id:qid,correct_choice_ids:correctIds,answer_key_json:null,explanation:String(fd.get('explanation')||'')||null,updated_by:state.user.id},{onConflict:'question_id'});if(keyRes.error)return toast(friendlyError(keyRes.error), 'danger');closeModal();toast('บันทึกคำถามแล้ว','success');route();});};
     document.getElementById('add-question')?.addEventListener('click',()=>openQuestion());
     document.querySelectorAll('[data-edit-question]').forEach(b=>b.addEventListener('click',async()=>{const {data,error}=await state.supabase.from('ec_questions').select('*').eq('id',b.dataset.editQuestion).single();if(error)return toast(friendlyError(error), 'danger');openQuestion(data);}));
-    document.getElementById('assign-all-competency')?.addEventListener('click',async()=>{if(!confirm('สร้างรายการประเมินให้เจ้าหน้าที่ห้องปฏิบัติการทั้งหมดหรือไม่ แพทย์จะไม่ถูกนำมาสร้างแบบทดสอบ'))return;let directory;try{directory=await loadDirectory();}catch(error){return toast(friendlyError(error), 'danger');}const {data:practitioners,error:practitionerError}=await state.supabase.from('ec_round_assignments').select('user_id').eq('round_id',round.id).eq('assignment_role','practitioner').eq('active',true);if(practitionerError)return toast(friendlyError(practitionerError), 'danger');const practitionerIds=new Set((practitioners||[]).map(x=>x.user_id));const eligible=directory.filter(p=>personHasRole(p,'staff')&&!personHasRole(p,'physician'));const rows=eligible.map(p=>({round_id:round.id,user_id:p.id,assignment_type:practitionerIds.has(p.id)?'practical':'quiz',assigned_by:state.user.id}));if(!rows.length)return toast('ไม่พบเจ้าหน้าที่ที่ต้องรับการประเมิน','warning');const {error}=await state.supabase.from('ec_competency_assignments').upsert(rows,{onConflict:'round_id,user_id',ignoreDuplicates:true});if(error)return toast(friendlyError(error), 'danger');toast('สร้างรายการประเมิน แล้ว','success');route();});
+    document.getElementById('assign-all-competency')?.addEventListener('click',async()=>{if(isHistoricalRound(round)&&round.historical_review_status!=='qm_certified')return toast('ต้องให้ผู้จัดการคุณภาพรับรองข้อมูลย้อนหลังให้ครบก่อน','warning');if(!confirm('สร้างรายการประเมินให้เจ้าหน้าที่ห้องปฏิบัติการทั้งหมดหรือไม่ แพทย์จะไม่ถูกนำมาสร้างแบบทดสอบ'))return;let directory;try{directory=await loadDirectory();}catch(error){return toast(friendlyError(error), 'danger');}const {data:practitioners,error:practitionerError}=await state.supabase.from('ec_round_assignments').select('user_id').eq('round_id',round.id).eq('assignment_role','practitioner').eq('active',true);if(practitionerError)return toast(friendlyError(practitionerError), 'danger');const practitionerIds=new Set((practitioners||[]).map(x=>x.user_id));const eligible=directory.filter(p=>personHasRole(p,'staff')&&!personHasRole(p,'physician'));const rows=eligible.map(p=>({round_id:round.id,user_id:p.id,assignment_type:practitionerIds.has(p.id)?'practical':'quiz',assigned_by:state.user.id}));if(!rows.length)return toast('ไม่พบเจ้าหน้าที่ที่ต้องรับการประเมิน','warning');const {error}=await state.supabase.from('ec_competency_assignments').upsert(rows,{onConflict:'round_id,user_id',ignoreDuplicates:true});if(error)return toast(friendlyError(error), 'danger');toast('สร้างรายการประเมิน แล้ว','success');route();});
   }
 
   async function openQuizReview(assignmentId) {
@@ -1334,7 +1759,7 @@
 
   async function renderReports() {
     const {data:rounds,error}=await state.supabase.from('ec_eqa_rounds').select('*').order('survey_year',{ascending:false});if(error)return renderError(error);
-    const content=`<section class="page"><div class="page-header"><div><h1>รายงาน / ทะเบียน EQA</h1><p>กดปุ่มพิมพ์ แล้วเลือกบันทึกเป็นไฟล์ PDF</p></div><button class="btn btn-primary no-print" id="print-report">พิมพ์ / บันทึกเป็น PDF</button></div><div class="print-only"><h1>ทะเบียน EQA ประจำปี</h1><p>${esc(cfg.ORGANIZATION_NAME)}</p></div><div class="card"><div class="table-wrap"><table><thead><tr><th>ปี</th><th>ผู้ให้บริการ / รอบ</th><th>โปรแกรม</th><th>วันครบกำหนด</th><th>สถานะ</th><th>เลขเอกสาร</th></tr></thead><tbody>${(rounds||[]).map(r=>`<tr><td>${r.survey_year}</td><td>${esc(r.provider)} ${esc(r.round_code)}</td><td>${esc(r.program_name)}</td><td>${fmtDate(r.due_date)}</td><td>${STATUS_LABELS[r.status]||'ไม่ทราบสถานะ'}</td><td>${esc(r.document_number||'-')} ฉบับแก้ไขที่ ${esc(r.document_revision||'1')}</td></tr>`).join('')}</tbody></table></div><div class="small muted" style="margin-top:12px">พิมพ์จากระบบวันที่ ${fmtDate(new Date(),true)}</div></div></section>`;appEl.innerHTML=shell(content,'รายงาน');bindShell();document.getElementById('print-report').onclick=()=>window.print();
+    const content=`<section class="page"><div class="page-header"><div><h1>รายงาน / ทะเบียน EQA</h1><p>กดปุ่มพิมพ์ แล้วเลือกบันทึกเป็นไฟล์ PDF</p></div><button class="btn btn-primary no-print" id="print-report">พิมพ์ / บันทึกเป็น PDF</button></div><div class="print-only"><h1>ทะเบียน EQA ประจำปี</h1><p>${esc(cfg.ORGANIZATION_NAME)}</p></div><div class="card"><div class="table-wrap"><table><thead><tr><th>ปี</th><th>ผู้ให้บริการ / รอบ</th><th>ประเภทข้อมูล</th><th>โปรแกรม</th><th>วันครบกำหนด</th><th>สถานะ</th><th>เลขเอกสาร</th></tr></thead><tbody>${(rounds||[]).map(r=>`<tr><td>${r.survey_year}</td><td>${esc(r.provider)} ${esc(r.round_code)}</td><td>${isHistoricalRound(r)?'ข้อมูลย้อนหลัง':'รอบใหม่'}</td><td>${esc(r.program_name)}</td><td>${fmtDate(r.due_date)}</td><td>${STATUS_LABELS[r.status]||'ไม่ทราบสถานะ'}${isHistoricalRound(r)?`<br><span class="small muted">${esc(labelFrom(HISTORICAL_REVIEW_LABELS,r.historical_review_status))}</span>`:''}</td><td>${esc(r.document_number||'-')} ฉบับแก้ไขที่ ${esc(r.document_revision||'1')}</td></tr>`).join('')}</tbody></table></div><div class="small muted" style="margin-top:12px">พิมพ์จากระบบวันที่ ${fmtDate(new Date(),true)}</div></div></section>`;appEl.innerHTML=shell(content,'รายงาน');bindShell();document.getElementById('print-report').onclick=()=>window.print();
   }
 
   async function invokeAdminUserAction(body) {
