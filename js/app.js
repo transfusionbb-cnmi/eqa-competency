@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.3.0
+/* CNMI EQA and Competency Management System v2.3.1
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -83,8 +83,8 @@
     instruction: 'คู่มือหรือคำแนะนำ',
     specimen_image: 'ภาพสิ่งส่งตรวจ',
     raw_result_image: 'ภาพผลทดสอบดิบ',
-    submission_form: 'แบบฟอร์มผลที่ส่งผู้ให้บริการ',
-    submission_evidence: 'หลักฐานการส่งผล',
+    submission_form: 'หลักฐาน/แบบฟอร์มผลที่ส่งผู้ให้บริการ',
+    submission_evidence: 'หลักฐานการส่งผล (ข้อมูลเดิม — ระบบจะรวมกับแบบฟอร์มผล)',
     official_result: 'รายงานผลประเมินอย่างเป็นทางการ (Official Evaluation)',
     participant_summary: 'รายงานเปรียบเทียบผู้เข้าร่วม (Participant Summary)',
     antibody_panel: 'แผงเซลล์ Antibody Identification / Antigram',
@@ -97,11 +97,11 @@
     instruction: 'คู่มือ วิธีปฏิบัติ ข้อควรระวัง และ Master List ใช้ประกอบการสร้างฟอร์ม แต่ไม่ใช้เป็นเฉลย',
     specimen_image: 'ภาพสิ่งส่งตรวจหรือวัสดุทดสอบที่ต้องเก็บเป็นหลักฐาน',
     raw_result_image: 'ภาพผลทดสอบดิบ ใช้สร้าง Competency สำหรับเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง',
-    submission_form: 'ผลที่ห้องปฏิบัติการกรอกและส่งผู้ให้บริการ ใช้ตรวจว่าห้องส่งอะไรเท่านั้น ห้ามใช้เป็นเฉลย',
-    submission_evidence: 'ภาพหน้าจอ ใบยืนยัน หรือหลักฐานวันเวลาที่ส่งผล',
+    submission_form: 'ไฟล์เดียวกันกับหลักฐานการส่งผล: แบบฟอร์ม/PDF/ภาพหน้าจอที่แสดงผลซึ่งห้องส่งจริง ใช้ตรวจว่าห้องส่งอะไรและเชื่อมกับวันเวลาที่ส่ง ห้ามใช้เป็นเฉลย',
+    submission_evidence: 'ประเภทเดิมเพื่อรองรับข้อมูลเก่า รายการใหม่ให้เลือก “หลักฐาน/แบบฟอร์มผลที่ส่งผู้ให้บริการ” เพียงประเภทเดียว',
     official_result: 'Original Evaluation หรือรายงานที่มี Intended Response / Grade ใช้เป็นแหล่งหลักของเฉลยและคะแนน',
     participant_summary: 'Participant Summary หรือ PSR ใช้เทียบสัดส่วนคำตอบของห้องอื่น และใช้ประเมิน Educational Challenge',
-    antibody_panel: 'Antigram หรือ Panel cell profile ใช้จับคู่ปฏิกิริยากับ antigen profile สำหรับ Antibody Identification อัปโหลดได้หลาย Panel/หลาย Lot และตั้งชื่อ Panel01, Panel02 ตามลำดับ ไม่ใช่ภาพผลตัวอย่างและไม่ใช่เฉลย',
+    antibody_panel: 'Antigram หรือ Panel cell profile ใช้จับคู่ปฏิกิริยากับ antigen profile สำหรับ Antibody Identification อัปโหลดได้หลาย Panel/หลาย Lot และตั้งชื่อ PanelA, PanelB, PanelC ตามลำดับ ไม่ใช่ภาพผลตัวอย่างและไม่ใช่เฉลย',
     corrective_action: 'หลักฐานการแก้ไข ป้องกัน และติดตามประสิทธิผล',
     closure_report: 'รายงานสรุปเมื่อปิดรอบ',
     other: 'เอกสารประกอบอื่นที่ไม่เข้ากลุ่มข้างต้น',
@@ -238,20 +238,149 @@
 
   const CAP_RESULT_OPTIONS = {
     abo: [
-      ['', '— เลือกผล —'], ['A', 'A (CAP 188)'], ['B', 'B (CAP 191)'], ['AB', 'AB (CAP 192)'], ['O', 'O (CAP 195)'],
-      ['ไม่สอดคล้อง ต้องตรวจเพิ่ม', 'Cell/serum ไม่สอดคล้อง ต้องตรวจเพิ่ม (CAP 199)']
+      ['', '— เลือกผล —'], ['A', '188 │ Group A'], ['B', '191 │ Group B'], ['AB', '192 │ Group AB'], ['O', '195 │ Group O'],
+      ['ไม่สอดคล้อง ต้องตรวจเพิ่ม', '199 │ Cell/serum grouping do not agree — additional testing required']
     ],
     subgroup: [
-      ['', '— ไม่ระบุ —'], ['ไม่ได้ตรวจ subgroup', 'ไม่ได้ตรวจ subgroup (CAP 105)'], ['A1', 'A1 (CAP 189)'],
-      ['Asub', 'Asub (CAP 124)'], ['A1B', 'A1B (CAP 193)'], ['AsubB', 'AsubB (CAP 125)']
+      ['', '— ไม่ระบุ —'], ['ไม่ได้ตรวจ subgroup', '105 │ Subgroup not tested'], ['A1', '189 │ A1'],
+      ['Asub', '124 │ A subgroup'], ['A1B', '193 │ A1B'], ['AsubB', '125 │ A subgroup B']
     ],
-    rh: [['', '— เลือกผล —'], ['Rh positive', 'Rh positive (CAP 207)'], ['Rh negative', 'Rh negative (CAP 208)']],
-    screen: [['', '— เลือกผล —'], ['ไม่พบแอนติบอดี', 'ไม่พบ unexpected antibody (CAP 110)'], ['พบแอนติบอดี', 'พบ unexpected antibody (CAP 111)']],
-    crossmatch: [['', '— เลือกผล —'], ['Negative', 'Negative (CAP 29)'], ['Positive', 'Positive (CAP 30)'], ['Would refer for testing', 'Would refer for testing (CAP 20)']],
-    crossmatchType: [['', '— เลือกวิธี —'], ['Immediate spin only', 'Immediate spin only (CAP 58)'], ['Antiglobulin crossmatch with IgG AHG', 'Antiglobulin crossmatch with IgG AHG (CAP 59)'], ['Antiglobulin crossmatch with polyspecific AHG', 'Antiglobulin crossmatch with polyspecific AHG (CAP 60)']],
-    strength: [['', '— เลือกความแรง —'], ['Microscopic', 'Microscopic (CAP 24)'], ['1+', '1+ (CAP 25)'], ['2+', '2+ (CAP 26)'], ['3+', '3+ (CAP 27)'], ['4+', '4+ (CAP 28)'], ['Not applicable', 'Not applicable (CAP 80)']],
-    antigen: [['', '— เลือกผล —'], ['Negative', 'Negative (CAP 209)'], ['Positive', 'Positive (CAP 210)'], ['Reagent not available', 'Reagent not available (CAP 235)'], ['Test not indicated', 'Test not indicated (CAP 435)']]
+    rh: [['', '— เลือกผล —'], ['Rh positive', '207 │ Rh positive'], ['Rh negative', '208 │ Rh negative']],
+    screen: [['', '— เลือกผล —'], ['ไม่พบแอนติบอดี', '110 │ Unexpected antibody not detected'], ['พบแอนติบอดี', '111 │ Unexpected antibody detected']],
+    crossmatch: [['', '— เลือกผล —'], ['Negative', '29 │ Negative'], ['Positive', '30 │ Positive'], ['Would refer for testing', '20 │ Would refer for testing']],
+    crossmatchType: [['', '— เลือกวิธี —'], ['Immediate spin only', '58 │ Immediate spin only'], ['Antiglobulin crossmatch with IgG AHG', '59 │ Antiglobulin crossmatch with IgG AHG'], ['Antiglobulin crossmatch with polyspecific AHG', '60 │ Antiglobulin crossmatch with polyspecific AHG']],
+    strength: [['', '— เลือกความแรง —'], ['Microscopic', '24 │ Microscopic'], ['1+', '25 │ 1+'], ['2+', '26 │ 2+'], ['3+', '27 │ 3+'], ['4+', '28 │ 4+'], ['Not applicable', '80 │ Not applicable']],
+    antigen: [['', '— เลือกผล —'], ['Negative', '209 │ Negative'], ['Positive', '210 │ Positive'], ['Reagent not available', '235 │ Reagent not available'], ['Test not indicated', '435 │ Test not indicated']]
   };
+
+  const EQA_FILE_TEST_ALIASES = Object.freeze({
+    abo: 'ABO', rh: 'Rh', abscreen: 'AbScreen', antibody_screen: 'AbScreen', screen: 'AbScreen',
+    abid: 'AbID', antibodyid: 'AbID', antibodyidentification: 'AbID',
+    crossmatch: 'Crossmatch', xmatch: 'Crossmatch', compatibility: 'Crossmatch',
+    agtyping: 'AgTyping', antigentyping: 'AgTyping', phenotype: 'AgTyping',
+    eluateabid: 'EluateAbID', eluateid: 'EluateAbID', dat: 'DAT',
+    cbc: 'CBC', wbccount: 'WBCCount', antibodytiter: 'AntibodyTiter', titer: 'AntibodyTiter',
+    multitest: 'MultiTest'
+  });
+
+  const EQA_FILE_ROLE_ALIASES = Object.freeze({
+    rawresult: 'RawResult', antigram: 'Antigram', blankresultform: 'BlankResultForm',
+    submittedresultform: 'SubmittedResultForm', officialevaluation: 'OfficialEvaluation',
+    participantsummary: 'ParticipantSummary', kitinstruction: 'KitInstruction'
+  });
+
+  function canonicalFilenameToken(value) {
+    return String(value || '').trim().replace(/[^a-z0-9]+/gi, '').toLowerCase();
+  }
+
+  function parseEqaFilename(fileName) {
+    const original = String(fileName || '').trim();
+    const extensionMatch = original.match(/\.([a-z0-9]+)$/i);
+    const extension = extensionMatch ? extensionMatch[1].toLowerCase() : '';
+    const stem = extensionMatch ? original.slice(0, -extensionMatch[0].length) : original;
+    const parts = stem.split('_').map((part) => part.trim()).filter(Boolean);
+    const parsed = {
+      valid: false,
+      original,
+      extension,
+      provider_round: parts[0] || '',
+      specimen: '',
+      test_type: '',
+      role: '',
+      panel_id: '',
+      cell_start: null,
+      cell_end: null,
+      lot: '',
+      donor: '',
+      antigens: [],
+      phase: '',
+      extra_cell: '',
+      qualifiers: [],
+      warnings: [],
+      bundle_key: '',
+      panel_key: ''
+    };
+    if (parts.length < 2) {
+      parsed.warnings.push('ชื่อไฟล์ต้องคั่นส่วนหลักด้วยเครื่องหมาย _');
+      return parsed;
+    }
+
+    const roleIndex = parts.findLastIndex((part, index) => index > 0 && Boolean(EQA_FILE_ROLE_ALIASES[canonicalFilenameToken(part)]));
+    parsed.role = roleIndex >= 0 ? EQA_FILE_ROLE_ALIASES[canonicalFilenameToken(parts[roleIndex])] : '';
+    if (!parsed.role) parsed.warnings.push('ไม่พบบทบาทไฟล์มาตรฐาน เช่น RawResult หรือ Antigram');
+
+    // เอกสารทั้งฉบับ: Provider-Round_Program_DocumentRole.ext
+    // รองรับชื่อเดิมที่วาง DocumentRole ก่อน qualifier เช่น KitInstruction_J-JE1
+    if (['BlankResultForm','SubmittedResultForm','OfficialEvaluation','ParticipantSummary','KitInstruction'].includes(parsed.role)) {
+      const documentParts = parts.slice(1).filter((_, index) => index + 1 !== roleIndex);
+      parsed.specimen = documentParts[0] || 'ALL';
+      parsed.qualifiers = documentParts.slice(1);
+      parsed.valid = Boolean(parsed.provider_round && parsed.role && extension);
+      parsed.bundle_key = [parsed.provider_round, parsed.specimen, parsed.role].join('|').toUpperCase();
+      if (roleIndex !== parts.length - 1) parsed.warnings.push('ชื่อมาตรฐานใหม่ควรวางบทบาทเอกสารไว้ท้ายชื่อก่อนนามสกุล');
+      return parsed;
+    }
+
+    parsed.specimen = String(parts[1] || '').toUpperCase().replace(/_/g, '-');
+    const rawTest = parts[2] || '';
+    parsed.test_type = EQA_FILE_TEST_ALIASES[canonicalFilenameToken(rawTest)] || rawTest;
+    parsed.qualifiers = parts.slice(3).filter((_, index) => index + 3 !== roleIndex);
+
+    for (const qualifier of parsed.qualifiers) {
+      let match = qualifier.match(/^Panel([A-Za-z]|\d{1,2})$/i);
+      if (match) { parsed.panel_id = String(match[1]).toUpperCase().padStart(/^\d+$/.test(match[1]) ? 2 : 1, '0'); continue; }
+      match = qualifier.match(/^Cell(\d{1,2})[-–](\d{1,2})$/i);
+      if (match) { parsed.cell_start = Number(match[1]); parsed.cell_end = Number(match[2]); continue; }
+      match = qualifier.match(/^Lot(.+)$/i);
+      if (match) { parsed.lot = match[1]; continue; }
+      match = qualifier.match(/^Donor(.+)$/i);
+      if (match) { parsed.donor = match[1].toUpperCase(); continue; }
+      match = qualifier.match(/^ExtraCell(\d{1,2})$/i);
+      if (match) { parsed.extra_cell = String(Number(match[1])).padStart(2, '0'); continue; }
+      match = qualifier.match(/^(RT|IAT|IS|AHG|ENZYME)$/i);
+      if (match) { parsed.phase = match[1].toUpperCase(); continue; }
+    }
+
+    if (parsed.test_type === 'AgTyping') {
+      const antigenToken = parsed.qualifiers.find((item) => !/^Panel|^Cell|^Lot|^Donor|^ExtraCell|^(RT|IAT|IS|AHG|ENZYME)$/i.test(item));
+      if (antigenToken && !/^SelectedAntigen$/i.test(antigenToken)) {
+        parsed.antigens = antigenToken.split('-').map((item) => item.trim()).filter(Boolean);
+      }
+    }
+    if (parsed.test_type === 'Crossmatch' && !parsed.donor) {
+      const donorLike = parsed.qualifiers.find((item) => /^(?:JE|J)-?\d{1,2}R$/i.test(item));
+      if (donorLike) parsed.donor = donorLike.toUpperCase();
+    }
+
+    if (parsed.test_type === 'AbID') {
+      if (!parsed.panel_id && !parsed.extra_cell) parsed.warnings.push('AbID ควรระบุ PanelA/PanelB หรือ ExtraCell01');
+      if (parsed.role === 'RawResult' && !parsed.extra_cell && (parsed.cell_start === null || parsed.cell_end === null)) parsed.warnings.push('ภาพผล AbID ควรระบุช่วง Cell เช่น Cell01-06');
+      if (parsed.role === 'Antigram' && !parsed.lot) parsed.warnings.push('Antigram ควรระบุ Lot เช่น Lot8RA453');
+    }
+    if (!Object.values(EQA_FILE_TEST_ALIASES).includes(parsed.test_type)) parsed.warnings.push(`ชนิดการทดสอบ “${parsed.test_type || '-'}” ไม่อยู่ในคำมาตรฐาน`);
+    if (!/^(?:JE|J|ELU|TRC|AABT|RBCAT)-?\d{1,3}[RS]?$/i.test(parsed.specimen)) parsed.warnings.push('รหัสตัวอย่างควรเป็นรูปแบบ J-01, JE-07, ELU-01 เป็นต้น');
+    if (!['png','jpg','jpeg','webp','pdf'].includes(extension)) parsed.warnings.push('นามสกุลที่รองรับคือ PDF, PNG, JPG, JPEG หรือ WebP');
+
+    parsed.bundle_key = [parsed.provider_round, parsed.specimen, parsed.test_type, parsed.donor].filter(Boolean).join('|').toUpperCase();
+    parsed.panel_key = parsed.panel_id ? [parsed.bundle_key, `PANEL${parsed.panel_id}`].join('|') : '';
+    parsed.valid = Boolean(parsed.provider_round && parsed.specimen && parsed.test_type && parsed.role && extension && !parsed.warnings.some((item) => item.includes('ไม่อยู่ในคำมาตรฐาน')));
+    return parsed;
+  }
+
+  function filenameParsePreview(fileName) {
+    const parsed = parseEqaFilename(fileName);
+    const parts = [
+      parsed.specimen && `ตัวอย่าง ${parsed.specimen}`,
+      parsed.test_type && `การทดสอบ ${parsed.test_type}`,
+      parsed.panel_id && `Panel ${parsed.panel_id}`,
+      parsed.cell_start !== null && `Cell ${String(parsed.cell_start).padStart(2, '0')}–${String(parsed.cell_end).padStart(2, '0')}`,
+      parsed.lot && `Lot ${parsed.lot}`,
+      parsed.donor && `Donor ${parsed.donor}`,
+      parsed.role && `บทบาท ${parsed.role}`
+    ].filter(Boolean);
+    const warningHtml = parsed.warnings.length ? `<div class="notice warning small" style="margin-top:8px"><strong>ระบบยังอ่านชื่อไฟล์ได้ไม่ครบ</strong><br>${parsed.warnings.map(esc).join('<br>')}</div>` : '';
+    return `<div class="notice ${parsed.valid ? 'success' : 'info'} small"><strong>${parsed.valid ? 'ระบบ parse ชื่อไฟล์ได้' : 'ตรวจชื่อไฟล์'}</strong><br>${parts.length ? parts.map(esc).join(' · ') : 'ใช้ชื่อมาตรฐานเพื่อให้ระบบจับคู่ไฟล์อัตโนมัติ'}</div>${warningHtml}`;
+  }
 
   function isCapJJeRound(round = state.currentRound) {
     if (!round) return false;
@@ -1414,7 +1543,13 @@
   function generatedOptionLabel(option) {
     const label = String(option?.label || option?.value || '').trim();
     const code = String(option?.code || '').trim();
-    return code && !label.includes(code) ? `${label} (${code})` : label;
+    if (!code) return label;
+    const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const cleanLabel = label
+      .replace(new RegExp(`^\\s*${escapedCode}\\s*(?:[|│:–—-]+)\\s*`, 'i'), '')
+      .replace(new RegExp(`\\s*\\(?\\s*CAP\\s*${escapedCode}\\s*\\)?\\s*$`, 'i'), '')
+      .trim();
+    return `${code} │ ${cleanLabel || label}`;
   }
 
   function generatedFieldControl(field, value, attributes, disabled) {
@@ -1750,7 +1885,7 @@
       <div class="other-antigen-grid">
         ${otherAntigens.slice(0, slotCount).map((row, index) => `<section class="other-antigen-card">
           <div class="other-antigen-title">ตำแหน่งที่ ${index + 1}</div>
-          <div class="field"><label>ชื่อ Antigen / รหัส antisera</label><input class="input" name="${prefix}_antigen_${specimen}_other_${index}_antigen" value="${esc(row.antigen || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Anti-K (CAP 124)"></div>
+          <div class="field"><label>ชื่อ Antigen / รหัส antisera</label><input class="input" name="${prefix}_antigen_${specimen}_other_${index}_antigen" value="${esc(row.antigen || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น 124 │ Anti-K"></div>
           <div class="field"><label>ผล</label><select class="select" name="${prefix}_antigen_${specimen}_other_${index}_result" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.antigen, row.result)}</select></div>
         </section>`).join('')}
       </div>
@@ -2268,25 +2403,37 @@
   }
 
   async function roundSubmission(round) {
-    const [{ data: rows, error }, directory] = await Promise.all([
+    const [{ data: rows, error }, { data: submissionDocs, error: docError }, directory] = await Promise.all([
       state.supabase.from('ec_submission_evidence').select('*, ec_round_documents(*)').eq('round_id', round.id).order('submitted_at', { ascending: false }),
+      state.supabase.from('ec_round_documents').select('id,title,file_name,storage_path,mime_type,category,created_at').eq('round_id', round.id).in('category', ['submission_form','submission_evidence']).is('archived_at', null).order('created_at', { ascending: false }),
       loadDirectory()
     ]);
-    if (error) throw error;
+    if (error || docError) throw (error || docError);
     const name = (id) => directory.find((person) => person.id === id)?.full_name || '-';
+    const documentCell = (row) => {
+      const doc = row.ec_round_documents;
+      if (!doc) return '<span class="muted">ไม่ได้เชื่อมไฟล์</span>';
+      return `<strong>${esc(doc.title || doc.file_name)}</strong><br><span class="small muted">${esc(doc.file_name || '')}</span><div style="margin-top:6px"><button class="btn btn-outline btn-sm" data-open-submission-path="${esc(doc.storage_path)}">เปิดไฟล์</button></div>`;
+    };
+    const rowsTable = (rows || []).length ? `<div class="table-wrap"><table style="min-width:820px"><thead><tr><th>วันเวลา</th><th>ผู้ส่ง</th><th>เลขอ้างอิง</th><th>ไฟล์หลักฐาน/แบบฟอร์มผล</th><th>หมายเหตุ</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${fmtDate(row.submitted_at,true)}</td><td>${esc(name(row.submitted_by))}</td><td>${esc(row.provider_reference || '-')}</td><td>${documentCell(row)}</td><td>${esc(row.note || '-')}</td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่ได้บันทึกวันเวลาและไฟล์ที่ส่งผล');
+    const linkedIds = new Set((rows || []).map((row) => row.document_id).filter(Boolean));
+    const unlinkedDocs = (submissionDocs || []).filter((doc) => !linkedIds.has(doc.id));
+    const unlinkedNotice = unlinkedDocs.length ? `<div class="notice warning"><strong>พบไฟล์ผลที่ส่งซึ่งยังไม่เชื่อมกับวันเวลาส่ง ${unlinkedDocs.length} ไฟล์</strong><br>${unlinkedDocs.map((doc) => esc(doc.file_name)).join('<br>')}<br><span class="small">กด “บันทึกการส่ง” แล้วเลือกไฟล์เดิม ไม่ต้องอัปโหลดซ้ำ</span></div><div style="height:12px"></div>` : '';
+
     if (isHistoricalRound(round)) {
-      return `<div class="card"><div class="card-header"><div><h2>หลักฐานการส่งผลย้อนหลัง</h2><div class="small muted">แสดงข้อมูลการส่งจริงในอดีต แยกจากผู้ที่นำข้อมูลเข้าระบบภายหลัง</div></div></div>
+      return `<div class="card"><div class="card-header"><div><h2>หลักฐาน/แบบฟอร์มผลที่ส่งย้อนหลัง</h2><div class="small muted">ไฟล์เดียวใช้ทั้งยืนยันคำตอบที่ห้องส่งและเป็นหลักฐานการส่ง โดยเชื่อมกับวันเวลาและผู้ส่งจริง</div></div>${canManage() ? `<button class="btn btn-primary" id="add-submission">＋ เชื่อมไฟล์กับข้อมูลการส่ง</button>` : ''}</div>
         <div class="grid cols-3">
           <div><strong>วันที่และเวลาที่ส่งจริง</strong><p>${fmtDate(round.actual_submitted_at, true)}</p></div>
           <div><strong>เจ้าหน้าที่ผู้ส่งผลจริง</strong><p>${esc(name(round.actual_submitted_by))}</p></div>
           <div><strong>เลขอ้างอิง</strong><p>${esc(round.actual_provider_reference || '-')}</p></div>
         </div>
-        <div class="notice">ให้อัปโหลดภาพหน้าจอหรือ PDF หลักฐานการส่งในหัวข้อ 2 “เอกสาร/ภาพ” โดยเลือกประเภท “หลักฐานการส่งผล”</div>
-        ${(rows || []).length ? `<div style="height:14px"></div><div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>เลขอ้างอิง</th><th>หมายเหตุ</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${fmtDate(row.submitted_at, true)}</td><td>${esc(row.provider_reference || '-')}</td><td>${esc(row.note || '-')}</td></tr>`).join('')}</tbody></table></div>` : ''}
+        <div class="notice info">อัปโหลดไฟล์เพียงครั้งเดียวในหัวข้อ 2 โดยเลือกประเภท “หลักฐาน/แบบฟอร์มผลที่ส่งผู้ให้บริการ” แล้วกลับมาเชื่อมไฟล์ในหน้านี้</div>
+        <div style="height:12px"></div>${unlinkedNotice}${rowsTable}
       </div>`;
     }
-    return `<div class="card"><div class="card-header"><div><h2>หลักฐานการส่งผล</h2><div class="small muted">บันทึกวันเวลา ผู้ส่ง เลขอ้างอิง และแนบหลักฐาน</div></div>${canManage() ? `<button class="btn btn-primary" id="add-submission">＋ บันทึกการส่ง</button>` : ''}</div>
-      ${(rows || []).length ? `<div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>เลขอ้างอิง</th><th>หมายเหตุ</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${fmtDate(row.submitted_at,true)}</td><td>${esc(row.provider_reference || '-')}</td><td>${esc(row.note || '-')}</td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่มีหลักฐานการส่งผล')}
+    return `<div class="card"><div class="card-header"><div><h2>หลักฐาน/แบบฟอร์มผลที่ส่งผู้ให้บริการ</h2><div class="small muted">อัปโหลดไฟล์ครั้งเดียว แล้วบันทึกวันเวลา ผู้ส่ง เลขอ้างอิง และเลือกไฟล์เดียวกันเป็นหลักฐาน</div></div>${canManage() ? `<button class="btn btn-primary" id="add-submission">＋ บันทึกการส่ง</button>` : ''}</div>
+      <div class="notice info">ไฟล์นี้ใช้สรุปว่า “ห้องส่งอะไร” และเป็นหลักฐานการส่ง แต่ไม่ใช้เป็นเฉลยของ Competency</div><div style="height:12px"></div>
+      ${unlinkedNotice}${rowsTable}
     </div>`;
   }
 
@@ -2298,6 +2445,50 @@
       not_graded: ['ไม่ให้คะแนน', 'warning', '–'],
       pending: ['รอตรวจ', 'warning', '…']
     }[String(value || 'pending')] || ['รอตรวจ', 'warning', '…'];
+  }
+
+  function isEducationalOfficialRow(row) {
+    return String(row?.challenge_type || '').toLowerCase() === 'educational'
+      || ['educational','not_graded'].includes(String(row?.assessment || '').toLowerCase())
+      || /educational|see note\s*\[?26\]?|not graded/i.test(`${row?.official_grade || ''} ${row?.note || ''}`);
+  }
+
+  function educationalReviewInfo(row) {
+    if (!isEducationalOfficialRow(row)) return null;
+    const alignment = String(row?.consensus_alignment || '').toLowerCase();
+    const status = String(row?.internal_review_status || '').toLowerCase();
+    if (alignment === 'minority' || status === 'needs_explanation' || row?.review_required === true) {
+      return ['คำตอบส่วนน้อย — ต้องชี้แจง', 'danger', row?.review_reason || 'ผลที่ห้องรายงานต่างจากคำตอบของผู้เข้าร่วมส่วนใหญ่ กรุณาทบทวนความเหมาะสมและระบุเหตุผล'];
+    }
+    if (alignment === 'aligned' || status === 'acceptable') {
+      return ['สอดคล้องกับกลุ่มส่วนใหญ่', 'success', row?.review_reason || 'ผลที่ห้องรายงานตรงกับ participant consensus'];
+    }
+    return ['รอตรวจความเหมาะสม', 'warning', row?.review_reason || 'ข้อมูล consensus ยังไม่ชัดหรือยังไม่มี Participant Summary'];
+  }
+
+  function educationalReviewBadge(row) {
+    const info = educationalReviewInfo(row);
+    if (!info) return '<span class="muted">—</span>';
+    const [label, cls, detail] = info;
+    return `<span class="badge ${esc(cls)}">${esc(label)}</span>${detail ? `<div class="small muted" style="margin-top:5px">${esc(detail)}</div>` : ''}`;
+  }
+
+
+  function isEducationalCompetencyReview(item) {
+    return item?.is_educational === true
+      || String(item?.challenge_type || '').toLowerCase() === 'educational'
+      || String(item?.answer_basis || '').toLowerCase() === 'participant_consensus';
+  }
+
+  function competencyReviewStatus(item) {
+    if (isEducationalCompetencyReview(item)) {
+      if (item?.is_correct === true || String(item?.comparison_status || '') === 'aligned') return ['สอดคล้องกับกลุ่มส่วนใหญ่', 'success'];
+      if (item?.is_correct === false || String(item?.comparison_status || '') === 'minority') return ['คำตอบส่วนน้อย — ต้องชี้แจง', 'warning'];
+      return ['รอตรวจความเหมาะสม', 'warning'];
+    }
+    if (item?.is_correct === true) return ['ตอบถูก', 'success'];
+    if (item?.is_correct === false) return ['ต้องทบทวน', 'danger'];
+    return ['รอตรวจ', 'warning'];
   }
 
   function canonicalOfficialSpecimen(value, testName = '') {
@@ -2351,11 +2542,11 @@
     return `<section class="cap-official-section">
       <div class="cap-official-section-head"><div><span class="section-kicker">${esc(subtitle)}</span><h3>${esc(title)}</h3></div><span class="badge info">${rows.length} รายการ</span></div>
       <div class="official-table-wrap"><table class="cap-official-detail-table">
-        <thead><tr><th>ลำดับ</th><th>รายการทดสอบ</th><th>ผลประเมิน / Intended Response</th><th>% กลุ่มสมาชิกส่วนมาก</th><th>ผ่าน</th><th>ไม่ผ่าน</th><th>หมายเหตุ</th></tr></thead>
+        <thead><tr><th>ลำดับ</th><th>รายการทดสอบ</th><th>ผลประเมิน / Intended Response</th><th>คำตอบส่วนใหญ่ / % ผู้เข้าร่วม</th><th>ผ่าน</th><th>ไม่ผ่าน</th><th>ประเมินภายใน Educational</th><th>หมายเหตุ</th></tr></thead>
         <tbody>${sorted.map((row, index) => {
           const [label] = officialAssessmentInfo(row.assessment);
-          const peer = String(row.majority_percent || row.peer_result || '').trim() || '-';
-          return `<tr><td>${index + 1}</td><td><strong>${esc(row.test_name || '-')}</strong></td><td><strong>${esc(officialPrimaryResult(row))}</strong>${officialSecondaryResult(row) ? `<div class="small muted">${esc(officialSecondaryResult(row))}</div>` : ''}</td><td>${esc(peer)}</td><td class="official-mark-cell">${row.assessment === 'pass' ? '✓' : ''}</td><td class="official-mark-cell fail">${row.assessment === 'fail' ? '✓' : ''}</td><td>${esc(row.note || (['educational','not_graded'].includes(row.assessment) ? label : ''))}</td></tr>`;
+          const peer = [String(row.peer_result || '').trim(), String(row.majority_percent || '').trim()].filter(Boolean).join(' · ') || '-';
+          return `<tr><td>${index + 1}</td><td><strong>${esc(row.test_name || '-')}</strong></td><td><strong>${esc(officialPrimaryResult(row))}</strong>${officialSecondaryResult(row) ? `<div class="small muted">${esc(officialSecondaryResult(row))}</div>` : ''}</td><td>${esc(peer)}</td><td class="official-mark-cell">${row.assessment === 'pass' ? '✓' : ''}</td><td class="official-mark-cell fail">${row.assessment === 'fail' ? '✓' : ''}</td><td>${educationalReviewBadge(row)}</td><td>${esc(row.note || (['educational','not_graded'].includes(row.assessment) ? label : ''))}</td></tr>`;
         }).join('')}</tbody>
       </table></div>
     </section>`;
@@ -2424,8 +2615,8 @@
               <td>${esc(row.test_name || '-')}</td>
               <td>${esc(row.lab_result || '-')}</td>
               <td>${esc(row.intended_response || '-')}</td>
-              <td>${esc(row.majority_percent || row.peer_result || '-')}</td>
-              <td><span class="badge ${cls}">${esc(label)}</span>${row.note ? `<div class="small muted" style="margin-top:5px">${esc(row.note)}</div>` : ''}</td>
+              <td>${esc([String(row.peer_result || '').trim(), String(row.majority_percent || '').trim()].filter(Boolean).join(' · ') || '-')}</td>
+              <td><span class="badge ${cls}">${esc(label)}</span>${isEducationalOfficialRow(row) ? `<div style="margin-top:7px">${educationalReviewBadge(row)}</div>` : ''}${row.note ? `<div class="small muted" style="margin-top:5px">${esc(row.note)}</div>` : ''}</td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>
@@ -2448,7 +2639,7 @@
         <summary>ดูคำอธิบายและหัวข้อทบทวนเพิ่มเติม</summary>
         <div class="official-summary-grid">
           <section class="official-summary-card"><span class="summary-index">1</span><div><h3>ผลของห้องปฏิบัติการ</h3><p>${esc(ai.lab_result_summary || 'ยังไม่มีสรุป')}</p></div></section>
-          <section class="official-summary-card"><span class="summary-index">2</span><div><h3>ผลที่ควรเป็น / Intended Response</h3><p>${esc(ai.intended_response_summary || 'ยังไม่มีสรุป')}</p></div></section>
+          <section class="official-summary-card"><span class="summary-index">2</span><div><h3>ผลที่ควรเป็น / Intended Response / Participant consensus</h3><p>${esc(ai.intended_response_summary || 'ยังไม่มีสรุป')}</p></div></section>
           <section class="official-summary-card"><span class="summary-index">3</span><div><h3>คะแนนและ Grade</h3><p>${esc(ai.grade_summary || 'ยังไม่มีสรุป')}</p></div></section>
           <section class="official-summary-card"><span class="summary-index">4</span><div><h3>เปรียบเทียบกับผู้เข้าร่วม</h3><p>${esc(ai.peer_comparison_summary || 'ยังไม่มี Participant Summary หรือยังไม่ได้สรุป')}</p></div></section>
           <section class="official-summary-card review"><span class="summary-index">5</span><div><h3>หัวข้อที่ต้องทบทวน</h3>${reviewTopics ? `<ul>${reviewTopics.split('\n').filter(Boolean).map((topic) => `<li>${esc(topic)}</li>`).join('')}</ul>` : '<p>ไม่พบหัวข้อที่ต้องทบทวน</p>'}</div></section>
@@ -2469,7 +2660,7 @@
           <summary>แก้ไขข้อความสรุปที่ AI สร้าง</summary>
           <div class="official-edit-grid">
             <div class="field"><label>1. ผลของห้องปฏิบัติการ</label><textarea class="textarea" name="lab_result_summary">${esc(ai.lab_result_summary || '')}</textarea></div>
-            <div class="field"><label>2. ผลที่ควรเป็น / Intended Response</label><textarea class="textarea" name="intended_response_summary">${esc(ai.intended_response_summary || '')}</textarea></div>
+            <div class="field"><label>2. ผลที่ควรเป็น / Intended Response / Participant consensus</label><textarea class="textarea" name="intended_response_summary">${esc(ai.intended_response_summary || '')}</textarea></div>
             <div class="field"><label>3. คะแนนและ Grade</label><textarea class="textarea" name="grade_summary">${esc(ai.grade_summary || '')}</textarea></div>
             <div class="field"><label>4. เปรียบเทียบกับผู้เข้าร่วม</label><textarea class="textarea" name="peer_comparison_summary">${esc(ai.peer_comparison_summary || '')}</textarea></div>
             <div class="field" style="grid-column:1/-1"><label>5. หัวข้อที่ต้องทบทวน — 1 บรรทัดต่อ 1 หัวข้อ</label><textarea class="textarea" name="review_topics">${esc(reviewTopics)}</textarea></div>
@@ -3087,10 +3278,10 @@
 
     document.getElementById('upload-doc-btn')?.addEventListener('click', () => {
       showModal('อัปโหลดเอกสาร/ภาพ', `<form id="doc-form" class="form-grid">
-        <div class="field"><label>ประเภท</label><select class="select" id="document-category-select" name="category">${Object.entries(DOCUMENT_CATEGORY_LABELS).map(([value,label])=>`<option value="${value}">${esc(label)}</option>`).join('')}</select><div class="help" id="document-category-help"></div></div>
+        <div class="field"><label>ประเภท</label><select class="select" id="document-category-select" name="category">${Object.entries(DOCUMENT_CATEGORY_LABELS).filter(([value]) => value !== 'submission_evidence').map(([value,label])=>`<option value="${value}">${esc(label)}</option>`).join('')}</select><div class="help" id="document-category-help"></div></div>
         <div class="field"><label>ชื่อเอกสาร</label><input class="input" name="title" required><div class="help" id="document-title-help">ตั้งชื่อให้อ่านรู้เรื่อง เช่น Original Evaluation, Participant Summary หรือผลที่ห้องส่งจริง</div></div>
         <div class="field"><label>ผู้ที่เปิดดูได้</label><select class="select" name="visibility"><option value="restricted">เฉพาะผู้ทบทวน ผู้จัดการคุณภาพ และแพทย์</option><option value="assigned">ผู้ได้รับมอบหมาย</option><option value="staff">บุคลากรทุกคน</option></select></div>
-        <div class="field"><label>ไฟล์ PDF/JPG/PNG/WebP ไม่เกิน 20 MB</label><input class="input" type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp" required></div>
+        <div class="field"><label>ไฟล์ PDF/JPG/PNG/WebP ไม่เกิน 20 MB</label><input class="input" id="document-file-input" type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp" required><div class="help">ชื่อไฟล์ใช้เครื่องหมาย <code>_</code> แยกส่วน ระบบจะ parse ตัวอย่าง/การทดสอบ/Panel/Cell/Lot เพื่อจับคู่ให้อัตโนมัติ</div><div id="filename-parse-preview" style="margin-top:8px"></div></div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="upload-doc-save">อัปโหลด</button>`);
       const categorySelect = document.getElementById('document-category-select');
       const updateCategoryHelp = () => {
@@ -3098,13 +3289,20 @@
         const titleHelp = document.getElementById('document-title-help');
         if (help) help.textContent = DOCUMENT_CATEGORY_HELP[categorySelect?.value] || '';
         if (titleHelp) titleHelp.innerHTML = categorySelect?.value === 'antibody_panel'
-          ? 'ตัวอย่าง: <code>CAP-JA-2026_AbID_Panel01_Lot8RA453_Antigram.pdf</code> และ Panel ถัดไปใช้ <code>Panel02</code>'
+          ? 'ตัวอย่าง: <code>CAP-JA-2026_J-01_AbID_PanelA_Lot8RA453_Antigram.png</code> และ Panel ถัดไปใช้ <code>PanelB</code>'
           : categorySelect?.value === 'raw_result_image'
-            ? 'กรณีหลาย Panel: <code>CAP-JA-2026_J-01_AbID_Panel01_Cell01-11_RawResult.jpg</code> · Extra cell: <code>CAP-JA-2026_J-01_AbID_ExtraCell01_Anti-E_RawResult.jpg</code>'
+            ? 'กรณีหลาย Panel: <code>CAP-JA-2026_J-01_AbID_PanelA_Cell01-06_RawResult.png</code> และ <code>..._PanelA_Cell07-11_RawResult.png</code> · Extra cell: <code>CAP-JA-2026_J-01_AbID_ExtraCell01_Anti-E_RawResult.jpg</code>'
             : 'ตั้งชื่อให้อ่านรู้เรื่อง เช่น Original Evaluation, Participant Summary หรือผลที่ห้องส่งจริง';
       };
       categorySelect?.addEventListener('change', updateCategoryHelp);
       updateCategoryHelp();
+      const documentFileInput = document.getElementById('document-file-input');
+      const updateFilenamePreview = () => {
+        const preview = document.getElementById('filename-parse-preview');
+        const file = documentFileInput?.files?.[0];
+        if (preview) preview.innerHTML = file ? filenameParsePreview(file.name) : '';
+      };
+      documentFileInput?.addEventListener('change', updateFilenamePreview);
       document.getElementById('upload-doc-save').addEventListener('click', async () => {
         const form = document.getElementById('doc-form'); if (!form.reportValidity()) return;
         const fd = new FormData(form); const file = fd.get('file');
@@ -3123,7 +3321,7 @@
           : category === 'raw_result_image'
             ? ' อัปโหลดภาพผลทดสอบดิบแล้ว ระบบจะใช้สร้าง Competency สำหรับเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง'
           : category === 'submission_form'
-            ? ' บันทึกผลที่ห้องส่งจริงแล้ว ระบบจะใช้เป็นหลักฐานประกอบเท่านั้นและจะไม่ใช้เป็นเฉลย'
+            ? ' บันทึกหลักฐาน/แบบฟอร์มผลที่ส่งจริงแล้ว ให้นำไฟล์เดียวกันไปเชื่อมกับวันเวลาที่ส่งในหัวข้อ 7 โดยไม่ต้องอัปโหลดซ้ำ และระบบจะไม่ใช้ไฟล์นี้เป็นเฉลย'
           : category === 'official_result'
             ? ' อัปโหลด Official Evaluation แล้ว สามารถสร้างเฉลยข้อสอบและสรุปผลอย่างเป็นทางการแยกกันได้ หากมี Educational Challenge ให้เพิ่ม Participant Summary ด้วย'
           : category === 'participant_summary'
@@ -3321,8 +3519,56 @@
     });
   }
 
-    function bindSubmission(round) {
-    document.getElementById('add-submission')?.addEventListener('click',()=>{showModal('บันทึกหลักฐานการส่งผล',`<form id="submission-form" class="form-grid"><div class="field"><label>วันเวลา</label><input class="input" type="datetime-local" name="submitted_at" required value="${new Date().toISOString().slice(0,16)}"></div><div class="field"><label>เลขอ้างอิง</label><input class="input" name="reference"></div><div class="field"><label>หมายเหตุ</label><textarea class="textarea" name="note"></textarea></div></form>`,`<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-submission">บันทึก</button>`);document.getElementById('save-submission').addEventListener('click',async()=>{const f=document.getElementById('submission-form');if(!f.reportValidity())return;const fd=new FormData(f);const {error}=await state.supabase.from('ec_submission_evidence').insert({round_id:round.id,submitted_at:new Date(String(fd.get('submitted_at'))).toISOString(),submitted_by:state.user.id,provider_reference:String(fd.get('reference')||'')||null,note:String(fd.get('note')||'')||null});if(error)return toast(friendlyError(error), 'danger');await state.supabase.from('ec_eqa_rounds').update({status:'submitted_to_provider',updated_by:state.user.id,competency_open_at:new Date().toISOString()}).eq('id',round.id);closeModal();toast('บันทึกการส่งผลแล้ว','success');route();});});
+  function bindSubmission(round) {
+    document.querySelectorAll('[data-open-submission-path]').forEach((button) => button.addEventListener('click', async () => {
+      const { data, error } = await state.supabase.storage.from(cfg.PRIVATE_BUCKET).createSignedUrl(button.dataset.openSubmissionPath, 300);
+      if (error) return toast(friendlyError(error), 'danger');
+      window.open(data.signedUrl, '_blank', 'noopener');
+    }));
+
+    document.getElementById('add-submission')?.addEventListener('click', async () => {
+      const { data: documents, error: documentError } = await state.supabase
+        .from('ec_round_documents')
+        .select('id,title,file_name,category,created_at')
+        .eq('round_id', round.id)
+        .in('category', ['submission_form','submission_evidence'])
+        .is('archived_at', null)
+        .order('created_at', { ascending: false });
+      if (documentError) return toast(friendlyError(documentError), 'danger');
+      if (!(documents || []).length) {
+        showModal('ยังไม่มีไฟล์ผลที่ส่ง', `<div class="notice warning"><strong>ให้อัปโหลดไฟล์ก่อนเพียงครั้งเดียว</strong><br>ไปที่หัวข้อ 2 “เอกสาร/ภาพ” แล้วเลือกประเภท “หลักฐาน/แบบฟอร์มผลที่ส่งผู้ให้บริการ” จากนั้นกลับมาเชื่อมวันเวลาส่งในหน้านี้</div>`, `<button class="btn btn-outline" data-close-modal>ปิด</button><button class="btn btn-primary" id="go-upload-submission-document">ไปหัวข้อเอกสาร/ภาพ</button>`);
+        document.getElementById('go-upload-submission-document')?.addEventListener('click', () => { closeModal(); navigate(`round/${round.id}/documents`); });
+        return;
+      }
+      const defaultSubmittedAt = isHistoricalRound(round) && round.actual_submitted_at
+        ? new Date(round.actual_submitted_at).toISOString().slice(0,16)
+        : new Date().toISOString().slice(0,16);
+      const defaultReference = isHistoricalRound(round) ? (round.actual_provider_reference || '') : '';
+      showModal('บันทึกการส่งผลและเชื่อมไฟล์หลักฐาน', `<form id="submission-form" class="form-grid">
+        <div class="field"><label>วันที่และเวลาที่ส่งจริง</label><input class="input" type="datetime-local" name="submitted_at" required value="${esc(defaultSubmittedAt)}"></div>
+        <div class="field"><label>เลขอ้างอิง</label><input class="input" name="reference" value="${esc(defaultReference)}"></div>
+        <div class="field" style="grid-column:1/-1"><label>ไฟล์หลักฐาน/แบบฟอร์มผลที่ส่ง</label><select class="select" name="document_id" required><option value="">— เลือกไฟล์ที่อัปโหลดไว้ —</option>${documents.map((doc, index) => `<option value="${doc.id}" ${documents.length === 1 || index === 0 ? 'selected' : ''}>${esc(doc.title || doc.file_name)} — ${esc(doc.file_name)}</option>`).join('')}</select><div class="help">เลือกไฟล์เดิม ไม่ต้องอัปโหลดภาพหลักฐานซ้ำอีกชุด</div></div>
+        <div class="field" style="grid-column:1/-1"><label>หมายเหตุ</label><textarea class="textarea" name="note" placeholder="เช่น ส่งผ่าน CAP e-LAB Solutions และได้รับข้อความยืนยัน"></textarea></div>
+      </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-submission">บันทึก</button>`);
+      document.getElementById('save-submission')?.addEventListener('click', async () => {
+        const form = document.getElementById('submission-form');
+        if (!form?.reportValidity()) return;
+        const fd = new FormData(form);
+        const { error } = await state.supabase.from('ec_submission_evidence').insert({
+          round_id: round.id,
+          submitted_at: new Date(String(fd.get('submitted_at'))).toISOString(),
+          submitted_by: state.user.id,
+          provider_reference: String(fd.get('reference') || '').trim() || null,
+          note: String(fd.get('note') || '').trim() || null,
+          document_id: String(fd.get('document_id'))
+        });
+        if (error) return toast(friendlyError(error), 'danger');
+        await state.supabase.from('ec_eqa_rounds').update({ status:'submitted_to_provider', updated_by:state.user.id, competency_open_at: round.competency_open_at || new Date().toISOString() }).eq('id', round.id);
+        closeModal();
+        toast('บันทึกการส่งและเชื่อมไฟล์หลักฐานแล้ว', 'success');
+        route();
+      });
+    });
   }
 
   function bindOfficial(round) {
@@ -3652,14 +3898,18 @@
       const payload = answer?.answer_payload || {};
       const userAnswer = payload.choice_id ? choiceName(payload.choice_id) : (payload.text || '-');
       const key = keyMap.get(question.id);
-      const correctText = (key?.correct_choice_ids || []).map(choiceName).join(', ') || key?.answer_key_json?.text || key?.explanation || 'ให้ผู้ทบทวนพิจารณา';
+      const isEducational = String(key?.answer_key_json?.challenge_type || '').toLowerCase() === 'educational'
+        || String(key?.answer_key_json?.answer_basis || '').toLowerCase() === 'participant_consensus';
+      const consensusText = [key?.answer_key_json?.consensus_result, key?.answer_key_json?.consensus_percent].filter(Boolean).join(' · ');
+      const correctText = consensusText || (key?.correct_choice_ids || []).map(choiceName).join(', ') || key?.answer_key_json?.text || key?.explanation || 'ให้ผู้ทบทวนพิจารณา';
       const galleryHtml = questionImageGallery(question, imageMap, 'review');
       return `<div class="card" style="box-shadow:none;border:1px solid var(--line)">
-        <h3>${question.question_order}. ${esc(displayQuestionPrompt(question.prompt) || question.prompt)}</h3>
+        <h3>${question.question_order}. ${esc(displayQuestionPrompt(question.prompt) || question.prompt)} ${isEducational ? '<span class="badge info">Educational</span>' : ''}</h3>
         ${galleryHtml}
-        <div class="grid cols-2"><div><strong>คำตอบของผู้ทำ</strong><p>${esc(userAnswer)}</p></div><div><strong>แนวคำตอบ/เฉลย</strong><p>${esc(correctText)}</p></div></div>
+        <div class="grid cols-2"><div><strong>คำตอบของผู้ทำ</strong><p>${esc(userAnswer)}</p></div><div><strong>${isEducational ? 'คำตอบของผู้เข้าร่วมส่วนใหญ่' : 'แนวคำตอบ/เฉลย'}</strong><p>${esc(correctText)}</p></div></div>
+        ${isEducational && key?.answer_key_json?.comparison_note ? `<div class="notice info small">${esc(key.answer_key_json.comparison_note)}</div>` : ''}
         <div class="form-grid cols-2">
-          <div class="field"><label>ผลการตรวจ</label><select class="select" data-answer-result="${answer?.id || ''}" required><option value="">เลือกผล</option><option value="true" ${answer?.is_correct===true?'selected':''}>ถูก</option><option value="false" ${answer?.is_correct===false?'selected':''}>ไม่ถูก</option></select></div>
+          <div class="field"><label>${isEducational ? 'ผลการเปรียบเทียบ' : 'ผลการตรวจ'}</label><select class="select" data-answer-result="${answer?.id || ''}" required><option value="">เลือกผล</option><option value="true" ${answer?.is_correct===true?'selected':''}>${isEducational ? 'สอดคล้องกับกลุ่มส่วนใหญ่' : 'ถูก'}</option><option value="false" ${answer?.is_correct===false?'selected':''}>${isEducational ? 'คำตอบส่วนน้อย — ต้องชี้แจง' : 'ไม่ถูก'}</option></select></div>
           <div class="field"><label>ข้อคิดเห็น</label><input class="input" data-answer-comment="${answer?.id || ''}" value="${esc(answer?.reviewer_comment || '')}"></div>
         </div>
       </div>`;
@@ -3693,9 +3943,9 @@
       const answer = answerMap.get(row.answer_id);
       const question = answer ? questionMap.get(answer.question_id) : null;
       const heading = row.answer_id ? `${question?.question_order || '-'}. ${question?.prompt || 'รายการทบทวน'}` : 'การทบทวนผลประเมินจากการปฏิบัติจริง';
-      return `<div class="card" style="box-shadow:none;border:1px solid var(--line)"><h3>${esc(heading)}</h3><div class="grid cols-3"><div><span class="small muted">สาเหตุหรือปัจจัย</span><p>${esc(row.reason_for_error)}</p></div><div><span class="small muted">ความเข้าใจ/วิธีที่ถูกต้อง</span><p>${esc(row.corrected_understanding)}</p></div><div><span class="small muted">การนำไปใช้</span><p>${esc(row.application_to_work)}</p></div></div></div>`;
+      return `<div class="card" style="box-shadow:none;border:1px solid var(--line)"><h3>${esc(heading)}</h3><div class="grid cols-3"><div><span class="small muted">เหตุผลหรือปัจจัยที่ทำให้ตอบต่าง/ตอบไม่ถูก</span><p>${esc(row.reason_for_error)}</p></div><div><span class="small muted">ผลการทบทวนและข้อสรุปที่เหมาะสม</span><p>${esc(row.corrected_understanding)}</p></div><div><span class="small muted">การนำไปใช้</span><p>${esc(row.application_to_work)}</p></div></div></div>`;
     }).join('');
-    showModal(`ตรวจแบบทบทวน — ${assignment.ec_profiles?.full_name || ''}`, `<div class="notice info">ตรวจว่าผู้รับการประเมินเข้าใจสาเหตุ แนวคิดที่ถูกต้อง และการนำไปใช้ครบถ้วน</div><div style="height:12px"></div>${rows || empty('ไม่พบแบบทบทวน')}<div class="field"><label>ข้อคิดเห็นผู้ทบทวน</label><textarea class="textarea" id="reflection-review-note"></textarea></div>`, `<button class="btn btn-warning" id="return-reflection">ส่งกลับแก้ไข</button><button class="btn btn-success" id="accept-reflection">รับรองและปิดการประเมิน</button>`, true);
+    showModal(`ตรวจแบบทบทวน — ${assignment.ec_profiles?.full_name || ''}`, `<div class="notice info">ตรวจว่าผู้รับการประเมินอธิบายเหตุผล ผลการทบทวน และการนำไปใช้ครบถ้วน รวมถึงกรณี Educational ที่ตอบต่างจากกลุ่มส่วนใหญ่</div><div style="height:12px"></div>${rows || empty('ไม่พบแบบทบทวน')}<div class="field"><label>ข้อคิดเห็นผู้ทบทวน</label><textarea class="textarea" id="reflection-review-note"></textarea></div>`, `<button class="btn btn-warning" id="return-reflection">ส่งกลับแก้ไข</button><button class="btn btn-success" id="accept-reflection">รับรองและปิดการประเมิน</button>`, true);
     document.getElementById('return-reflection').addEventListener('click', async () => {
       const note = String(document.getElementById('reflection-review-note').value || '').trim();
       if (!note) return toast('กรุณาระบุเหตุผลที่ส่งกลับ', 'warning');
@@ -3862,15 +4112,25 @@
       </article>`;
     }).join('');
     const reviewQuestions = Array.isArray(releasedReview?.questions) ? releasedReview.questions : [];
-    const releasedReviewHtml = releasedReview ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>เฉลยหลังส่งคำตอบ</h2><div class="small muted">แสดงเฉพาะหลังส่งคำตอบแล้ว</div></div><span class="badge info">คะแนน ${releasedReview.score ?? '-'}%</span></div>${releasedReview.official_summary ? `<div class="notice info">${esc(releasedReview.official_summary)}</div><div style="height:12px"></div>` : ''}${reviewQuestions.map((item) => `<div class="answer-review-row ${item.is_correct === true ? 'correct' : item.is_correct === false ? 'incorrect' : ''}"><div><strong>${item.question_order}. ${esc(item.prompt || '')}</strong></div><div class="grid cols-2" style="margin-top:8px"><div><span class="small muted">คำตอบของคุณ</span><div>${esc(item.user_answer || '-')}</div></div><div><span class="small muted">เฉลย</span><div>${esc(item.correct_answer || '-')}</div></div></div>${item.explanation ? `<div class="small" style="margin-top:8px"><strong>คำอธิบาย:</strong> ${esc(item.explanation)}</div>` : ''}</div>`).join('')}</div>` : '';
+    const releasedScoreBadge = releasedReview?.score === null || releasedReview?.score === undefined
+      ? '<span class="badge info">ไม่มีคะแนนทางการสำหรับ Educational</span>'
+      : `<span class="badge info">คะแนน Graded ${esc(releasedReview.score)}%</span>`;
+    const releasedReviewHtml = releasedReview ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>ผลเปรียบเทียบและเฉลยหลังส่งคำตอบ</h2><div class="small muted">รายการ Graded แสดงเฉลยทางการ ส่วน Educational แสดงคำตอบของผู้เข้าร่วมส่วนใหญ่เพื่อทบทวนภายใน</div></div>${releasedScoreBadge}</div>${releasedReview.official_summary ? `<div class="notice info">${esc(releasedReview.official_summary)}</div><div style="height:12px"></div>` : ''}${reviewQuestions.map((item) => {
+      const educational = isEducationalCompetencyReview(item);
+      const [statusLabel, statusClass] = competencyReviewStatus(item);
+      const comparisonText = [item.consensus_result, item.consensus_percent].filter(Boolean).join(' · ') || item.correct_answer || '-';
+      return `<div class="answer-review-row ${!educational && item.is_correct === true ? 'correct' : !educational && item.is_correct === false ? 'incorrect' : ''}"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><strong>${item.question_order}. ${esc(item.prompt || '')}</strong><span class="badge ${esc(statusClass)}">${esc(statusLabel)}</span></div><div class="grid cols-2" style="margin-top:8px"><div><span class="small muted">คำตอบของคุณ</span><div>${esc(item.user_answer || '-')}</div></div><div><span class="small muted">${educational ? 'คำตอบของผู้เข้าร่วมส่วนใหญ่' : 'เฉลย'}</span><div>${esc(comparisonText)}</div></div></div>${item.comparison_note ? `<div class="small" style="margin-top:8px"><strong>ผลการเปรียบเทียบ:</strong> ${esc(item.comparison_note)}</div>` : ''}${item.explanation ? `<div class="small" style="margin-top:8px"><strong>${educational ? 'คำอธิบายประกอบ:' : 'คำอธิบาย:'}</strong> ${esc(item.explanation)}</div>` : ''}</div>`;
+    }).join('')}</div>` : '';
     const reflectionMap = new Map((reflections || []).map((row) => [row.answer_id, row]));
     const incorrectReviewQuestions = reviewQuestions.filter((item) => item.is_correct === false);
     const reflectionEditable = assignment.status === 'needs_reflection';
     const reflectionHtml = ['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status)
-      ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>แบบทบทวนข้อผิดพลาด</h2><div class="small muted">บันทึกสาเหตุ ความเข้าใจที่ถูกต้อง และการนำไปใช้กับงาน</div></div>${assignmentBadge(assignment.status)}</div>${!releasedReview ? `<div class="notice warning">ผู้จัดการคุณภาพยังไม่ได้เปิดเฉลย จึงยังกรอกแบบทบทวนไม่ได้</div>` : incorrectReviewQuestions.map((item) => {
+      ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>แบบทบทวนและชี้แจง</h2><div class="small muted">ใช้ทั้งข้อที่ตอบไม่ถูกและ Educational ที่คำตอบต่างจากกลุ่มส่วนใหญ่</div></div>${assignmentBadge(assignment.status)}</div>${!releasedReview ? `<div class="notice warning">ผู้จัดการคุณภาพยังไม่ได้เปิดผล จึงยังกรอกแบบทบทวนไม่ได้</div>` : incorrectReviewQuestions.map((item) => {
           const answer = answerMap.get(item.question_id);
           const reflection = answer ? reflectionMap.get(answer.id) : null;
-          return `<div class="reflection-item" data-reflection-answer="${answer?.id || ''}"><h3>${item.question_order}. ${esc(item.prompt || '')}</h3><div class="grid cols-2"><div><span class="small muted">คำตอบของคุณ</span><div>${esc(item.user_answer || '-')}</div></div><div><span class="small muted">เฉลย</span><div>${esc(item.correct_answer || '-')}</div></div></div><div class="form-grid" style="margin-top:12px"><div class="field"><label>สาเหตุที่ตอบผิด</label><textarea class="textarea" data-reflection-field="reason_for_error" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.reason_for_error || '')}</textarea></div><div class="field"><label>ความเข้าใจที่ถูกต้อง</label><textarea class="textarea" data-reflection-field="corrected_understanding" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.corrected_understanding || '')}</textarea></div><div class="field"><label>จะนำไปใช้กับงานอย่างไร</label><textarea class="textarea" data-reflection-field="application_to_work" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.application_to_work || '')}</textarea></div>${reflection?.reviewer_note ? `<div class="notice warning"><strong>ข้อคิดเห็นผู้ทบทวน:</strong> ${esc(reflection.reviewer_note)}</div>` : ''}</div></div>`;
+          const educational = isEducationalCompetencyReview(item);
+          const referenceText = [item.consensus_result, item.consensus_percent].filter(Boolean).join(' · ') || item.correct_answer || '-';
+          return `<div class="reflection-item" data-reflection-answer="${answer?.id || ''}"><h3>${item.question_order}. ${esc(item.prompt || '')} ${educational ? '<span class="badge info">Educational</span>' : ''}</h3><div class="grid cols-2"><div><span class="small muted">คำตอบของคุณ</span><div>${esc(item.user_answer || '-')}</div></div><div><span class="small muted">${educational ? 'คำตอบของผู้เข้าร่วมส่วนใหญ่' : 'เฉลย'}</span><div>${esc(referenceText)}</div></div></div><div class="form-grid" style="margin-top:12px"><div class="field"><label>${educational ? 'เหตุผลที่เลือกคำตอบต่างจากกลุ่มส่วนใหญ่' : 'สาเหตุที่ตอบไม่ถูก'}</label><textarea class="textarea" data-reflection-field="reason_for_error" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.reason_for_error || '')}</textarea></div><div class="field"><label>${educational ? 'ทบทวนแล้ว คำตอบของห้องเหมาะสมหรือควรแก้ไข เพราะเหตุใด' : 'ความเข้าใจที่ถูกต้องหลังทบทวน'}</label><textarea class="textarea" data-reflection-field="corrected_understanding" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.corrected_understanding || '')}</textarea></div><div class="field"><label>สิ่งที่จะตรวจสอบหรือปรับใช้กับงาน</label><textarea class="textarea" data-reflection-field="application_to_work" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.application_to_work || '')}</textarea></div>${reflection?.reviewer_note ? `<div class="notice warning"><strong>ข้อคิดเห็นผู้ทบทวน:</strong> ${esc(reflection.reviewer_note)}</div>` : ''}</div></div>`;
         }).join('')}${reflectionEditable && releasedReview ? `<div class="modal-footer"><button class="btn btn-primary" id="submit-reflection">ส่งแบบทบทวน</button></div>` : ''}</div>`
       : '';
     const driveButton = !['not_started','in_progress'].includes(assignment.status) ? `<button class="btn btn-outline" id="archive-my-competency">เก็บ PDF ใน Google Drive</button>` : '';
@@ -4415,17 +4675,28 @@
           <p><strong>รายงานผลประเมินอย่างเป็นทางการ (Official Evaluation)</strong> ใช้ Intended Response, Grade และคะแนนเป็นแหล่งหลักของเฉลย</p>
           <p><strong>รายงานเปรียบเทียบผู้เข้าร่วม (Participant Summary)</strong> ใช้ดูสัดส่วน/consensus ของห้องอื่น และใช้ประเมิน Educational Challenge หรือรายการ See Note [26] เท่านั้น ร้อยละในเอกสารนี้ไม่ใช่คะแนนของห้องเรา</p>
           <p><strong>กรณีหนึ่งตัวอย่างมีหลายการทดสอบ</strong></p><ul><li><strong>ฟอร์มเปล่าจากผู้ให้บริการเป็นตัวกำหนดโครงสร้าง จำนวนช่อง และรายการทดสอบ</strong> แบบฟอร์มที่ห้องส่งและรายงานผลใช้ตรวจคำตอบภายหลัง แต่ห้ามนำมาสร้างช่องหรือบอกคำตอบล่วงหน้า</li><li>ระบบแยกเป็นกลุ่มการทดสอบ เช่น ABO/Rh, Antibody screen, Antibody identification, Eluate identification, Crossmatch, DAT, CBC, WBC count, Titer และ Antigen typing</li><li>ตัวอย่างเดียวกันปรากฏในหลายกลุ่มได้ ไม่ถือว่าซ้ำ</li><li>ต้องยึดฟอร์มต้นฉบับว่าแต่ละตัวอย่างทำอะไร ห้ามนำทุกการทดสอบไปใส่ทุกตัวอย่าง</li><li>ผลเชิงตัวเลขต้องคงหน่วยและจำนวนทศนิยมตามฟอร์ม</li><li>Antigen typing แบบเลือกชนิด antigen ต้องมีช่อง “ชื่อ antigen” คู่กับ “ผล” ตามจำนวนตำแหน่งจริง ผู้ปฏิบัติเป็นผู้เลือก antigen เอง และเว้นช่องที่ไม่ได้ใช้ได้</li></ul>
-          <p><strong>ชื่อไฟล์สำหรับเอกสารทั้งฉบับ</strong> ใช้รูปแบบ <code>ผู้ให้บริการ-รอบ_โปรแกรม_บทบาทเอกสาร.pdf</code></p>
-          <ul><li>ฟอร์มเปล่า J: <code>CAP-JA-2026_J_BlankResultForm.pdf</code></li><li>ฟอร์มเปล่า JE1: <code>CAP-JA-2026_JE1_BlankResultForm.pdf</code></li><li>คู่มือ: <code>CAP-JA-2026_KitInstruction_J-JE1.pdf</code></li><li>ผลที่ห้องส่ง J: <code>CAP-JA-2026_J_SubmittedResultForm.pdf</code></li><li>ผลที่ห้องส่ง JE1: <code>CAP-JA-2026_JE1_SubmittedResultForm.pdf</code></li><li>Official Evaluation J: <code>CAP-JA-2026_J_OfficialEvaluation.pdf</code></li><li>Official Evaluation Educational: <code>CAP-JA-2026_JE1_OfficialEvaluation_EducationalChallenge.pdf</code></li><li>Participant Summary: <code>CAP-JA-2026_ParticipantSummary_PeerComparison.pdf</code></li><li>Antigram Panel แรก: <code>CAP-JA-2026_AbID_Panel01_Lot8RA453_Antigram.pdf</code></li><li>Antigram Panel ถัดไป: <code>CAP-JA-2026_AbID_Panel02_LotXXXXXX_Antigram.pdf</code></li></ul>
-          <p><strong>ชื่อไฟล์สำหรับภาพผลดิบ</strong> ใช้รูปแบบ <code>ผู้ให้บริการ-รอบ_ตัวอย่าง_ชนิดการทดสอบ_RawResult</code> หนึ่งการทดสอบหลายตัวอย่างใช้รหัสโจทย์หลักได้ ไม่ต้องใช้ MultiTest; ใช้ <code>MultiTest</code> เฉพาะภาพเดียวที่มีหลายชนิดการทดสอบ</p>
-          <ul><li>ABO: <code>CAP-JA-2026_J-01_ABO_RawResult.png</code></li><li>Ab screen รวม RT/IAT: <code>CAP-JA-2026_J-01_AbScreen_RawResult.png</code></li><li>Ab identification Panel แรก: <code>CAP-JA-2026_J-01_AbID_Panel01_Cell01-11_RawResult.jpg</code></li><li>Ab identification Panel ถัดไป: <code>CAP-JA-2026_J-01_AbID_Panel02_Cell01-11_RawResult.jpg</code></li><li>Selected/Extra cell: <code>CAP-JA-2026_J-01_AbID_ExtraCell01_Anti-E_RawResult.jpg</code></li><li>Crossmatch หลายตัวอย่างในโจทย์ J-06: <code>CAP-JA-2026_J-06_X-Match_RawResult.png</code></li><li>หลายการทดสอบในภาพเดียว: <code>CAP-JA-2026_J-01_MultiTest_ABO-Rh-AbScreen_RawResult.png</code></li></ul>
-          <p><strong>หลาย Panel ในตัวอย่างเดียว</strong> ให้ใช้ Panel01, Panel02, Panel03 ตามลำดับที่ทำจริง โดย Antigram ไม่ต้องใส่รหัสตัวอย่างหากเป็นน้ำยาชุดเดียวที่ใช้ร่วมกันหลายตัวอย่าง ส่วนภาพผลดิบต้องใส่รหัสตัวอย่างเพื่อจับคู่ให้ถูกต้อง หากใช้ selected cell หรือ extra cell เพิ่มเพื่อ Rule of 3 / rule out ให้ใช้ ExtraCell01, ExtraCell02 และระบุเป้าหมายสั้น ๆ ต่อท้ายชื่อไฟล์</p><p>สำหรับ CAP หากฟอร์มระบุช่องและคู่มือระบุ code กับชื่อ ระบบจะรวมเป็นตัวเลือกแบบ “ชื่อ (CAP code)” โดยไม่สร้างรหัสขึ้นเอง</p>
+          <p><strong>กติกาชื่อไฟล์มาตรฐานที่ระบบใช้ parse</strong></p>
+          <div class="notice info"><code>&lt;ProviderRound&gt;_&lt;Specimen&gt;_&lt;Test&gt;_[Qualifier...]_&lt;FileRole&gt;.&lt;ext&gt;</code><br>คั่นส่วนหลักด้วย <code>_</code> เท่านั้น ไม่เว้นวรรค ไม่ใช้ภาษาไทยในชื่อไฟล์ และวางบทบาทไฟล์ไว้ท้ายชื่อก่อนนามสกุล</div>
+          <p><strong>ชนิดการทดสอบที่ใช้เป็นคำมาตรฐาน</strong></p>
+          <ul><li><code>ABO</code></li><li><code>Rh</code></li><li><code>AbScreen</code></li><li><code>AbID</code></li><li><code>Crossmatch</code></li><li><code>AgTyping</code></li><li><code>EluateAbID</code></li><li><code>DAT</code></li><li><code>CBC</code></li><li><code>WBCCount</code></li><li><code>AntibodyTiter</code></li><li><code>MultiTest</code> เฉพาะภาพเดียวที่มีหลายการทดสอบจริง</li></ul>
+          <p><strong>บทบาทไฟล์ที่ใช้เป็นคำมาตรฐาน</strong></p>
+          <ul><li><code>RawResult</code> ภาพผลดิบ</li><li><code>Antigram</code> antigen profile ของ panel</li><li><code>BlankResultForm</code> แบบฟอร์มเปล่า</li><li><code>SubmittedResultForm</code> หลักฐาน/แบบฟอร์มผลที่ส่งผู้ให้บริการ</li><li><code>OfficialEvaluation</code> ผลประเมินทางการ</li><li><code>ParticipantSummary</code> รายงานเปรียบเทียบผู้เข้าร่วม</li><li><code>KitInstruction</code> คู่มือ/คำแนะนำ</li></ul>
+          <p><strong>Qualifier ที่ระบบอ่านได้</strong></p>
+          <ul><li><code>PanelA</code>, <code>PanelB</code>, <code>PanelC</code> ระบุชุด Panel</li><li><code>Cell01-06</code> ระบุช่วง cell</li><li><code>Lot8RA453</code> ระบุ Lot ของ Antigram</li><li><code>DonorJ-06R</code> ระบุ donor สำหรับ Crossmatch</li><li><code>C-c-E-e-K</code> ระบุ antigen ใน Ag typing</li><li><code>RT</code>, <code>IAT</code>, <code>IS</code>, <code>AHG</code>, <code>ENZYME</code> ระบุ phase เมื่อจำเป็น</li><li><code>ExtraCell01</code> ระบุ selected/extra cell</li></ul>
+          <p><strong>ตัวอย่างชื่อภาพผลตามชนิดการทดสอบ</strong></p>
+          <ul><li>ABO: <code>CAP-JA-2026_J-01_ABO_RawResult.png</code></li><li>Rh: <code>CAP-JA-2026_J-01_Rh_RawResult.png</code></li><li>Antibody screen: <code>CAP-JA-2026_J-01_AbScreen_RawResult.png</code></li><li>Crossmatch: <code>CAP-JA-2026_JE-07_Crossmatch_DonorJ-06R_RawResult.png</code></li><li>Antigen typing: <code>CAP-JA-2026_J-06R_AgTyping_C-c-E-e-K_RawResult.png</code></li></ul>
+          <p><strong>Ab ID หลาย Panel ในตัวอย่างเดียว</strong></p>
+          <ul><li><code>CAP-JA-2026_J-01_AbID_PanelA_Cell01-06_RawResult.png</code></li><li><code>CAP-JA-2026_J-01_AbID_PanelA_Cell07-11_RawResult.png</code></li><li><code>CAP-JA-2026_J-01_AbID_PanelA_Lot8RA453_Antigram.png</code></li><li><code>CAP-JA-2026_J-01_AbID_PanelB_Cell01-06_RawResult.png</code></li><li><code>CAP-JA-2026_J-01_AbID_PanelB_Cell07-11_RawResult.png</code></li><li><code>CAP-JA-2026_J-01_AbID_PanelB_Lot8RA454_Antigram.png</code></li><li><code>CAP-JA-2026_J-01_AbID_PanelC_Cell01-06_RawResult.png</code></li><li><code>CAP-JA-2026_J-01_AbID_PanelC_Cell07-11_RawResult.png</code></li><li><code>CAP-JA-2026_J-01_AbID_PanelC_Lot8RA455_Antigram.png</code></li></ul>
+          <p>ระบบรวมไฟล์ด้วย <strong>ProviderRound + Specimen + Test + Donor</strong> เป็นหนึ่งชุด แล้วจับภาพผลกับ Antigram ด้วย <strong>Panel ID</strong> จากนั้นเรียง Panel A → B → C และ Cell จากเลขน้อยไปมาก ดังนั้นหนึ่งตัวอย่างทำได้หลาย Panel โดยไม่ต้องบังคับให้มีเพียง Panel A</p>
+          <p><strong>เอกสารทั้งฉบับ</strong> ใช้รูปแบบ <code>&lt;ProviderRound&gt;_&lt;Program&gt;_&lt;DocumentRole&gt;.pdf</code> เช่น <code>CAP-JA-2026_J_BlankResultForm.pdf</code>, <code>CAP-JA-2026_J-JE1_KitInstruction.pdf</code>, <code>CAP-JA-2026_J_SubmittedResultForm.pdf</code>, <code>CAP-JA-2026_J_OfficialEvaluation.pdf</code> และ <code>CAP-JA-2026_ALL_ParticipantSummary.pdf</code></p>
+          <p><strong>หลักฐานการส่งผลกับแบบฟอร์มผลที่ส่งเป็นไฟล์เดียวกัน</strong> ให้อัปโหลดเพียงครั้งเดียวในประเภท “หลักฐาน/แบบฟอร์มผลที่ส่งผู้ให้บริการ” แล้วในหัวข้อ 7 เลือกไฟล์เดิมเพื่อผูกกับวันเวลา ผู้ส่ง และเลขอ้างอิง ระบบไม่สร้างไฟล์ซ้ำและไม่ใช้ไฟล์นี้เป็นเฉลย</p>
+          <p>ชื่อไฟล์ไม่ตรงมาตรฐานยังอัปโหลดได้ แต่ระบบจะแจ้งเตือนและอาจต้องใช้ประเภทเอกสาร/เนื้อหาไฟล์ช่วยจับคู่เอง สำหรับ CAP ตัวเลือกผลแสดงเป็น <strong>เลข CAP │ คำตอบ</strong> และห้ามสร้างรหัสขึ้นเอง</p>
         </div></details>
         <details><summary>ผลรายบุคคลและสรุปผลห้องปฏิบัติการ</summary><div class="guide-body"><p>ผู้ปฏิบัติแต่ละคนบันทึกผลของตนเองแยกกัน เมื่อส่งครบ ระบบจะเติมค่าที่ตรงกันในสรุปผลห้องให้อัตโนมัติ</p><p>ค่าที่ไม่ตรงกันจะถูกทำเครื่องหมายให้ผู้ทบทวนตรวจและเลือกผลที่ถูกต้องก่อนส่งให้ผู้จัดการคุณภาพ</p></div></details>
         <details><summary>การตรวจ รับรอง และรับทราบ</summary><div class="guide-body"><p>ผู้ทบทวนตรวจผลห้องและหลักฐาน จากนั้นส่งให้ผู้จัดการคุณภาพรับรอง เมื่อรับรองแล้วแพทย์จึงกดรับทราบได้</p><p>ผู้จัดการคุณภาพต้องรับรองทุกรอบ แม้เป็นหนึ่งในผู้ปฏิบัติจริง โดยต้องสลับ “ใช้งานในบทบาท” ให้ตรงกับขั้นตอน เช่น กรอกผลในบทบาทเจ้าหน้าที่ และรับรองในบทบาทผู้จัดการคุณภาพ</p><p>ประวัติการอนุมัติจะแสดงชื่อพร้อมบทบาทที่ใช้ลงนามในแต่ละครั้ง ส่วนผู้ทบทวนยังต้องเป็นคนละคนกับผู้ปฏิบัติจริงทั้งสองคน</p><p>การส่งกลับต้องระบุเหตุผล เพื่อให้ผู้เกี่ยวข้องแก้ไขเฉพาะจุด</p></div></details>
-        <details><summary>การสร้างจากเอกสารและรายงานผล</summary><div class="guide-body"><p><strong>ระบบอ่านไฟล์ทีละฉบับ</strong> และบันทึกสถานะ “รออ่าน / กำลังอ่าน / AI อ่านแล้ว / อ่านไม่สำเร็จ” ไว้ในตาราง หากเกิดรหัส 546 ให้กดสร้างใหม่ ระบบจะทำต่อเฉพาะไฟล์ที่เหลือ</p><p><strong>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</strong> อ่านฟอร์มเปล่า คู่มือ ภาพผลดิบ และ Antigram/Panel cell แล้วสร้างฉบับร่างให้ QM ตรวจ</p><p><strong>สร้างเฉลยและสรุปจาก Evaluation / Participant Summary</strong> ต้องมี Official Evaluation ก่อน ระบบใช้ Intended Response เป็นเฉลยของรายการ graded และใช้ Participant Summary เฉพาะ Educational Challenge</p><p>ระบบแยกสรุปเป็น 5 ส่วน: ผลของห้อง, ผลที่ควรเป็น, คะแนน/Grade, เปรียบเทียบผู้เข้าร่วม และหัวข้อทบทวน</p><p>หาก Educational Challenge ไม่มี Participant Summary หรือ consensus ไม่ชัด ระบบจะไม่เดาเฉลยและทำเครื่องหมายให้ QM ตรวจเอง</p><p><strong>สร้างย้อนหลังครบชุด</strong> ใช้กับรอบที่ได้รับผลแล้ว ระบบสร้างแบบกรอก คำแนะนำ ข้อสอบ เฉลย และสรุป พร้อมตั้งให้เห็นเฉลยหลังส่งคำตอบ</p><p>ข้อสอบทุกข้อยังเป็นฉบับร่างจนกว่า QM จะตรวจและกดเผยแพร่</p></div></details>
+        <details><summary>การสร้างจากเอกสารและรายงานผล</summary><div class="guide-body"><p><strong>ระบบอ่านไฟล์ทีละฉบับ</strong> และบันทึกสถานะ “รออ่าน / กำลังอ่าน / AI อ่านแล้ว / อ่านไม่สำเร็จ” ไว้ในตาราง หากเกิดรหัส 546 ให้กดสร้างใหม่ ระบบจะทำต่อเฉพาะไฟล์ที่เหลือ</p><p><strong>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</strong> อ่านฟอร์มเปล่า คู่มือ ภาพผลดิบ และ Antigram/Panel cell แล้วสร้างฉบับร่างให้ QM ตรวจ</p><p><strong>สร้างเฉลยและสรุปจาก Evaluation / Participant Summary</strong> ต้องมี Official Evaluation ก่อน ระบบใช้ Intended Response เป็นเฉลยของรายการ graded และใช้ Participant Summary เฉพาะ Educational Challenge</p><p>ระบบแยกสรุปเป็น 5 ส่วน: ผลของห้อง, ผลที่ควรเป็น, คะแนน/Grade, เปรียบเทียบผู้เข้าร่วม และหัวข้อทบทวน</p><p>Educational Challenge ไม่คิดเป็นคะแนนทางการ แต่ระบบต้องเทียบคำตอบของห้อง/บุคลากรกับ participant consensus: ถ้าสอดคล้องให้ระบุว่าเหมาะสม ถ้าเป็นคำตอบส่วนน้อยให้สถานะ “ต้องทบทวน/ชี้แจง” และบันทึกเหตุผลว่าทำไมจึงตอบต่าง หากไม่มี Participant Summary หรือ consensus ไม่ชัด ระบบจะไม่เดาและให้ QM ตรวจเอง</p><p><strong>สร้างย้อนหลังครบชุด</strong> ใช้กับรอบที่ได้รับผลแล้ว ระบบสร้างแบบกรอก คำแนะนำ ข้อสอบ เฉลย และสรุป พร้อมตั้งให้เห็นเฉลยหลังส่งคำตอบ</p><p>ข้อสอบทุกข้อยังเป็นฉบับร่างจนกว่า QM จะตรวจและกดเผยแพร่</p></div></details>
         <details><summary>การแจ้งเตือน EQA และ Competency</summary><div class="guide-body"><p>ผู้ดูแลระบบหรือผู้จัดการคุณภาพตั้งค่าได้ที่เมนู <strong>แจ้งเตือน / Google Drive</strong> ระบบตรวจรายการ EQA ใกล้ครบกำหนด แบบทดสอบที่ยังไม่ส่ง แบบทบทวน ผู้ทบทวนที่ยังไม่ตรวจ และรายการรอผู้จัดการคุณภาพ</p><p>Email ส่งถึงผู้เกี่ยวข้องตามหน้าที่ ส่วน Google Chat ใช้แจ้งภาพรวมของหน่วยงาน โดยค่าเริ่มต้นไม่แสดงชื่อผู้รับการประเมินรายบุคคล</p><p>ปุ่ม <strong>ตรวจและส่งตอนนี้</strong> ใช้ทดสอบหรือตรวจรายการทันที ส่วน Trigger ใน Google Apps Script จะเรียกตรวจอัตโนมัติทุกวัน</p></div></details>
-        <details><summary>แบบทบทวนหลังผลประเมินไม่ผ่าน</summary><div class="guide-body"><p>เมื่อผู้จัดการคุณภาพรับรองแล้วพบข้อที่ตอบไม่ถูกหรือหัวข้อการปฏิบัติที่ต้องปรับปรุง ระบบจะเปลี่ยนสถานะเป็น <strong>ต้องทบทวน</strong></p><p>เจ้าหน้าที่บันทึกสาเหตุ ความเข้าใจหรือวิธีที่ถูกต้อง และแผนการนำไปใช้กับงาน จากนั้นส่งให้ผู้ทบทวนตรวจ ผู้ทบทวนสามารถรับรองหรือส่งกลับแก้ไขได้</p></div></details>
+        <details><summary>แบบทบทวนหลังตอบไม่ถูกหรือ Educational เป็นคำตอบส่วนน้อย</summary><div class="guide-body"><p>เมื่อผู้จัดการคุณภาพรับรองแล้วพบข้อที่ตอบไม่ถูก หรือ Educational Challenge ที่คำตอบต่างจากกลุ่มผู้เข้าร่วมส่วนใหญ่ ระบบจะเปลี่ยนสถานะเป็น <strong>ต้องทบทวน</strong> โดย Educational ไม่ถูกนับเป็นคะแนนทางการ</p><p>เจ้าหน้าที่บันทึกเหตุผลที่เลือกคำตอบเดิม ผลการทบทวนว่าคำตอบของห้องเหมาะสมหรือควรแก้ไข และสิ่งที่จะนำไปใช้กับงาน จากนั้นส่งให้ผู้ทบทวนรับรองหรือส่งกลับแก้ไข</p></div></details>
         <details><summary>การเก็บ PDF ใน Google Drive</summary><div class="guide-body"><p>รายงานทะเบียน รอบ EQA และ Competency สามารถกดเก็บใน Google Drive ได้จากหน้า รายงาน / ทะเบียน หรือหน้าการประเมิน ระบบจะสร้างไฟล์ฉบับใหม่พร้อมเลขเวอร์ชัน และเก็บลิงก์ไว้ในระบบ</p><p>เมื่อเปิดการเก็บอัตโนมัติ ระบบจะสำรองไฟล์ในจุดสำคัญ เช่น ส่งคำตอบ ผู้ทบทวนตรวจ ผู้จัดการคุณภาพรับรอง ส่ง Reflection และปิดรอบ โดยไม่เขียนทับไฟล์เดิม</p></div></details>
         <details><summary>การยืนยันตัวตนสองขั้นตอน</summary><div class="guide-body"><p>ผู้ใช้งานทุกคนเปิดใช้งานได้จากเมนู ตั้งค่าของฉัน โดยสแกน QR Code ด้วยแอปยืนยันตัวตน แล้วกรอกรหัส 6 หลักเพื่อยืนยัน</p><p>ควรเก็บบัญชีและโทรศัพท์ที่ใช้สร้างรหัสไว้กับเจ้าของบัญชีเท่านั้น</p></div></details>
         <details><summary>การลบข้อมูล</summary><div class="guide-body"><p>ปุ่มลบที่ระบุว่าเป็นการลบถาวรจะลบข้อมูลจริงและกู้คืนไม่ได้ ควรตรวจชื่อรอบ เอกสาร หรือคำถามก่อนยืนยันทุกครั้ง</p></div></details>
