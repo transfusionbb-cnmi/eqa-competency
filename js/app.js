@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.3.1
+/* CNMI EQA and Competency Management System v2.3.2
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -18,6 +18,13 @@
     currentRound: null,
     busy: false,
   };
+
+  const SIDEBAR_COLLAPSED_KEY = 'cnmi-eqa-sidebar-collapsed';
+  const AI_EXTRACTION_SCHEMA_VERSION = 'v2.3.2';
+
+  function desktopSidebarCollapsed() {
+    return window.innerWidth > 900 && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+  }
 
   const ROLE_LABELS = {
     staff: 'เจ้าหน้าที่',
@@ -784,7 +791,7 @@
 
   function navItem(route, icon, label, activeRoute) {
     const active = activeRoute === route || (route === 'rounds' && activeRoute.startsWith('round/'));
-    return `<button class="nav-btn ${active ? 'active' : ''}" data-nav="${route}"><span class="nav-icon">${icon}</span><span>${esc(label)}</span></button>`;
+    return `<button class="nav-btn ${active ? 'active' : ''}" data-nav="${route}" title="${esc(label)}" aria-label="${esc(label)}"><span class="nav-icon">${icon}</span><span>${esc(label)}</span></button>`;
   }
 
   function currentRoute() {
@@ -796,7 +803,7 @@
     const route = currentRoute();
     const assignedRoleBadges = state.roles.map((role) => `<span class="badge">${esc(ROLE_LABELS[role] || 'บทบาทอื่น')}</span>`).join('');
     return `
-      <div class="app-shell">
+      <div class="app-shell ${desktopSidebarCollapsed() ? 'sidebar-collapsed' : ''}" id="app-shell">
         <aside class="sidebar" id="sidebar">
           <div class="sidebar-brand">
             <div class="brand-mark">CNMI</div>
@@ -838,7 +845,7 @@
         <main class="main">
           <header class="topbar">
             <div style="display:flex;align-items:center;gap:12px;min-width:0">
-              <button class="btn btn-outline mobile-menu" id="mobile-menu" aria-label="เปิดเมนู">☰</button>
+              <button class="btn btn-outline sidebar-toggle" id="sidebar-toggle" aria-label="ยุบหรือเปิดเมนูด้านข้าง" aria-expanded="${desktopSidebarCollapsed() ? 'false' : 'true'}">☰</button>
               <div style="min-width:0"><strong>${esc(title || 'ระบบ EQA และประเมินความสามารถ')}</strong><div class="small muted">${esc(cfg.ORGANIZATION_NAME || '')}</div></div>
             </div>
             <div class="topbar-user">
@@ -862,9 +869,17 @@
     document.getElementById('logout-btn')?.addEventListener('click', async () => {
       await state.supabase.auth.signOut();
     });
-    document.getElementById('mobile-menu')?.addEventListener('click', () => {
-      const isOpen = sidebar?.classList.toggle('open');
-      backdrop?.classList.toggle('show', Boolean(isOpen));
+    document.getElementById('sidebar-toggle')?.addEventListener('click', (event) => {
+      const shellEl = document.getElementById('app-shell');
+      if (window.innerWidth <= 900) {
+        const isOpen = sidebar?.classList.toggle('open');
+        backdrop?.classList.toggle('show', Boolean(isOpen));
+        event.currentTarget.setAttribute('aria-expanded', String(Boolean(isOpen)));
+        return;
+      }
+      const collapsed = shellEl?.classList.toggle('sidebar-collapsed');
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
+      event.currentTarget.setAttribute('aria-expanded', String(!collapsed));
     });
     backdrop?.addEventListener('click', closeSidebar);
     document.querySelectorAll('[data-role-switch]').forEach((select) => select.addEventListener('change', async (event) => {
@@ -2552,8 +2567,133 @@
     </section>`;
   }
 
+  const OFFICIAL_TEST_DEFINITIONS = [
+    { key: 'abo', label: 'ABO Group', pattern: /\babo\b/i },
+    { key: 'rh', label: 'Rh Type', pattern: /\brh(?:\(d\))?\s*(?:type|typing)?\b/i },
+    { key: 'screen', label: 'Unexpected Antibody Detection', pattern: /unexpected\s+antibody\s+detection|antibody\s+(?:screen|detection)/i },
+    { key: 'identification', label: 'Antibody Identification', pattern: /antibody\s+identification|\bab\s*id\b/i },
+    { key: 'crossmatch', label: 'Crossmatch/Compatibility Testing', pattern: /crossmatch|compatibility\s+testing/i },
+  ];
+
+  function canonicalOfficialTestName(value) {
+    const text = String(value || '').trim();
+    const matches = OFFICIAL_TEST_DEFINITIONS.filter((definition) => definition.pattern.test(text));
+    return matches.length === 1 ? matches[0].label : text;
+  }
+
+  function officialCompositeTests(value) {
+    const text = String(value || '').trim();
+    return OFFICIAL_TEST_DEFINITIONS.filter((definition) => definition.pattern.test(text));
+  }
+
+  function officialValueSegments(value) {
+    const text = String(value || '').replace(/<br\s*\/?\s*>/gi, '\n').trim();
+    if (!text) return [];
+    const segments = text.split(/\s*(?:;|\n|\r|\u2022|\|\|)\s*/).map((item) => item.trim()).filter(Boolean);
+    return segments.length > 1 ? segments : [text];
+  }
+
+  function officialSegmentAt(value, index, expectedCount) {
+    const parts = officialValueSegments(value);
+    if (parts.length === expectedCount) return parts[index] || '';
+    if (parts.length === 1) return parts[0];
+    return parts[index] || '';
+  }
+
+  function officialComparisonKey(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    const upper = raw.toUpperCase();
+    const capCodes = [...raw.matchAll(/(?:^|[^0-9])(\d{3})\s*[│|]/g)].map((match) => match[1]).sort();
+    if (capCodes.length) return `codes:${[...new Set(capCodes)].join(';')}`;
+    const antibodies = [...raw.matchAll(/anti-([A-Za-z0-9]+(?:\^[A-Za-z0-9]+)?)/gi)].map((match) => `Anti-${match[1]}`).sort();
+    if (antibodies.length) return `antibodies:${[...new Set(antibodies)].join(';')}`;
+    if (/ANTIBODY\s+NOT\s+DETECTED/.test(upper)) return 'screen:not-detected';
+    if (/ANTIBODY\s+DETECTED/.test(upper)) return 'screen:detected';
+    const group = upper.match(/GROUP\s+(AB|A|B|O)\b/);
+    if (group) return `abo:${group[1]}`;
+    if (/RH(?:\(D\))?\s+NEGATIVE/.test(upper)) return 'rh:negative';
+    if (/RH(?:\(D\))?\s+POSITIVE/.test(upper)) return 'rh:positive';
+    if (/CROSSMATCH|COMPATIBIL/.test(upper)) {
+      if (/NEGATIVE|COMPATIBLE/.test(upper)) return 'crossmatch:negative';
+      if (/POSITIVE|INCOMPATIBLE/.test(upper)) return 'crossmatch:positive';
+    }
+    const strength = upper.match(/(?:MICROSCOPIC|\+[1-4])\s*(?:REACTION)?/);
+    if (strength) return `strength:${strength[0].replace(/\s+/g, '')}`;
+    if (/\bNEGATIVE\b/.test(upper) && !/POSITIVE/.test(upper)) return 'result:negative';
+    if (/\bPOSITIVE\b/.test(upper) && !/NEGATIVE/.test(upper)) return 'result:positive';
+    return upper
+      .replace(/\b(?:RESULT|YOUR|LAB|PARTICIPANT|CONSENSUS|MOST\s+FREQUENT|RESPONSE|SUMMARY|FROM|FOR)\b/g, '')
+      .replace(/\d+(?:\.\d+)?%/g, '')
+      .replace(/[^A-Z0-9+]+/g, '');
+  }
+
+  function normalizeEducationalOfficialRow(row) {
+    if (!isEducationalOfficialRow(row)) return row;
+    const labKey = officialComparisonKey(row?.lab_result);
+    const peerKey = officialComparisonKey(row?.peer_result || row?.intended_response);
+    if (labKey && peerKey && labKey === peerKey) {
+      return {
+        ...row,
+        consensus_alignment: 'aligned',
+        internal_review_status: 'acceptable',
+        review_required: false,
+        review_reason: row?.review_reason && !/ต่าง|ส่วนน้อย|unclear|ไม่ชัด/i.test(String(row.review_reason))
+          ? row.review_reason
+          : 'ผลที่ห้องรายงานตรงกับคำตอบส่วนใหญ่ของผู้เข้าร่วม',
+        assessment: 'educational',
+      };
+    }
+    if (!labKey || !peerKey) {
+      return {
+        ...row,
+        consensus_alignment: 'unclear',
+        internal_review_status: 'pending',
+        review_required: true,
+        review_reason: 'ข้อมูลผลของห้องหรือ participant consensus ยังไม่ครบ กรุณาตรวจเอกสารต้นทาง',
+        assessment: row?.assessment === 'educational' ? 'pending' : row?.assessment,
+      };
+    }
+    return row;
+  }
+
+  function normalizeCapOfficialRows(specimenRows) {
+    const expanded = [];
+    for (const originalRow of specimenRows || []) {
+      const specimen = canonicalOfficialSpecimen(originalRow?.specimen, originalRow?.test_name);
+      const tests = officialCompositeTests(originalRow?.test_name);
+      if (/^J-0[1-5]$/.test(specimen) && tests.length > 1) {
+        tests.forEach((test, index) => {
+          expanded.push(normalizeEducationalOfficialRow({
+            ...originalRow,
+            specimen,
+            test_name: test.label,
+            lab_result: officialSegmentAt(originalRow?.lab_result, index, tests.length),
+            intended_response: officialSegmentAt(originalRow?.intended_response, index, tests.length),
+            official_grade: officialSegmentAt(originalRow?.official_grade, index, tests.length),
+            peer_result: officialSegmentAt(originalRow?.peer_result, index, tests.length),
+            majority_percent: officialSegmentAt(originalRow?.majority_percent, index, tests.length),
+          }));
+        });
+      } else {
+        expanded.push(normalizeEducationalOfficialRow({
+          ...originalRow,
+          specimen,
+          test_name: canonicalOfficialTestName(originalRow?.test_name),
+        }));
+      }
+    }
+    const byKey = new Map();
+    expanded.forEach((row) => {
+      const key = `${row.specimen}|${String(row.test_name || '').toLowerCase()}`;
+      const previous = byKey.get(key);
+      if (!previous || String(row.lab_result || row.intended_response || '').length > String(previous.lab_result || previous.intended_response || '').length) byKey.set(key, row);
+    });
+    return [...byKey.values()];
+  }
+
   function capOfficialSummaryTables(specimenRows) {
-    const normalized = (specimenRows || []).map((row) => ({ ...row, _specimen: canonicalOfficialSpecimen(row.specimen, row.test_name) }));
+    const normalized = normalizeCapOfficialRows(specimenRows).map((row) => ({ ...row, _specimen: canonicalOfficialSpecimen(row.specimen, row.test_name) }));
     const mainSpecimens = ['J-01','J-02','J-03','J-04','J-05'];
     const mainRows = normalized.filter((row) => mainSpecimens.includes(row._specimen));
     const testNames = [...new Set(mainRows.map((row) => String(row.test_name || '').trim()).filter(Boolean))]
@@ -2757,6 +2897,10 @@
             participant_consensus: 'อิง Participant consensus',
             insufficient: 'หลักฐานไม่พอ'
           }[key?.answer_key_json?.answer_basis] || '';
+          const referenceAnswer = String(key?.answer_key_json?.challenge_type === 'educational'
+            ? (key?.answer_key_json?.consensus_result || key?.answer_key_json?.text || '')
+            : (key?.answer_key_json?.text || '')).trim();
+          const referencePercent = String(key?.answer_key_json?.consensus_percent || '').trim();
           const sortedChoices = (q.ec_question_choices || []).slice().sort((a, b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
           const galleryHtml = questionImageGallery(q, adminImageMap, 'admin');
           return `<article class="admin-question-card">
@@ -2773,6 +2917,7 @@
             ${isAntibodyIdentificationQuestion(q) && q.question_type !== 'single_choice'
               ? `<div class="question-catalog-note"><strong>ตัวอย่างช่องที่ผู้ทำข้อสอบจะเห็น</strong><span>พิมพ์ Anti-K แล้วเลือกรายการจาก CAP Master List ได้มากกว่า 1 รายการ</span><input class="input" type="search" list="cap-antibody-preview-${q.id}" placeholder="พิมพ์ Anti- หรือรหัส CAP เช่น 124" autocomplete="off">${capAntibodyDatalist(`cap-antibody-preview-${q.id}`)}</div>`
               : sortedChoices.length ? `<div class="question-choice-preview">${sortedChoices.map((choice) => `<div><span class="choice-dot"></span>${esc(choice.choice_text)}</div>`).join('')}</div>` : ''}
+            ${referenceAnswer ? `<div class="answer-key-preview"><span class="small muted">${key?.answer_key_json?.challenge_type === 'educational' ? 'คำตอบของผู้เข้าร่วมส่วนใหญ่' : 'แนวคำตอบ/เฉลย'}</span><strong>${esc(referenceAnswer)}</strong>${referencePercent ? `<span class="badge info">${esc(referencePercent)}</span>` : ''}</div>` : ''}
             <div class="admin-question-footer">
               <div class="question-meta">
                 <span>${esc(labelFrom(QUESTION_TYPE_LABELS, q.question_type))}</span>
@@ -2935,7 +3080,7 @@
       const categories = AI_DOCUMENT_CATEGORIES[mode] || AI_DOCUMENT_CATEGORIES.questions;
       const { data, error } = await state.supabase
         .from('ec_round_documents')
-        .select('id,category,title,file_name,file_size,ai_extraction_status,ai_extraction_file_size')
+        .select('id,category,title,file_name,file_size,ai_extraction_status,ai_extraction_file_size,ai_extraction')
         .eq('round_id', round.id)
         .is('archived_at', null)
         .in('category', categories)
@@ -2948,7 +3093,8 @@
       const docs = await loadDocumentsForAI(mode);
       const pending = docs.filter((doc) =>
         doc.ai_extraction_status !== 'completed'
-        || Number(doc.ai_extraction_file_size || 0) !== Number(doc.file_size || 0));
+        || Number(doc.ai_extraction_file_size || 0) !== Number(doc.file_size || 0)
+        || String(doc.ai_extraction?.schema_version || '') !== AI_EXTRACTION_SCHEMA_VERSION);
 
       for (const doc of pending) {
         progressState.step += 1;
@@ -3192,7 +3338,10 @@
         try {
           setBusy(true);
           const currentDocs = await loadDocumentsForAI(mode);
-          const pendingCount = currentDocs.filter((doc) => doc.ai_extraction_status !== 'completed' || Number(doc.ai_extraction_file_size || 0) !== Number(doc.file_size || 0)).length;
+          const pendingCount = currentDocs.filter((doc) =>
+            doc.ai_extraction_status !== 'completed'
+            || Number(doc.ai_extraction_file_size || 0) !== Number(doc.file_size || 0)
+            || String(doc.ai_extraction?.schema_version || '') !== AI_EXTRACTION_SCHEMA_VERSION).length;
           const sourceDocCount = pendingFormDocuments(currentDocs).targets.length;
           const questionBatches = (mode === 'questions' || isHistoricalBundle) ? planQuestionBatches(currentDocs, questionCount) : [];
           const answerBatches = mode === 'answers' ? await loadAnswerQuestionBatches(forceRegenerateAnswers) : [];
@@ -3648,6 +3797,8 @@
         key = results[2].data || null;
       }
       const correctIndex = choices.findIndex((choice) => (key?.correct_choice_ids || []).includes(choice.id));
+      const keyJson = key?.answer_key_json && typeof key.answer_key_json === 'object' ? key.answer_key_json : {};
+      const currentReferenceAnswer = String(keyJson.challenge_type === 'educational' ? (keyJson.consensus_result || keyJson.text || '') : (keyJson.text || '')).trim();
       const imageOptions = imageDocuments.length
         ? `<option value="">ไม่ใช้รูปประกอบ</option>${imageDocuments.map((doc) => `<option value="${doc.id}" ${row?.image_document_id===doc.id?'selected':''}>${esc(doc.title)} — ${esc(doc.file_name)}${doc.visibility==='staff'?'':' (ระบบจะเปิดให้บุคลากรทุกคน)'}</option>`).join('')}`
         : '<option value="">ยังไม่มีไฟล์รูปในหัวข้อ 2. เอกสาร/ภาพ</option>';
@@ -3661,8 +3812,12 @@
         <div class="field" style="grid-column:1/-1"><label>คำถาม</label><textarea class="textarea" name="prompt" required>${esc(row?.prompt || '')}</textarea></div>
         <div class="field" style="grid-column:1/-1"><label>รูปประกอบจากหัวข้อ 2. เอกสาร/ภาพ</label><select class="select" name="image_document_id">${imageOptions}</select><div class="help">เมื่อใช้เป็นรูปข้อสอบ ระบบจะตั้งสิทธิ์ไฟล์เป็น “บุคลากรทุกคน”</div></div>
         <div class="field" style="grid-column:1/-1"><label>ตัวเลือก (หนึ่งบรรทัดต่อหนึ่งตัวเลือก)</label><textarea class="textarea" name="choices">${esc(choices.map((choice) => choice.choice_text).join('\n'))}</textarea></div>
-        <div class="field"><label>ลำดับตัวเลือกที่ถูก</label><input class="input" type="number" name="correct" min="1" value="${correctIndex >= 0 ? correctIndex + 1 : ''}"><div class="help">เว้นว่างได้จนกว่าจะได้รับรายงานผลอย่างเป็นทางการ</div></div>
-        <div class="field"><label>คำอธิบายเฉลย</label><input class="input" name="explanation" value="${esc(key?.explanation || '')}"></div>
+        <div class="field"><label>ลำดับตัวเลือกที่ถูก</label><input class="input" type="number" name="correct" min="1" value="${correctIndex >= 0 ? correctIndex + 1 : ''}"><div class="help">ใช้สำหรับข้อเลือกคำตอบเดียว</div></div>
+        <div class="field"><label>ประเภทการประเมิน</label><select class="select" name="challenge_type"><option value="graded" ${keyJson.challenge_type==='graded'?'selected':''}>Graded — มีเฉลยทางการ</option><option value="educational" ${keyJson.challenge_type==='educational'?'selected':''}>Educational — ใช้คำตอบส่วนใหญ่</option><option value="unknown" ${!keyJson.challenge_type||keyJson.challenge_type==='unknown'?'selected':''}>รอตรวจ</option></select></div>
+        <div class="field"><label>แหล่งอ้างอิงคำตอบ</label><select class="select" name="answer_basis"><option value="official_intended_response" ${keyJson.answer_basis==='official_intended_response'?'selected':''}>Official Intended Response</option><option value="participant_consensus" ${keyJson.answer_basis==='participant_consensus'?'selected':''}>Participant consensus</option><option value="insufficient" ${!keyJson.answer_basis||keyJson.answer_basis==='insufficient'?'selected':''}>หลักฐานยังไม่พอ</option></select></div>
+        <div class="field"><label>ร้อยละของคำตอบส่วนใหญ่</label><input class="input" name="consensus_percent" value="${esc(keyJson.consensus_percent || '')}" placeholder="เช่น 98.0%"></div>
+        <div class="field" style="grid-column:1/-1"><label>แนวคำตอบ / คำตอบส่วนใหญ่</label><textarea class="textarea" name="reference_answer" placeholder="เช่น 115 │ Anti-E; 124 │ Anti-K">${esc(currentReferenceAnswer)}</textarea><div class="help">ข้อ Antibody Identification ใส่ได้หลายรายการ คั่นด้วย ; ระบบจะเทียบโดยไม่สนลำดับ</div></div>
+        <div class="field" style="grid-column:1/-1"><label>คำอธิบายเฉลย</label><input class="input" name="explanation" value="${esc(key?.explanation || '')}"></div>
         <label><input type="checkbox" name="critical" ${row?.is_critical?'checked':''}> ข้อสำคัญ</label>
         <label><input type="checkbox" name="published" ${row?.published?'checked':''}> เผยแพร่คำถาม</label>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-question">บันทึก</button>`, true);
@@ -3707,7 +3862,21 @@
           if (error) return toast(friendlyError(error), 'danger');
           if (correct > 0 && inserted?.[correct - 1]) correctIds = [inserted[correct - 1].id];
         }
-        const keyResult = await state.supabase.from('ec_question_answer_keys').upsert({ question_id: questionId, correct_choice_ids: correctIds, answer_key_json: null, explanation: String(fd.get('explanation') || '') || null, updated_by: state.user.id }, { onConflict: 'question_id' });
+        const referenceAnswer = String(fd.get('reference_answer') || '').trim();
+        const challengeType = String(fd.get('challenge_type') || 'unknown');
+        const answerBasis = String(fd.get('answer_basis') || 'insufficient');
+        const isAntibodyKey = isAntibodyIdentificationQuestion({ section: payload.section, prompt: payload.prompt }) && Boolean(referenceAnswer);
+        const answerKeyJson = {
+          ...(keyJson || {}),
+          challenge_type: challengeType,
+          answer_basis: answerBasis,
+          text: referenceAnswer,
+          consensus_result: challengeType === 'educational' ? referenceAnswer : String(keyJson.consensus_result || ''),
+          consensus_percent: String(fd.get('consensus_percent') || '').trim(),
+          auto_compare: isAntibodyKey ? 'antibody_set' : null,
+          needs_manual_review: !(correctIds.length || referenceAnswer),
+        };
+        const keyResult = await state.supabase.from('ec_question_answer_keys').upsert({ question_id: questionId, correct_choice_ids: correctIds, answer_key_json: answerKeyJson, explanation: String(fd.get('explanation') || '') || null, updated_by: state.user.id }, { onConflict: 'question_id' });
         if (keyResult.error) return toast(friendlyError(keyResult.error), 'danger');
         closeModal(); toast('บันทึกคำถามแล้ว', 'success'); route();
       });
