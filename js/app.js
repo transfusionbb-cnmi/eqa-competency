@@ -87,6 +87,7 @@
     submission_evidence: 'หลักฐานการส่งผล',
     official_result: 'รายงานผลประเมินอย่างเป็นทางการ (Official Evaluation)',
     participant_summary: 'รายงานเปรียบเทียบผู้เข้าร่วม (Participant Summary)',
+    antibody_panel: 'แผงเซลล์ Antibody Identification / Antigram',
     corrective_action: 'หลักฐานการแก้ไขและป้องกัน',
     closure_report: 'รายงานสรุปปิดรอบ',
     other: 'เอกสารอื่น ๆ'
@@ -100,6 +101,7 @@
     submission_evidence: 'ภาพหน้าจอ ใบยืนยัน หรือหลักฐานวันเวลาที่ส่งผล',
     official_result: 'Original Evaluation หรือรายงานที่มี Intended Response / Grade ใช้เป็นแหล่งหลักของเฉลยและคะแนน',
     participant_summary: 'Participant Summary หรือ PSR ใช้เทียบสัดส่วนคำตอบของห้องอื่น และใช้ประเมิน Educational Challenge',
+    antibody_panel: 'Antigram หรือ Panel cell profile ใช้จับคู่ปฏิกิริยากับ antigen profile สำหรับ Antibody Identification ไม่ใช่ภาพผลตัวอย่างและไม่ใช่เฉลย',
     corrective_action: 'หลักฐานการแก้ไข ป้องกัน และติดตามประสิทธิผล',
     closure_report: 'รายงานสรุปเมื่อปิดรอบ',
     other: 'เอกสารประกอบอื่นที่ไม่เข้ากลุ่มข้างต้น',
@@ -451,20 +453,21 @@
     }
   }
 
-  function showModal(title, bodyHtml, footerHtml = '', large = false) {
+  function showModal(title, bodyHtml, footerHtml = '', large = false, locked = false) {
     closeModal();
     const wrap = document.createElement('div');
     wrap.className = 'modal-backdrop';
     wrap.id = 'modal-backdrop';
+    wrap.dataset.locked = locked ? 'true' : 'false';
     wrap.innerHTML = `
       <div class="modal ${large ? 'modal-lg' : ''}" role="dialog" aria-modal="true">
-        <div class="modal-header"><h2>${esc(title)}</h2><button class="close-btn" data-close-modal>×</button></div>
+        <div class="modal-header"><h2>${esc(title)}</h2>${locked ? '' : '<button class="close-btn" data-close-modal>×</button>'}</div>
         <div class="modal-body">${bodyHtml}</div>
         ${footerHtml ? `<div class="modal-footer">${footerHtml}</div>` : ''}
       </div>`;
     document.body.appendChild(wrap);
     wrap.addEventListener('click', (e) => {
-      if (e.target === wrap || e.target.closest('[data-close-modal]')) closeModal();
+      if (!locked && (e.target === wrap || e.target.closest('[data-close-modal]'))) closeModal();
     });
   }
 
@@ -1207,6 +1210,7 @@
     const sourceDocuments = (docs || []).filter((doc) => doc.category === 'source_document');
     const instructionDocuments = (docs || []).filter((doc) => doc.category === 'instruction');
     const rawResultDocuments = (docs || []).filter((doc) => doc.category === 'raw_result_image');
+    const antibodyPanelDocuments = (docs || []).filter((doc) => doc.category === 'antibody_panel');
     const submittedResultDocuments = (docs || []).filter((doc) => doc.category === 'submission_form');
     const officialDocuments = (docs || []).filter((doc) => doc.category === 'official_result');
     const participantSummaryDocuments = (docs || []).filter((doc) => doc.category === 'participant_summary');
@@ -1216,7 +1220,7 @@
     const generatedAt = round.generated_form_generated_at ? fmtDate(round.generated_form_generated_at, true) : '';
     const generatedFormStatus = round.generated_result_form_schema
       ? `<div class="notice success"><strong>มีแบบกรอกและคำแนะนำที่สร้างจากเอกสารแล้ว</strong><br><span class="small">สร้างเมื่อ ${esc(generatedAt || '-')} · ระบบใช้ “ประเภทเอกสาร” เป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่เท่านั้น</span>${round.generated_instruction_th ? `<details style="margin-top:8px"><summary>ดูคำแนะนำภาษาไทย</summary><div class="small" style="white-space:pre-wrap;margin-top:8px">${esc(round.generated_instruction_th)}</div></details>` : ''}</div><div style="height:12px"></div>`
-      : `<div class="compact-status"><span>ฟอร์มต้นฉบับ <strong>${sourceDocuments.length}</strong></span><span>คู่มือ/คำแนะนำ <strong>${instructionDocuments.length}</strong></span><span>ภาพผลดิบ <strong>${rawResultDocuments.length}</strong></span><span>ผลที่ส่ง <strong>${submittedResultDocuments.length}</strong></span><span>Official Evaluation <strong>${officialDocuments.length}</strong></span><span>Participant Summary <strong>${participantSummaryDocuments.length}</strong></span></div>`;
+      : `<div class="compact-status"><span>ฟอร์มต้นฉบับ <strong>${sourceDocuments.length}</strong></span><span>คู่มือ/คำแนะนำ <strong>${instructionDocuments.length}</strong></span><span>ภาพผลดิบ <strong>${rawResultDocuments.length}</strong></span><span>Panel/Antigram <strong>${antibodyPanelDocuments.length}</strong></span><span>ผลที่ส่ง <strong>${submittedResultDocuments.length}</strong></span><span>Official Evaluation <strong>${officialDocuments.length}</strong></span><span>Participant Summary <strong>${participantSummaryDocuments.length}</strong></span></div>`;
     return `<div class="card">
       <div class="card-header"><div><h2>เอกสารและภาพ</h2></div>
       <div class="table-actions">${uploadAllowed ? `<button class="btn btn-primary" id="upload-doc-btn">＋ อัปโหลดไฟล์</button>` : ''}<button class="btn btn-outline" id="go-auto-competency">จัดการข้อสอบ</button></div></div>
@@ -1224,14 +1228,24 @@
         <button class="btn btn-primary" id="generate-document-bundle" ${documentBundleReady ? '' : 'disabled'}>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</button>
         <button class="btn btn-success" id="generate-answer-bundle" ${answerBundleReady ? '' : 'disabled'}>สร้างเฉลยและสรุปจาก Evaluation / Participant Summary</button>
         <button class="btn btn-secondary" id="generate-historical-bundle" ${historicalBundleReady ? '' : 'disabled'}>สร้างย้อนหลังครบชุดจากเอกสารและรายงานผล</button>
-      </div><div class="small muted" style="margin:8px 0 14px">Official Evaluation ใช้เป็นแหล่งหลักของเฉลย/คะแนน ส่วน Participant Summary ใช้เทียบกับห้องอื่นและประเมิน Educational Challenge รายละเอียดชื่อไฟล์อยู่ในเมนูคู่มือการใช้งาน</div>` : ''}
+      </div><div class="small muted" style="margin:8px 0 14px">ระบบจะอ่านไฟล์ทีละฉบับและแสดงสถานะในตาราง หากรอบมี Antibody Identification ให้อัปโหลด Antigram/Panel cell แยกจากภาพผลดิบ Official Evaluation ใช้เป็นแหล่งหลักของเฉลย/คะแนน ส่วน Participant Summary ใช้เทียบกับห้องอื่นและประเมิน Educational Challenge</div>` : ''}
       ${participantSummaryDocuments.length && !officialDocuments.length ? `<div class="notice warning"><strong>มี Participant Summary แต่ยังไม่มี Official Evaluation</strong><br>ระบบยังไม่เปิดสร้างเฉลย เพื่อป้องกันการนำร้อยละของผู้เข้าร่วมมาใช้แทนผลของห้องปฏิบัติการ</div><div style="height:12px"></div>` : ''}
       ${officialDocuments.length && !participantSummaryDocuments.length ? `<div class="notice info"><strong>สร้างผลแบบให้คะแนนได้แล้ว</strong><br>หากรอบนี้มี Educational Challenge ให้เพิ่ม Participant Summary เพื่อให้ระบบประเมินเทียบ consensus ของผู้เข้าร่วมได้ถูกต้อง</div><div style="height:12px"></div>` : ''}
       ${generatedFormStatus}
-      ${(docs || []).length ? `<div class="table-wrap"><table><thead><tr><th>ประเภท</th><th>ชื่อ</th><th>ผู้ที่เปิดดูได้</th><th>วันที่อัปโหลด</th><th>จัดการ</th></tr></thead><tbody>
+      ${(docs || []).length ? `<div class="table-wrap"><table><thead><tr><th>ประเภท</th><th>ชื่อ</th><th>สถานะ AI</th><th>ผู้ที่เปิดดูได้</th><th>วันที่อัปโหลด</th><th>จัดการ</th></tr></thead><tbody>
         ${(docs || []).map((d) => {
           const canEditDocument = canManage() || d.uploaded_by === state.user.id;
-          return `<tr><td>${esc(labelFrom(DOCUMENT_CATEGORY_LABELS, d.category))}</td><td><strong>${esc(d.title)}</strong><br><span class="small muted">${esc(d.file_name)}</span></td><td>${esc(labelFrom(VISIBILITY_LABELS, d.visibility))}</td><td>${fmtDate(d.created_at, true)}</td><td><div class="table-actions"><button class="btn btn-outline btn-sm" data-open-doc="${d.id}" data-path="${esc(d.storage_path)}">เปิดไฟล์</button>${canEditDocument ? `<button class="btn btn-outline btn-sm" data-edit-doc="${d.id}">แก้ไข</button><button class="btn btn-danger btn-sm" data-delete-doc="${d.id}">ลบ</button>` : ''}</div></td></tr>`;
+          const extractable = ['source_document','instruction','raw_result_image','antibody_panel','submission_form','official_result','participant_summary'].includes(d.category);
+          const aiStatus = !extractable
+            ? '<span class="small muted">ไม่ต้องอ่าน</span>'
+            : d.ai_extraction_status === 'completed'
+              ? '<span class="badge success">AI อ่านแล้ว</span>'
+              : d.ai_extraction_status === 'processing'
+                ? '<span class="badge info">กำลังอ่าน</span>'
+                : d.ai_extraction_status === 'failed'
+                  ? `<span class="badge danger">อ่านไม่สำเร็จ</span>${d.ai_extraction_error ? `<br><span class="small muted">${esc(d.ai_extraction_error)}</span>` : ''}`
+                  : '<span class="badge">รออ่าน</span>';
+          return `<tr><td>${esc(labelFrom(DOCUMENT_CATEGORY_LABELS, d.category))}</td><td><strong>${esc(d.title)}</strong><br><span class="small muted">${esc(d.file_name)}</span></td><td>${aiStatus}</td><td>${esc(labelFrom(VISIBILITY_LABELS, d.visibility))}</td><td>${fmtDate(d.created_at, true)}</td><td><div class="table-actions"><button class="btn btn-outline btn-sm" data-open-doc="${d.id}" data-path="${esc(d.storage_path)}">เปิดไฟล์</button>${canEditDocument ? `<button class="btn btn-outline btn-sm" data-edit-doc="${d.id}">แก้ไข</button><button class="btn btn-danger btn-sm" data-delete-doc="${d.id}">ลบ</button>` : ''}</div></td></tr>`;
         }).join('')}
       </tbody></table></div>` : empty('ยังไม่มีไฟล์ในรอบนี้')}
     </div>`;
@@ -1997,7 +2011,7 @@
     const name = (id) => directory.find((p) => p.id === id)?.full_name || id;
     const imageName = (id) => (documents || []).find((doc) => doc.id === id)?.title || '';
     const keyMap = new Map((keys || []).map((key) => [key.question_id, key]));
-    const sourceCategories = new Set(['source_document','instruction','raw_result_image']);
+    const sourceCategories = new Set(['source_document','instruction','raw_result_image','antibody_panel']);
     const sourceDocs = (documents || []).filter((doc) => sourceCategories.has(doc.category));
     const officialDocs = (documents || []).filter((doc) => doc.category === 'official_result');
     const participantSummaryDocs = (documents || []).filter((doc) => doc.category === 'participant_summary');
@@ -2043,7 +2057,7 @@
           <button class="btn btn-outline" id="publish-all-questions" ${(questions || []).length ? '' : 'disabled'}>เผยแพร่ทั้งหมด</button>
           <button class="btn btn-outline" id="add-question">＋ เพิ่มเอง</button>
         </div>` : ''}
-        ${latestRun ? `<div class="small muted" style="margin-bottom:10px">การสร้างล่าสุด: ${latestRun.generation_type === 'form_instructions' ? 'แบบกรอกและคำแนะนำ' : latestRun.generation_type === 'questions' ? 'ข้อสอบ' : 'เฉลยและสรุป'} · ${latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' ? 'ไม่สำเร็จ' : 'กำลังประมวลผล'} · ${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}</div>` : ''}
+        ${latestRun ? `<div class="small muted" style="margin-bottom:10px">การสร้างล่าสุด: ${latestRun.generation_type === 'document_extract' ? 'อ่านเอกสาร' : latestRun.generation_type === 'form_instructions' ? 'แบบกรอกและคำแนะนำ' : latestRun.generation_type === 'questions' ? 'ข้อสอบ' : 'เฉลยและสรุป'} · ${latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' ? 'ไม่สำเร็จ' : 'กำลังประมวลผล'} · ${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}</div>` : ''}
         ${(questions || []).length ? questions.map((q) => {
           const key = keyMap.get(q.id);
           const hasKey = Boolean(key?.correct_choice_ids?.length || key?.answer_key_json?.text);
@@ -2170,14 +2184,100 @@
       const { data, error } = await state.supabase.functions.invoke('generate-competency', { body });
       if (error) {
         let detail = error.message || 'เรียกบริการ AI ไม่สำเร็จ';
+        const status = Number(error?.context?.status || error?.status || 0);
         try {
           const payload = error.context && typeof error.context.json === 'function' ? await error.context.json() : null;
           if (payload?.error) detail = payload.error;
         } catch (_) { /* use original message */ }
+        if (status === 546 || /546|WORKER_RESOURCE_LIMIT/i.test(detail)) {
+          detail = 'การอ่านไฟล์ใช้เวลานานเกินขีดจำกัดของ Supabase ระบบจะจำไฟล์ที่อ่านเสร็จแล้ว กรุณากดสร้างอีกครั้งเพื่ออ่านต่อเฉพาะไฟล์ที่ยังไม่เสร็จ';
+        }
         throw new Error(detail);
       }
       if (data?.error) throw new Error(data.error);
       return data;
+    };
+
+    const AI_DOCUMENT_CATEGORIES = {
+      documents: ['source_document', 'instruction', 'raw_result_image', 'antibody_panel'],
+      answers: ['source_document', 'instruction', 'raw_result_image', 'antibody_panel', 'submission_form', 'official_result', 'participant_summary'],
+      historical: ['source_document', 'instruction', 'raw_result_image', 'antibody_panel', 'submission_form', 'official_result', 'participant_summary'],
+    };
+
+    const updateAiProgress = (step, total, title, detail = '') => {
+      const target = document.getElementById('document-ai-progress');
+      if (!target) return;
+      const safeTotal = Math.max(1, Number(total || 1));
+      const safeStep = Math.max(0, Math.min(safeTotal, Number(step || 0)));
+      const percent = Math.round((safeStep / safeTotal) * 100);
+      target.innerHTML = `
+        <div class="notice info"><strong>${esc(title)}</strong><br><span class="small">${esc(detail)}</span></div>
+        <div style="height:14px"></div>
+        <div style="height:12px;border-radius:999px;background:#e8eef5;overflow:hidden">
+          <div style="height:100%;width:${percent}%;background:#5aaee6;transition:width .25s ease"></div>
+        </div>
+        <div class="small muted" style="margin-top:8px">ขั้นตอน ${safeStep}/${safeTotal} · ${percent}%</div>
+        <div class="small muted" style="margin-top:12px">กรุณาอย่าปิด รีเฟรช ออกจากระบบ หรืออัปโหลดไฟล์เพิ่มจนกว่าจะเสร็จ</div>`;
+    };
+
+    const loadDocumentsForAI = async (mode) => {
+      const categories = AI_DOCUMENT_CATEGORIES[mode] || AI_DOCUMENT_CATEGORIES.documents;
+      const { data, error } = await state.supabase
+        .from('ec_round_documents')
+        .select('id,category,title,file_name,file_size,ai_extraction_status,ai_extraction_file_size')
+        .eq('round_id', round.id)
+        .is('archived_at', null)
+        .in('category', categories)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    };
+
+    const extractDocumentsOneByOne = async (mode, progressState) => {
+      const docs = await loadDocumentsForAI(mode);
+      const pending = docs.filter((doc) =>
+        doc.ai_extraction_status !== 'completed'
+        || Number(doc.ai_extraction_file_size || 0) !== Number(doc.file_size || 0));
+
+      for (const doc of pending) {
+        progressState.step += 1;
+        updateAiProgress(
+          progressState.step,
+          progressState.total,
+          `กำลังอ่านไฟล์ ${progressState.step}/${progressState.total}`,
+          `${DOCUMENT_CATEGORY_LABELS[doc.category] || doc.category} · ${doc.file_name}`,
+        );
+        try {
+          await invokeDocumentAI({
+            action: 'extract_document',
+            round_id: round.id,
+            document_id: doc.id,
+          });
+        } catch (error) {
+          const detail = friendlyError(error);
+          try {
+            await state.supabase.from('ec_round_documents').update({
+              ai_extraction_status: 'failed',
+              ai_extraction_error: detail,
+            }).eq('id', doc.id).eq('round_id', round.id);
+          } catch (_) { /* best effort only */ }
+          throw new Error(`ไฟล์ “${doc.file_name}” อ่านไม่สำเร็จ: ${detail}`);
+        }
+      }
+      return { docs, extractedCount: pending.length };
+    };
+
+    const showAiSuccess = (title, message) => {
+      showModal(title,
+        `<div class="notice success"><strong>ดำเนินการเสร็จแล้ว</strong><br>${esc(message)}</div>
+         <div style="height:12px"></div>
+         <div class="small muted">ระบบบันทึกผลเรียบร้อย สามารถเปิดหน้าการประเมินความสามารถเพื่อตรวจแบบกรอก ข้อสอบ และเฉลยได้</div>`,
+        `<button class="btn btn-outline" data-close-modal>ปิด</button><button class="btn btn-primary" id="open-generated-competency">เปิดผล Competency</button>`,
+        true);
+      document.getElementById('open-generated-competency')?.addEventListener('click', () => {
+        closeModal();
+        navigate(`round/${round.id}/competency`);
+      });
     };
 
     const openBundleModal = (mode) => {
@@ -2195,7 +2295,8 @@
         ${isHistoricalBundle ? '<div class="notice info">เมื่อน้องส่งคำตอบ ระบบจะแสดงเฉลยและคำอธิบายทันทีสำหรับรอบย้อนหลังนี้</div>' : ''}
         <label><input type="checkbox" name="confirm_privacy" required> ยืนยันว่าไฟล์ไม่มีชื่อผู้ป่วย HN หรือข้อมูลส่วนบุคคลที่ไม่ควรส่งไปประมวลผล</label>
         ${mode === 'answers' || isHistoricalBundle ? '<div class="notice info">ระบบใช้ Official Evaluation สำหรับ Intended Response/Grade และใช้ Participant Summary เฉพาะ peer comparison หรือ Educational Challenge ผลที่ห้องส่งจะไม่ถูกใช้เป็นเฉลย</div>' : ''}
-        <div class="small muted">ระบบใช้ประเภทเอกสารเป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่ รายละเอียดอยู่ในคู่มือการใช้งาน</div>
+        <div class="notice"><strong>ระบบรุ่นนี้อ่านไฟล์ทีละฉบับ</strong><br><span class="small">หาก Supabase ตัดการทำงาน ระบบจะจำไฟล์ที่อ่านสำเร็จแล้ว เมื่อกดใหม่จะทำต่อเฉพาะไฟล์ที่เหลือ ไม่เริ่มทั้งหมดใหม่</span></div>
+        <div class="small muted">Antigram/Panel cell ให้เลือกประเภท “แผงเซลล์ Antibody Identification / Antigram” เพื่อใช้คู่กับภาพผล Ab ID</div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="confirm-document-ai-bundle">เริ่มสร้าง</button>`, true);
 
       document.getElementById('confirm-document-ai-bundle')?.addEventListener('click', async () => {
@@ -2204,41 +2305,70 @@
         const fd = new FormData(form);
         const questionCount = Number(fd.get('question_count') || 12);
         const replaceDrafts = fd.get('replace_drafts') === 'on';
-        closeModal();
+
         try {
           setBusy(true);
+          const currentDocs = await loadDocumentsForAI(mode);
+          const pendingCount = currentDocs.filter((doc) =>
+            doc.ai_extraction_status !== 'completed'
+            || Number(doc.ai_extraction_file_size || 0) !== Number(doc.file_size || 0)).length;
+          const actionCount = mode === 'documents' ? 2 : mode === 'answers' ? 1 : 3;
+          const progressState = { step: 0, total: pendingCount + actionCount };
+
+          showModal('กำลังประมวลผลเอกสาร', '<div id="document-ai-progress"></div>', '', true, true);
+          updateAiProgress(0, progressState.total, 'กำลังเตรียมรายการไฟล์', `พบไฟล์ที่ต้องอ่านใหม่ ${pendingCount} ไฟล์`);
+
+          await extractDocumentsOneByOne(mode, progressState);
+
+          let questionResult = null;
           if (mode === 'documents' || mode === 'historical') {
-            toast('กำลังสร้างแบบกรอก คำแนะนำ และข้อสอบ กรุณาอย่ากดซ้ำ', 'info', 6000);
+            progressState.step += 1;
+            updateAiProgress(progressState.step, progressState.total, 'กำลังสร้างแบบกรอกและคำแนะนำ', 'ใช้ข้อมูลสกัดจากฟอร์มต้นฉบับและคู่มือ');
             await invokeDocumentAI({ action: 'generate_form_instructions', round_id: round.id });
-            const questionResult = await invokeDocumentAI({
+
+            progressState.step += 1;
+            updateAiProgress(progressState.step, progressState.total, 'กำลังสร้างข้อสอบ Competency', `เป้าหมายประมาณ ${questionCount} ข้อ`);
+            questionResult = await invokeDocumentAI({
               action: 'generate_questions',
               round_id: round.id,
               question_count: questionCount,
-              replace_ai_drafts: replaceDrafts
+              replace_ai_drafts: replaceDrafts,
             });
+
             if (mode === 'documents') {
-              toast(`สร้างแบบกรอก คำแนะนำ และข้อสอบฉบับร่าง ${questionResult.generated_count || 0} ข้อแล้ว`, 'success', 7000);
-              navigate(`round/${round.id}/competency`);
+              setBusy(false);
+              showAiSuccess('สร้างเอกสารและข้อสอบสำเร็จ', `สร้างข้อสอบฉบับร่าง ${questionResult.generated_count || 0} ข้อแล้ว`);
               return;
             }
           }
 
+          progressState.step += 1;
+          updateAiProgress(progressState.step, progressState.total, 'กำลังสร้างเฉลยและสรุปผล', 'กำลังเทียบ Official Evaluation กับ Participant Summary');
           const answerResult = await invokeDocumentAI({
             action: 'generate_answers',
             round_id: round.id,
-            release_answers_after_submit: isHistoricalBundle
+            release_answers_after_submit: isHistoricalBundle,
           });
+
           const manualReviewHint = Number(answerResult.manual_review_count || 0) > 0
-            ? ` · มี ${answerResult.manual_review_count} ข้อที่หลักฐานไม่พอและต้องตรวจเอง`
+            ? ` มี ${answerResult.manual_review_count} ข้อที่หลักฐานไม่พอและต้องตรวจเอง`
             : '';
-          toast(isHistoricalBundle
-            ? `สร้างย้อนหลังครบชุดแล้ว พร้อมเฉลย ${answerResult.generated_count || 0} ข้อ และตั้งให้แสดงเฉลยหลังส่งคำตอบ${manualReviewHint}`
-            : `สร้างเฉลย ${answerResult.generated_count || 0} ข้อและสรุปผลแล้ว${manualReviewHint}`, Number(answerResult.manual_review_count || 0) > 0 ? 'warning' : 'success', 8500);
-          navigate(`round/${round.id}/competency`);
-        } catch (generationError) {
-          toast(friendlyError(generationError), 'danger', 8000);
-        } finally {
           setBusy(false);
+          showAiSuccess(
+            isHistoricalBundle ? 'สร้างย้อนหลังครบชุดสำเร็จ' : 'สร้างเฉลยและสรุปผลสำเร็จ',
+            isHistoricalBundle
+              ? `สร้างเฉลย ${answerResult.generated_count || 0} ข้อและตั้งให้แสดงหลังส่งคำตอบแล้ว.${manualReviewHint}`
+              : `สร้างเฉลย ${answerResult.generated_count || 0} ข้อและสรุปผลแล้ว.${manualReviewHint}`,
+          );
+        } catch (generationError) {
+          setBusy(false);
+          const message = friendlyError(generationError);
+          showModal('สร้างข้อมูลไม่สำเร็จ',
+            `<div class="notice danger"><strong>ระบบหยุดที่ขั้นตอนปัจจุบัน</strong><br>${esc(message)}</div>
+             <div style="height:12px"></div>
+             <div class="notice info">ไฟล์ที่ AI อ่านสำเร็จก่อนเกิดปัญหาถูกบันทึกไว้แล้ว กดสร้างใหม่เพื่อทำต่อเฉพาะไฟล์ที่เหลือ</div>`,
+            `<button class="btn btn-primary" data-close-modal>ปิดและกลับไปตรวจไฟล์</button>`,
+            true);
         }
       });
     };
@@ -2295,6 +2425,8 @@
             ? ' อัปโหลด Official Evaluation แล้ว สามารถสร้างเฉลยและสรุปผลได้ หากมี Educational Challenge ให้เพิ่ม Participant Summary ด้วย'
           : category === 'participant_summary'
             ? ' อัปโหลด Participant Summary แล้ว ระบบจะใช้เปรียบเทียบกับผู้เข้าร่วมและประเมิน Educational Challenge โดยไม่ใช้ร้อยละเป็นคะแนนของห้อง'
+          : category === 'antibody_panel'
+            ? ' อัปโหลด Antigram/Panel cell แล้ว ระบบจะใช้ antigen profile จับคู่กับภาพผล Antibody Identification และจะไม่ถือเป็นผลตัวอย่างหรือเฉลย'
             : '';
         toast(`อัปโหลดเรียบร้อย${nextHint}`, 'success'); route();
       });
@@ -2326,7 +2458,17 @@
         const hasReplacement = replacement instanceof File && replacement.size > 0;
         if (hasReplacement) { const fileError = validateFile(replacement); if (fileError) return toast(fileError, 'danger'); }
         const category = String(fd.get('category'));
-        const payload = { category, title: String(fd.get('title')).trim(), visibility: usedInQuiz ? 'staff' : String(fd.get('visibility')) };
+        const payload = {
+          category,
+          title: String(fd.get('title')).trim(),
+          visibility: usedInQuiz ? 'staff' : String(fd.get('visibility')),
+          ai_extraction: null,
+          ai_extraction_status: 'pending',
+          ai_extracted_at: null,
+          ai_extraction_model: null,
+          ai_extraction_file_size: null,
+          ai_extraction_error: null,
+        };
         let newPath = null;
         if (hasReplacement) {
           newPath = makePath(category, replacement);
@@ -3489,19 +3631,20 @@
           <p><strong>เอกสารต้นฉบับจากผู้ให้บริการ</strong> ใช้สร้างรายการตัวอย่าง รายการทดสอบ ช่องกรอก หน่วย จำนวนทศนิยม และโครงสร้างฟอร์ม</p>
           <p><strong>คู่มือหรือคำแนะนำ</strong> ใช้แปลวิธีปฏิบัติ ข้อควรระวัง และ Master List คู่มือไม่ถือเป็นเฉลยทางการ</p>
           <p><strong>ภาพผลทดสอบดิบ</strong> ใช้สร้าง Competency สำหรับเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง ภาพ Ab screen รวม RT/IAT ได้ โดยถามผลรวม Positive/Negative</p>
+          <p><strong>แผงเซลล์ Antibody Identification / Antigram</strong> ใช้เก็บ antigen profile ของ screening cells และ panel cells เพื่อเทียบกับภาพผล Ab ID ต้องอัปโหลดแยกจากภาพผลดิบ และไม่ถือเป็นผลของตัวอย่างหรือเฉลย</p>
           <p><strong>แบบฟอร์มผลที่ส่งผู้ให้บริการ</strong> ใช้ยืนยันว่าห้องปฏิบัติการส่งคำตอบอะไร แต่ระบบห้ามใช้เป็นเฉลย</p>
           <p><strong>รายงานผลประเมินอย่างเป็นทางการ (Official Evaluation)</strong> ใช้ Intended Response, Grade และคะแนนเป็นแหล่งหลักของเฉลย</p>
           <p><strong>รายงานเปรียบเทียบผู้เข้าร่วม (Participant Summary)</strong> ใช้ดูสัดส่วน/consensus ของห้องอื่น และใช้ประเมิน Educational Challenge หรือรายการ See Note [26] เท่านั้น ร้อยละในเอกสารนี้ไม่ใช่คะแนนของห้องเรา</p>
           <p><strong>กรณีหนึ่งตัวอย่างมีหลายการทดสอบ</strong></p><ul><li>ระบบแยกเป็นกลุ่มการทดสอบ เช่น ABO/Rh, Antibody screen, Antibody identification, Eluate identification, Crossmatch, DAT, CBC, WBC count, Titer และ Antigen typing</li><li>ตัวอย่างเดียวกันปรากฏในหลายกลุ่มได้ ไม่ถือว่าซ้ำ</li><li>ต้องยึดฟอร์มต้นฉบับว่าแต่ละตัวอย่างทำอะไร ห้ามนำทุกการทดสอบไปใส่ทุกตัวอย่าง</li><li>ผลเชิงตัวเลขต้องคงหน่วยและจำนวนทศนิยมตามฟอร์ม</li><li>Antigen typing แบบเลือกชนิด antigen ต้องมีช่อง “ชื่อ antigen” คู่กับ “ผล” ตามจำนวนตำแหน่งจริง</li></ul>
           <p><strong>ชื่อไฟล์สำหรับเอกสารทั้งฉบับ</strong> ใช้รูปแบบ <code>ผู้ให้บริการ-รอบ_โปรแกรม_บทบาทเอกสาร.pdf</code></p>
-          <ul><li>ฟอร์มเปล่า J: <code>CAP-JA-2026_J_BlankResultForm.pdf</code></li><li>ฟอร์มเปล่า JE1: <code>CAP-JA-2026_JE1_BlankResultForm.pdf</code></li><li>คู่มือ: <code>CAP-JA-2026_KitInstruction_J-JE1.pdf</code></li><li>ผลที่ห้องส่ง J: <code>CAP-JA-2026_J_SubmittedResultForm.pdf</code></li><li>ผลที่ห้องส่ง JE1: <code>CAP-JA-2026_JE1_SubmittedResultForm.pdf</code></li><li>Official Evaluation J: <code>CAP-JA-2026_J_OfficialEvaluation.pdf</code></li><li>Official Evaluation Educational: <code>CAP-JA-2026_JE1_OfficialEvaluation_EducationalChallenge.pdf</code></li><li>Participant Summary: <code>CAP-JA-2026_ParticipantSummary_PeerComparison.pdf</code></li></ul>
+          <ul><li>ฟอร์มเปล่า J: <code>CAP-JA-2026_J_BlankResultForm.pdf</code></li><li>ฟอร์มเปล่า JE1: <code>CAP-JA-2026_JE1_BlankResultForm.pdf</code></li><li>คู่มือ: <code>CAP-JA-2026_KitInstruction_J-JE1.pdf</code></li><li>ผลที่ห้องส่ง J: <code>CAP-JA-2026_J_SubmittedResultForm.pdf</code></li><li>ผลที่ห้องส่ง JE1: <code>CAP-JA-2026_JE1_SubmittedResultForm.pdf</code></li><li>Official Evaluation J: <code>CAP-JA-2026_J_OfficialEvaluation.pdf</code></li><li>Official Evaluation Educational: <code>CAP-JA-2026_JE1_OfficialEvaluation_EducationalChallenge.pdf</code></li><li>Participant Summary: <code>CAP-JA-2026_ParticipantSummary_PeerComparison.pdf</code></li><li>Panel A Antigram: <code>CAP-JA-2026_AbID_PanelA_Lot8RA453_Antigram.pdf</code></li></ul>
           <p><strong>ชื่อไฟล์สำหรับภาพผลดิบ</strong> ใช้รูปแบบ <code>ผู้ให้บริการ-รอบ_ตัวอย่าง_ชนิดการทดสอบ_RawResult</code> หนึ่งการทดสอบหลายตัวอย่างใช้รหัสโจทย์หลักได้ ไม่ต้องใช้ MultiTest; ใช้ <code>MultiTest</code> เฉพาะภาพเดียวที่มีหลายชนิดการทดสอบ</p>
           <ul><li>ABO: <code>CAP-JA-2026_J-01_ABO_RawResult.png</code></li><li>Ab screen รวม RT/IAT: <code>CAP-JA-2026_J-01_AbScreen_RawResult.png</code></li><li>Ab identification: <code>CAP-JA-2026_J-01_AbID_PanelA_Cell01-06_RawResult.jpg</code></li><li>Crossmatch หลายตัวอย่างในโจทย์ J-06: <code>CAP-JA-2026_J-06_X-Match_RawResult.png</code></li><li>หลายการทดสอบในภาพเดียว: <code>CAP-JA-2026_J-01_MultiTest_ABO-Rh-AbScreen_RawResult.png</code></li></ul>
           <p>สำหรับ CAP หากฟอร์มระบุช่องและคู่มือระบุ code กับชื่อ ระบบจะรวมเป็นตัวเลือกแบบ “ชื่อ (CAP code)” โดยไม่สร้างรหัสขึ้นเอง</p>
         </div></details>
         <details><summary>ผลรายบุคคลและสรุปผลห้องปฏิบัติการ</summary><div class="guide-body"><p>ผู้ปฏิบัติแต่ละคนบันทึกผลของตนเองแยกกัน เมื่อส่งครบ ระบบจะเติมค่าที่ตรงกันในสรุปผลห้องให้อัตโนมัติ</p><p>ค่าที่ไม่ตรงกันจะถูกทำเครื่องหมายให้ผู้ทบทวนตรวจและเลือกผลที่ถูกต้องก่อนส่งให้ผู้จัดการคุณภาพ</p></div></details>
         <details><summary>การตรวจ รับรอง และรับทราบ</summary><div class="guide-body"><p>ผู้ทบทวนตรวจผลห้องและหลักฐาน จากนั้นส่งให้ผู้จัดการคุณภาพรับรอง เมื่อรับรองแล้วแพทย์จึงกดรับทราบได้</p><p>ผู้จัดการคุณภาพต้องรับรองทุกรอบ แม้เป็นหนึ่งในผู้ปฏิบัติจริง โดยต้องสลับ “ใช้งานในบทบาท” ให้ตรงกับขั้นตอน เช่น กรอกผลในบทบาทเจ้าหน้าที่ และรับรองในบทบาทผู้จัดการคุณภาพ</p><p>ประวัติการอนุมัติจะแสดงชื่อพร้อมบทบาทที่ใช้ลงนามในแต่ละครั้ง ส่วนผู้ทบทวนยังต้องเป็นคนละคนกับผู้ปฏิบัติจริงทั้งสองคน</p><p>การส่งกลับต้องระบุเหตุผล เพื่อให้ผู้เกี่ยวข้องแก้ไขเฉพาะจุด</p></div></details>
-        <details><summary>การสร้างจากเอกสารและรายงานผล</summary><div class="guide-body"><p><strong>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</strong> อ่านฟอร์มเปล่า คู่มือ และภาพผลดิบ แล้วสร้างฉบับร่างให้ QM ตรวจ</p><p><strong>สร้างเฉลยและสรุปจาก Evaluation / Participant Summary</strong> ต้องมี Official Evaluation ก่อน ระบบใช้ Intended Response เป็นเฉลยของรายการ graded และใช้ Participant Summary เฉพาะ Educational Challenge</p><p>ระบบแยกสรุปเป็น 5 ส่วน: ผลของห้อง, ผลที่ควรเป็น, คะแนน/Grade, เปรียบเทียบผู้เข้าร่วม และหัวข้อทบทวน</p><p>หาก Educational Challenge ไม่มี Participant Summary หรือ consensus ไม่ชัด ระบบจะไม่เดาเฉลยและทำเครื่องหมายให้ QM ตรวจเอง</p><p><strong>สร้างย้อนหลังครบชุด</strong> ใช้กับรอบที่ได้รับผลแล้ว ระบบสร้างแบบกรอก คำแนะนำ ข้อสอบ เฉลย และสรุป พร้อมตั้งให้เห็นเฉลยหลังส่งคำตอบ</p><p>ข้อสอบทุกข้อยังเป็นฉบับร่างจนกว่า QM จะตรวจและกดเผยแพร่</p></div></details>
+        <details><summary>การสร้างจากเอกสารและรายงานผล</summary><div class="guide-body"><p><strong>ระบบอ่านไฟล์ทีละฉบับ</strong> และบันทึกสถานะ “รออ่าน / กำลังอ่าน / AI อ่านแล้ว / อ่านไม่สำเร็จ” ไว้ในตาราง หากเกิดรหัส 546 ให้กดสร้างใหม่ ระบบจะทำต่อเฉพาะไฟล์ที่เหลือ</p><p><strong>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</strong> อ่านฟอร์มเปล่า คู่มือ ภาพผลดิบ และ Antigram/Panel cell แล้วสร้างฉบับร่างให้ QM ตรวจ</p><p><strong>สร้างเฉลยและสรุปจาก Evaluation / Participant Summary</strong> ต้องมี Official Evaluation ก่อน ระบบใช้ Intended Response เป็นเฉลยของรายการ graded และใช้ Participant Summary เฉพาะ Educational Challenge</p><p>ระบบแยกสรุปเป็น 5 ส่วน: ผลของห้อง, ผลที่ควรเป็น, คะแนน/Grade, เปรียบเทียบผู้เข้าร่วม และหัวข้อทบทวน</p><p>หาก Educational Challenge ไม่มี Participant Summary หรือ consensus ไม่ชัด ระบบจะไม่เดาเฉลยและทำเครื่องหมายให้ QM ตรวจเอง</p><p><strong>สร้างย้อนหลังครบชุด</strong> ใช้กับรอบที่ได้รับผลแล้ว ระบบสร้างแบบกรอก คำแนะนำ ข้อสอบ เฉลย และสรุป พร้อมตั้งให้เห็นเฉลยหลังส่งคำตอบ</p><p>ข้อสอบทุกข้อยังเป็นฉบับร่างจนกว่า QM จะตรวจและกดเผยแพร่</p></div></details>
         <details><summary>การแจ้งเตือน EQA และ Competency</summary><div class="guide-body"><p>ผู้ดูแลระบบหรือผู้จัดการคุณภาพตั้งค่าได้ที่เมนู <strong>แจ้งเตือน / Google Drive</strong> ระบบตรวจรายการ EQA ใกล้ครบกำหนด แบบทดสอบที่ยังไม่ส่ง แบบทบทวน ผู้ทบทวนที่ยังไม่ตรวจ และรายการรอผู้จัดการคุณภาพ</p><p>Email ส่งถึงผู้เกี่ยวข้องตามหน้าที่ ส่วน Google Chat ใช้แจ้งภาพรวมของหน่วยงาน โดยค่าเริ่มต้นไม่แสดงชื่อผู้รับการประเมินรายบุคคล</p><p>ปุ่ม <strong>ตรวจและส่งตอนนี้</strong> ใช้ทดสอบหรือตรวจรายการทันที ส่วน Trigger ใน Google Apps Script จะเรียกตรวจอัตโนมัติทุกวัน</p></div></details>
         <details><summary>แบบทบทวนหลังผลประเมินไม่ผ่าน</summary><div class="guide-body"><p>เมื่อผู้จัดการคุณภาพรับรองแล้วพบข้อที่ตอบไม่ถูกหรือหัวข้อการปฏิบัติที่ต้องปรับปรุง ระบบจะเปลี่ยนสถานะเป็น <strong>ต้องทบทวน</strong></p><p>เจ้าหน้าที่บันทึกสาเหตุ ความเข้าใจหรือวิธีที่ถูกต้อง และแผนการนำไปใช้กับงาน จากนั้นส่งให้ผู้ทบทวนตรวจ ผู้ทบทวนสามารถรับรองหรือส่งกลับแก้ไขได้</p></div></details>
         <details><summary>การเก็บ PDF ใน Google Drive</summary><div class="guide-body"><p>รายงานทะเบียน รอบ EQA และ Competency สามารถกดเก็บใน Google Drive ได้จากหน้า รายงาน / ทะเบียน หรือหน้าการประเมิน ระบบจะสร้างไฟล์ฉบับใหม่พร้อมเลขเวอร์ชัน และเก็บลิงก์ไว้ในระบบ</p><p>เมื่อเปิดการเก็บอัตโนมัติ ระบบจะสำรองไฟล์ในจุดสำคัญ เช่น ส่งคำตอบ ผู้ทบทวนตรวจ ผู้จัดการคุณภาพรับรอง ส่ง Reflection และปิดรอบ โดยไม่เขียนทับไฟล์เดิม</p></div></details>
