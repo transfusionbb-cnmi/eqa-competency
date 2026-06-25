@@ -622,3 +622,87 @@ tr:last-child td { border-bottom: 0; }
   .header-actions { width: 100%; }
   .header-actions .btn { flex: 1 1 180px; }
 }
+
+
+/* v2.2.5 — vertical round submenu and easier CAP result entry */
+.round-subnav {
+  margin: 2px 0 10px 39px;
+  padding: 7px 0 7px 10px;
+  border-left: 2px solid rgba(23, 70, 106, .2);
+  display: grid;
+  gap: 3px;
+}
+.round-subnav-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: rgba(23, 63, 93, .62);
+  padding: 3px 8px 6px;
+}
+.round-subnav-btn {
+  border: 0;
+  background: transparent;
+  color: rgba(21, 55, 80, .82);
+  border-radius: 10px;
+  padding: 8px 9px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.round-subnav-btn:hover,
+.round-subnav-btn.active { background: rgba(255,255,255,.7); color: #173f5d; }
+.round-subnav-dot { width: 7px; height: 7px; border-radius: 50%; background: rgba(23,70,106,.28); margin-top: 4px; flex: 0 0 auto; }
+.round-subnav-btn.active .round-subnav-dot { background: var(--primary-dark); }
+.round-mobile-nav { display: none; margin-bottom: 14px; }
+.round-mobile-nav label { display: block; margin-bottom: 6px; font-weight: 800; }
+
+.result-instruction {
+  border: 1px solid #bcdff7;
+  background: #eef8ff;
+  border-radius: 16px;
+  padding: 15px 17px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  color: #24577a;
+}
+.result-instruction ol { margin: 8px 0 0 20px; padding: 0; line-height: 1.55; }
+.cap-specimen-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.cap-specimen-card { border: 1px solid var(--line); border-radius: 15px; background: #fbfdff; overflow: hidden; }
+.cap-specimen-title { padding: 12px 14px; background: #eef7fd; border-bottom: 1px solid var(--line); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cap-specimen-title strong { font-size: 18px; }
+.cap-field-group { padding: 13px 14px; border-bottom: 1px dashed var(--line); }
+.cap-field-group:last-child { border-bottom: 0; }
+.cap-field-group h4 { margin: 0 0 10px; color: #355a75; }
+.antibody-workup-details { margin-top: 12px; border: 1px solid #d8e8f3; border-radius: 13px; background: #fff; overflow: hidden; }
+.antibody-workup-details > summary { cursor: pointer; list-style: none; padding: 11px 12px; font-weight: 800; display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.antibody-workup-details > summary::-webkit-details-marker { display: none; }
+.antibody-workup-details[open] > summary { border-bottom: 1px solid var(--line); background: #f7fbfe; }
+.workup-help { padding: 10px 12px; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.workup-section { padding: 0 12px 12px; }
+.workup-section-head, .workup-row-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; }
+.workup-list { display: grid; gap: 10px; }
+.workup-row { border: 1px solid var(--line); border-radius: 12px; padding: 10px; background: #fff; }
+.extra-cell-row { background: #fffdf7; }
+.workup-empty { padding: 11px; border: 1px dashed var(--line); border-radius: 11px; color: var(--muted); font-size: 12px; text-align: center; }
+.modal-lg { width: min(1380px, 100%); }
+.modal-lg .modal-footer { position: sticky; bottom: -22px; background: rgba(255,255,255,.96); border-top: 1px solid var(--line); padding: 13px 0 3px; z-index: 3; }
+
+@media (max-width: 1100px) {
+  .cap-specimen-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 900px) {
+  .round-mobile-nav { display: block; }
+  .result-instruction { display: block; }
+  .result-instruction .badge { margin-top: 10px; }
+}
+@media (max-width: 720px) {
+  .cap-field-group .form-grid.cols-3,
+  .workup-row .form-grid.cols-3 { grid-template-columns: 1fr; }
+  .workup-row .field[style] { grid-column: auto !important; }
+  .cap-specimen-title { align-items: flex-start; }
+}

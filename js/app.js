@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System
+/* CNMI EQA and Competency Management System v2.2.5
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -101,7 +101,7 @@
     submission_evidence: 'ภาพหน้าจอ ใบยืนยัน หรือหลักฐานวันเวลาที่ส่งผล',
     official_result: 'Original Evaluation หรือรายงานที่มี Intended Response / Grade ใช้เป็นแหล่งหลักของเฉลยและคะแนน',
     participant_summary: 'Participant Summary หรือ PSR ใช้เทียบสัดส่วนคำตอบของห้องอื่น และใช้ประเมิน Educational Challenge',
-    antibody_panel: 'Antigram หรือ Panel cell profile ใช้จับคู่ปฏิกิริยากับ antigen profile สำหรับ Antibody Identification ไม่ใช่ภาพผลตัวอย่างและไม่ใช่เฉลย',
+    antibody_panel: 'Antigram หรือ Panel cell profile ใช้จับคู่ปฏิกิริยากับ antigen profile สำหรับ Antibody Identification อัปโหลดได้หลาย Panel/หลาย Lot และตั้งชื่อ Panel01, Panel02 ตามลำดับ ไม่ใช่ภาพผลตัวอย่างและไม่ใช่เฉลย',
     corrective_action: 'หลักฐานการแก้ไข ป้องกัน และติดตามประสิทธิผล',
     closure_report: 'รายงานสรุปเมื่อปิดรอบ',
     other: 'เอกสารประกอบอื่นที่ไม่เข้ากลุ่มข้างต้น',
@@ -594,6 +594,7 @@
           ${isCompetencyParticipant() ? navItem('my-competency', '✓', 'การประเมินของฉัน', route) : ''}
           <div class="nav-section">งาน EQA</div>
           ${navItem('rounds', '▦', 'รอบ EQA', route)}
+          ${roundSubmenu(route)}
           ${navItem('reports', '▤', 'รายงาน / ทะเบียน', route)}
           <div class="nav-section">การจัดการ</div>
           ${navItem('users', '♙', 'ผู้ใช้งานและสิทธิ์', route)}
@@ -1069,8 +1070,14 @@
     ['submission', '7. หลักฐานการส่ง'], ['official', '8. ผลประเมินกลับ'], ['capa', '9. การแก้ไขและป้องกัน'], ['competency', '10. การประเมินความสามารถ']
   ];
 
-  function roundTabs(roundId, active) {
-    return `<div class="tabs">${ROUND_TABS.map(([key, label]) => `<button class="tab-btn ${active === key ? 'active' : ''}" data-round-tab="${key}">${label}</button>`).join('')}</div>`;
+  function roundSubmenu(route) {
+    if (!route.startsWith('round/') || !state.currentRound?.id) return '';
+    const active = route.split('/')[2] || 'overview';
+    return `<div class="round-subnav"><div class="round-subnav-title">เมนูย่อยของรอบนี้</div>${ROUND_TABS.map(([key, label]) => `<button class="round-subnav-btn ${active === key ? 'active' : ''}" data-round-tab="${key}"><span class="round-subnav-dot"></span><span>${label}</span></button>`).join('')}</div>`;
+  }
+
+  function roundMobileSelector(active) {
+    return `<div class="round-mobile-nav"><label for="round-section-select">หัวข้อของรอบ</label><select class="select" id="round-section-select">${ROUND_TABS.map(([key, label]) => `<option value="${key}" ${active === key ? 'selected' : ''}>${label}</option>`).join('')}</select></div>`;
   }
 
   function roundStepper(round) {
@@ -1124,12 +1131,13 @@
       <div class="page-header"><div><h1>${esc(round.provider)} ${esc(round.round_code)} ${isHistoricalRound(round) ? '<span class="badge info">ข้อมูลย้อนหลัง</span>' : ''}</h1><p>${esc(round.program_name)} · ชุดตัวอย่าง ${esc(round.kit_number || '-')}</p></div>
       <div class="header-actions">${isHistoricalRound(round) ? `<span class="badge">${esc(labelFrom(HISTORICAL_REVIEW_LABELS, round.historical_review_status, 'กำลังตรวจข้อมูลย้อนหลัง'))}</span>` : ''}${statusBadge(round.status)}<button class="btn btn-outline" id="back-rounds">กลับ</button></div></div>
       <div class="card">${roundStepper(round)}</div><div style="height:14px"></div>
-      ${roundTabs(round.id, tab)}
+      ${roundMobileSelector(tab)}
       ${tabContent}
     </section>`;
     appEl.innerHTML = shell(content, `${round.provider} ${round.round_code}`); bindShell();
     document.getElementById('back-rounds')?.addEventListener('click', () => navigate('rounds'));
     document.querySelectorAll('[data-round-tab]').forEach((b) => b.addEventListener('click', () => navigate(`round/${round.id}/${b.dataset.roundTab}`)));
+    document.getElementById('round-section-select')?.addEventListener('change', (event) => navigate(`round/${round.id}/${event.currentTarget.value}`));
     bindRoundTab(round, tab);
   }
 
@@ -1413,7 +1421,8 @@
   function defaultCapSpecimenPayload() {
     return {
       abo: '', abo_subgroup: '', rh: '', screen: '', antibody: '', additional_antibodies: '',
-      crossmatch: '', crossmatch_type: '', strength: '', notes: ''
+      crossmatch: '', crossmatch_type: '', strength: '', notes: '',
+      antibody_workup: { panels: [], extra_cells: [] }
     };
   }
 
@@ -1452,22 +1461,104 @@
     };
   }
 
-  function capSpecimenRows(payload, prefix, specimens, disabled) {
-    return specimens.map((specimen) => {
+  function workupPanelRowHtml(prefix, specimen, index, row = {}, disabled = false) {
+    return `<div class="workup-row" data-workup-panel data-specimen="${esc(specimen)}">
+      <div class="workup-row-head"><strong>Panel ${index + 1}</strong>${disabled ? '' : '<button type="button" class="btn btn-danger btn-sm" data-remove-workup-row>ลบ</button>'}</div>
+      <div class="form-grid cols-3">
+        <div class="field"><label>ชื่อ Panel / ลำดับ</label><input class="input" data-workup-field="label" value="${esc(row.label || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Panel A / Panel 2"></div>
+        <div class="field"><label>Lot</label><input class="input" data-workup-field="lot" value="${esc(row.lot || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น 8RA453"></div>
+        <div class="field"><label>ช่วง Cell</label><input class="input" data-workup-field="cell_range" value="${esc(row.cell_range || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Cell 01–11"></div>
+        <div class="field"><label>Phase / วิธีตรวจ</label><input class="input" data-workup-field="phase" value="${esc(row.phase || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น IAT, enzyme"></div>
+        <div class="field"><label>รูปแบบปฏิกิริยา</label><input class="input" data-workup-field="reaction_pattern" value="${esc(row.reaction_pattern || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Cell 1, 3, 5 = 2+"></div>
+        <div class="field"><label>สรุปจาก Panel นี้</label><input class="input" data-workup-field="interpretation" value="${esc(row.interpretation || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น เข้าได้กับ Anti-E"></div>
+      </div>
+    </div>`;
+  }
+
+  function workupExtraCellRowHtml(prefix, specimen, index, row = {}, disabled = false) {
+    return `<div class="workup-row extra-cell-row" data-workup-extra data-specimen="${esc(specimen)}">
+      <div class="workup-row-head"><strong>Extra cell ${index + 1}</strong>${disabled ? '' : '<button type="button" class="btn btn-danger btn-sm" data-remove-workup-row>ลบ</button>'}</div>
+      <div class="form-grid cols-3">
+        <div class="field"><label>ชื่อ Cell / รหัส</label><input class="input" data-workup-field="label" value="${esc(row.label || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Selected cell 01"></div>
+        <div class="field"><label>แหล่งที่มา / Lot</label><input class="input" data-workup-field="source" value="${esc(row.source || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Panel B Lot ..."></div>
+        <div class="field"><label>ใช้ยืนยันอะไร</label><input class="input" data-workup-field="purpose" value="${esc(row.purpose || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น rule out Anti-K / Rule of 3"></div>
+        <div class="field"><label>Phase</label><input class="input" data-workup-field="phase" value="${esc(row.phase || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น IAT"></div>
+        <div class="field" style="grid-column:span 2"><label>ผล</label><input class="input" data-workup-field="result" value="${esc(row.result || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น 0 / 2+ และข้อสรุป"></div>
+      </div>
+    </div>`;
+  }
+
+  function capAntibodyWorkup(payload, prefix, specimen, disabled) {
+    const x = payload.specimens?.[specimen] || defaultCapSpecimenPayload();
+    const panels = Array.isArray(x.antibody_workup?.panels) ? x.antibody_workup.panels : [];
+    const extraCells = Array.isArray(x.antibody_workup?.extra_cells) ? x.antibody_workup.extra_cells : [];
+    return `<details class="antibody-workup-details" ${panels.length || extraCells.length ? 'open' : ''}>
+      <summary>รายละเอียด Antibody Identification / Panel cell ${panels.length || extraCells.length ? `<span class="badge info">${panels.length} panel · ${extraCells.length} extra cell</span>` : '<span class="small muted">กรอกเมื่อมีการทำ Ab ID</span>'}</summary>
+      <div class="workup-help">หนึ่งตัวอย่างทำได้หลาย Panel และเพิ่ม Selected/Extra cell เพื่อยืนยันได้ ระบบจะเก็บแยกเป็นลำดับ ไม่บังคับว่าต้องมีเพียง Panel A</div>
+      <div class="workup-section">
+        <div class="workup-section-head"><strong>Panel ที่ใช้</strong>${disabled ? '' : `<button type="button" class="btn btn-outline btn-sm" data-add-workup-panel data-prefix="${esc(prefix)}" data-specimen="${esc(specimen)}">＋ เพิ่ม Panel</button>`}</div>
+        <div class="workup-list" data-panel-list data-prefix="${esc(prefix)}" data-specimen="${esc(specimen)}">${panels.map((row, index) => workupPanelRowHtml(prefix, specimen, index, row, disabled)).join('') || '<div class="workup-empty">ยังไม่ได้เพิ่ม Panel</div>'}</div>
+      </div>
+      <div class="workup-section">
+        <div class="workup-section-head"><strong>Selected / Extra cell สำหรับยืนยัน</strong>${disabled ? '' : `<button type="button" class="btn btn-outline btn-sm" data-add-workup-extra data-prefix="${esc(prefix)}" data-specimen="${esc(specimen)}">＋ เพิ่ม Extra cell</button>`}</div>
+        <div class="workup-list" data-extra-list data-prefix="${esc(prefix)}" data-specimen="${esc(specimen)}">${extraCells.map((row, index) => workupExtraCellRowHtml(prefix, specimen, index, row, disabled)).join('') || '<div class="workup-empty">ยังไม่ได้เพิ่ม Extra cell</div>'}</div>
+      </div>
+    </details>`;
+  }
+
+  function capSpecimenCards(payload, prefix, specimens, disabled) {
+    return `<div class="cap-specimen-grid">${specimens.map((specimen) => {
       const x = payload.specimens?.[specimen] || defaultCapSpecimenPayload();
-      return `<tr>
-        <td><strong>${esc(specimen)}</strong></td>
-        <td><select class="select" name="${prefix}_${specimen}_abo" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.abo, x.abo)}</select></td>
-        <td><select class="select" name="${prefix}_${specimen}_abo_subgroup" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.subgroup, x.abo_subgroup)}</select></td>
-        <td><select class="select" name="${prefix}_${specimen}_rh" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.rh, x.rh)}</select></td>
-        <td><select class="select" name="${prefix}_${specimen}_screen" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.screen, x.screen)}</select></td>
-        <td><input class="input" name="${prefix}_${specimen}_antibody" value="${esc(x.antibody || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น 184 ไม่พบ / 137 Anti-s"></td>
-        <td><input class="input" name="${prefix}_${specimen}_additional_antibodies" value="${esc(x.additional_antibodies || '')}" ${disabled ? 'disabled' : ''} placeholder="ถ้ามี"></td>
-        <td><select class="select" name="${prefix}_${specimen}_crossmatch" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.crossmatch, x.crossmatch)}</select></td>
-        <td><select class="select" name="${prefix}_${specimen}_crossmatch_type" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.crossmatchType, x.crossmatch_type)}</select></td>
-        <td><select class="select" name="${prefix}_${specimen}_strength" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.strength, x.strength)}</select></td>
-      </tr>`;
-    }).join('');
+      return `<section class="cap-specimen-card">
+        <div class="cap-specimen-title"><strong>${esc(specimen)}</strong><span class="small muted">กรอกเฉพาะรายการที่ทำจริง</span></div>
+        <div class="cap-field-group"><h4>1) ABO / Rh</h4><div class="form-grid cols-3">
+          <div class="field"><label>ABO</label><select class="select" name="${prefix}_${specimen}_abo" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.abo, x.abo)}</select></div>
+          <div class="field"><label>ABO subgroup</label><select class="select" name="${prefix}_${specimen}_abo_subgroup" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.subgroup, x.abo_subgroup)}</select></div>
+          <div class="field"><label>Rh</label><select class="select" name="${prefix}_${specimen}_rh" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.rh, x.rh)}</select></div>
+        </div></div>
+        <div class="cap-field-group"><h4>2) Antibody screen / Identification</h4><div class="form-grid cols-3">
+          <div class="field"><label>Antibody screen</label><select class="select" name="${prefix}_${specimen}_screen" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.screen, x.screen)}</select></div>
+          <div class="field"><label>Primary antibody</label><input class="input" name="${prefix}_${specimen}_antibody" value="${esc(x.antibody || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Anti-E (CAP 115) หรือ 184"></div>
+          <div class="field"><label>Additional antibodies</label><input class="input" name="${prefix}_${specimen}_additional_antibodies" value="${esc(x.additional_antibodies || '')}" ${disabled ? 'disabled' : ''} placeholder="เว้นว่างถ้าไม่มี"></div>
+        </div>${capAntibodyWorkup(payload, prefix, specimen, disabled)}</div>
+        <div class="cap-field-group"><h4>3) Crossmatch กับ J-06R</h4><div class="form-grid cols-3">
+          <div class="field"><label>ผล Crossmatch</label><select class="select" name="${prefix}_${specimen}_crossmatch" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.crossmatch, x.crossmatch)}</select></div>
+          <div class="field"><label>ชนิด Crossmatch</label><select class="select" name="${prefix}_${specimen}_crossmatch_type" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.crossmatchType, x.crossmatch_type)}</select></div>
+          <div class="field"><label>ความแรง</label><select class="select" name="${prefix}_${specimen}_strength" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.strength, x.strength)}</select></div>
+        </div></div>
+      </section>`;
+    }).join('')}</div>`;
+  }
+
+  function bindCapWorkupControls(root = document) {
+    root.querySelectorAll('[data-add-workup-panel]').forEach((button) => {
+      button.onclick = () => {
+        const list = root.querySelector(`[data-panel-list][data-prefix="${CSS.escape(button.dataset.prefix)}"][data-specimen="${CSS.escape(button.dataset.specimen)}"]`);
+        if (!list) return;
+        list.querySelector('.workup-empty')?.remove();
+        const index = list.querySelectorAll('[data-workup-panel]').length;
+        list.insertAdjacentHTML('beforeend', workupPanelRowHtml(button.dataset.prefix, button.dataset.specimen, index));
+        bindCapWorkupControls(root);
+      };
+    });
+    root.querySelectorAll('[data-add-workup-extra]').forEach((button) => {
+      button.onclick = () => {
+        const list = root.querySelector(`[data-extra-list][data-prefix="${CSS.escape(button.dataset.prefix)}"][data-specimen="${CSS.escape(button.dataset.specimen)}"]`);
+        if (!list) return;
+        list.querySelector('.workup-empty')?.remove();
+        const index = list.querySelectorAll('[data-workup-extra]').length;
+        list.insertAdjacentHTML('beforeend', workupExtraCellRowHtml(button.dataset.prefix, button.dataset.specimen, index));
+        bindCapWorkupControls(root);
+      };
+    });
+    root.querySelectorAll('[data-remove-workup-row]').forEach((button) => {
+      button.onclick = () => {
+        const row = button.closest('.workup-row');
+        const list = row?.parentElement;
+        row?.remove();
+        if (list && !list.querySelector('.workup-row')) list.innerHTML = '<div class="workup-empty">ยังไม่ได้เพิ่มรายการ</div>';
+      };
+    });
   }
 
   function capAntigenTable(payload, prefix, specimen, disabled) {
@@ -1506,14 +1597,10 @@
     p.antigen_typing = { ...base.antigen_typing, ...(payload?.antigen_typing || {}) };
     p.methods_by_program = { ...base.methods_by_program, ...(payload?.methods_by_program || {}) };
     return `<div class="result-grid cap-result-form">
-      <div class="notice info"><strong>แบบกรอกนี้อ้างอิงเอกสาร CAP J-A / JE-A 2026</strong><br><span class="small">J-A ใช้ J-01 ถึง J-05 และ donor J-06R ส่วน JE-A ใช้ JE-07R/JE-07S และ crossmatch กับ J-06R</span></div>
-      <div class="subcard"><h3>J-A 2026 — Comprehensive Transfusion Medicine</h3>
-        <div class="table-wrap"><table class="compact-table cap-entry-table" style="min-width:1800px"><thead><tr><th>ตัวอย่าง</th><th>ABO</th><th>ABO subgroup</th><th>Rh</th><th>Antibody screen</th><th>Primary antibody</th><th>Additional antibodies</th><th>Crossmatch กับ J-06R</th><th>ชนิด Crossmatch</th><th>ความแรง</th></tr></thead><tbody>${capSpecimenRows(p, prefix, CAP_J_RESULT_SPECIMENS, disabled)}</tbody></table></div>
-      </div>
+      <div class="result-instruction"><div><strong>คำแนะนำก่อนกรอกผล</strong><ol><li>กรอกเฉพาะการทดสอบที่ทำจริงตามฟอร์ม CAP ไม่ต้องเติมทุกช่อง</li><li>Antibody screen เลือกผลรวม Detected / Not detected ส่วน phase และรายละเอียด Panel ให้บันทึกในหัวข้อ Antibody Identification</li><li>ถ้า Primary antibody เป็น CAP 184 หรือ 200 ให้เว้น Additional antibodies</li><li>Crossmatch ที่เป็น Negative หรือ Would refer ให้เลือกความแรงเป็น Not applicable</li><li>หนึ่งตัวอย่างเพิ่มได้หลาย Panel และเพิ่ม Selected/Extra cell เพื่อยืนยัน Rule of 3 หรือ rule out ได้</li></ol></div><span class="badge info">J-A: J-01–J-05 · JE-A: JE-07</span></div>
+      <div class="subcard"><h3>J-A 2026 — Comprehensive Transfusion Medicine</h3><p class="small muted">ผู้ป่วย J-01 ถึง J-05 ทำ crossmatch กับ donor J-06R</p>${capSpecimenCards(p, prefix, CAP_J_RESULT_SPECIMENS, disabled)}</div>
       ${capAntigenTable(p, prefix, 'J-06R', disabled)}
-      <div class="subcard"><h3>JE-A 2026 — Educational Challenge</h3>
-        <div class="table-wrap"><table class="compact-table cap-entry-table" style="min-width:1800px"><thead><tr><th>ตัวอย่าง</th><th>ABO</th><th>ABO subgroup</th><th>Rh</th><th>Antibody screen</th><th>Primary antibody</th><th>Additional antibodies</th><th>Crossmatch กับ J-06R</th><th>ชนิด Crossmatch</th><th>ความแรง</th></tr></thead><tbody>${capSpecimenRows(p, prefix, CAP_JE_RESULT_SPECIMENS, disabled)}</tbody></table></div>
-      </div>
+      <div class="subcard"><h3>JE-A 2026 — Educational Challenge</h3><p class="small muted">JE-07R/JE-07S และ crossmatch กับ donor J-06R</p>${capSpecimenCards(p, prefix, CAP_JE_RESULT_SPECIMENS, disabled)}</div>
       ${capAntigenTable(p, prefix, 'JE-07R', disabled)}
       ${capMethodFields(p, prefix, 'J', 'J-A', disabled)}
       ${capMethodFields(p, prefix, 'JE', 'JE-A', disabled)}
@@ -1554,6 +1641,8 @@
     const fd = new FormData(form);
     const specimens = {};
     [...CAP_J_RESULT_SPECIMENS, ...CAP_JE_RESULT_SPECIMENS].forEach((s) => {
+      const panelRows = [...form.querySelectorAll(`[data-workup-panel][data-specimen="${CSS.escape(s)}"]`)].map((row) => Object.fromEntries([...row.querySelectorAll('[data-workup-field]')].map((field) => [field.dataset.workupField, String(field.value || '').trim()]))).filter((row) => Object.values(row).some(Boolean));
+      const extraCellRows = [...form.querySelectorAll(`[data-workup-extra][data-specimen="${CSS.escape(s)}"]`)].map((row) => Object.fromEntries([...row.querySelectorAll('[data-workup-field]')].map((field) => [field.dataset.workupField, String(field.value || '').trim()]))).filter((row) => Object.values(row).some(Boolean));
       specimens[s] = {
         abo: String(fd.get(`${prefix}_${s}_abo`) || '').trim(),
         abo_subgroup: String(fd.get(`${prefix}_${s}_abo_subgroup`) || '').trim(),
@@ -1564,7 +1653,8 @@
         crossmatch: String(fd.get(`${prefix}_${s}_crossmatch`) || '').trim(),
         crossmatch_type: String(fd.get(`${prefix}_${s}_crossmatch_type`) || '').trim(),
         strength: String(fd.get(`${prefix}_${s}_strength`) || '').trim(),
-        notes: ''
+        notes: '',
+        antibody_workup: { panels: panelRows, extra_cells: extraCellRows }
       };
     });
     const antigen_typing = {};
@@ -1680,8 +1770,12 @@
         <div class="field"><label>แหล่งข้อมูล/หลักฐาน</label><textarea class="textarea" name="evidence_note" required placeholder="เช่น แบบบันทึกผลเดิม ลงชื่อผู้ปฏิบัติ 2 คน หน้า...">${esc(existing?.evidence_note || '')}</textarea></div>
         <div id="historical-individual-result-fields">${resultForm(existing?.result_payload, 'historicalIndividual', noEvidence)}</div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-historical-individual">บันทึกข้อมูลที่กรอกแทน</button>`, true);
+    bindCapWorkupControls(document.getElementById('historical-individual-form'));
     const checkbox = document.getElementById('no-individual-evidence');
-    const toggle = () => document.querySelectorAll('#historical-individual-result-fields input, #historical-individual-result-fields textarea, #historical-individual-result-fields select').forEach((field) => { field.disabled = checkbox.checked; });
+    const toggle = () => {
+      document.querySelectorAll('#historical-individual-result-fields input, #historical-individual-result-fields textarea, #historical-individual-result-fields select').forEach((field) => { field.disabled = checkbox.checked; });
+      document.querySelectorAll('#historical-individual-result-fields [data-add-workup-panel], #historical-individual-result-fields [data-add-workup-extra], #historical-individual-result-fields [data-remove-workup-row]').forEach((button) => { button.disabled = checkbox.checked; });
+    };
     checkbox.addEventListener('change', toggle); toggle();
     document.getElementById('save-historical-individual').addEventListener('click', async () => {
       const form = document.getElementById('historical-individual-form');
@@ -2117,6 +2211,7 @@
     if (tab === 'official') bindOfficial(round);
     if (tab === 'capa') bindCapa(round);
     if (tab === 'competency') { bindCompetencyAdmin(round); bindCompetencyReview(round); }
+    bindCapWorkupControls(document);
     document.querySelectorAll('[data-go-historical-step]').forEach((button) => button.addEventListener('click', () => navigate(`round/${round.id}/${button.dataset.goHistoricalStep}`)));
   }
 
@@ -2391,14 +2486,20 @@
     document.getElementById('upload-doc-btn')?.addEventListener('click', () => {
       showModal('อัปโหลดเอกสาร/ภาพ', `<form id="doc-form" class="form-grid">
         <div class="field"><label>ประเภท</label><select class="select" id="document-category-select" name="category">${Object.entries(DOCUMENT_CATEGORY_LABELS).map(([value,label])=>`<option value="${value}">${esc(label)}</option>`).join('')}</select><div class="help" id="document-category-help"></div></div>
-        <div class="field"><label>ชื่อเอกสาร</label><input class="input" name="title" required><div class="help">ตั้งชื่อให้อ่านรู้เรื่อง เช่น Original Evaluation, Participant Summary หรือผลที่ห้องส่งจริง</div></div>
+        <div class="field"><label>ชื่อเอกสาร</label><input class="input" name="title" required><div class="help" id="document-title-help">ตั้งชื่อให้อ่านรู้เรื่อง เช่น Original Evaluation, Participant Summary หรือผลที่ห้องส่งจริง</div></div>
         <div class="field"><label>ผู้ที่เปิดดูได้</label><select class="select" name="visibility"><option value="restricted">เฉพาะผู้ทบทวน ผู้จัดการคุณภาพ และแพทย์</option><option value="assigned">ผู้ได้รับมอบหมาย</option><option value="staff">บุคลากรทุกคน</option></select></div>
         <div class="field"><label>ไฟล์ PDF/JPG/PNG/WebP ไม่เกิน 20 MB</label><input class="input" type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp" required></div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="upload-doc-save">อัปโหลด</button>`);
       const categorySelect = document.getElementById('document-category-select');
       const updateCategoryHelp = () => {
         const help = document.getElementById('document-category-help');
+        const titleHelp = document.getElementById('document-title-help');
         if (help) help.textContent = DOCUMENT_CATEGORY_HELP[categorySelect?.value] || '';
+        if (titleHelp) titleHelp.innerHTML = categorySelect?.value === 'antibody_panel'
+          ? 'ตัวอย่าง: <code>CAP-JA-2026_AbID_Panel01_Lot8RA453_Antigram.pdf</code> และ Panel ถัดไปใช้ <code>Panel02</code>'
+          : categorySelect?.value === 'raw_result_image'
+            ? 'กรณีหลาย Panel: <code>CAP-JA-2026_J-01_AbID_Panel01_Cell01-11_RawResult.jpg</code> · Extra cell: <code>CAP-JA-2026_J-01_AbID_ExtraCell01_Anti-E_RawResult.jpg</code>'
+            : 'ตั้งชื่อให้อ่านรู้เรื่อง เช่น Original Evaluation, Participant Summary หรือผลที่ห้องส่งจริง';
       };
       categorySelect?.addEventListener('change', updateCategoryHelp);
       updateCategoryHelp();
@@ -3637,10 +3738,10 @@
           <p><strong>รายงานเปรียบเทียบผู้เข้าร่วม (Participant Summary)</strong> ใช้ดูสัดส่วน/consensus ของห้องอื่น และใช้ประเมิน Educational Challenge หรือรายการ See Note [26] เท่านั้น ร้อยละในเอกสารนี้ไม่ใช่คะแนนของห้องเรา</p>
           <p><strong>กรณีหนึ่งตัวอย่างมีหลายการทดสอบ</strong></p><ul><li>ระบบแยกเป็นกลุ่มการทดสอบ เช่น ABO/Rh, Antibody screen, Antibody identification, Eluate identification, Crossmatch, DAT, CBC, WBC count, Titer และ Antigen typing</li><li>ตัวอย่างเดียวกันปรากฏในหลายกลุ่มได้ ไม่ถือว่าซ้ำ</li><li>ต้องยึดฟอร์มต้นฉบับว่าแต่ละตัวอย่างทำอะไร ห้ามนำทุกการทดสอบไปใส่ทุกตัวอย่าง</li><li>ผลเชิงตัวเลขต้องคงหน่วยและจำนวนทศนิยมตามฟอร์ม</li><li>Antigen typing แบบเลือกชนิด antigen ต้องมีช่อง “ชื่อ antigen” คู่กับ “ผล” ตามจำนวนตำแหน่งจริง</li></ul>
           <p><strong>ชื่อไฟล์สำหรับเอกสารทั้งฉบับ</strong> ใช้รูปแบบ <code>ผู้ให้บริการ-รอบ_โปรแกรม_บทบาทเอกสาร.pdf</code></p>
-          <ul><li>ฟอร์มเปล่า J: <code>CAP-JA-2026_J_BlankResultForm.pdf</code></li><li>ฟอร์มเปล่า JE1: <code>CAP-JA-2026_JE1_BlankResultForm.pdf</code></li><li>คู่มือ: <code>CAP-JA-2026_KitInstruction_J-JE1.pdf</code></li><li>ผลที่ห้องส่ง J: <code>CAP-JA-2026_J_SubmittedResultForm.pdf</code></li><li>ผลที่ห้องส่ง JE1: <code>CAP-JA-2026_JE1_SubmittedResultForm.pdf</code></li><li>Official Evaluation J: <code>CAP-JA-2026_J_OfficialEvaluation.pdf</code></li><li>Official Evaluation Educational: <code>CAP-JA-2026_JE1_OfficialEvaluation_EducationalChallenge.pdf</code></li><li>Participant Summary: <code>CAP-JA-2026_ParticipantSummary_PeerComparison.pdf</code></li><li>Panel A Antigram: <code>CAP-JA-2026_AbID_PanelA_Lot8RA453_Antigram.pdf</code></li></ul>
+          <ul><li>ฟอร์มเปล่า J: <code>CAP-JA-2026_J_BlankResultForm.pdf</code></li><li>ฟอร์มเปล่า JE1: <code>CAP-JA-2026_JE1_BlankResultForm.pdf</code></li><li>คู่มือ: <code>CAP-JA-2026_KitInstruction_J-JE1.pdf</code></li><li>ผลที่ห้องส่ง J: <code>CAP-JA-2026_J_SubmittedResultForm.pdf</code></li><li>ผลที่ห้องส่ง JE1: <code>CAP-JA-2026_JE1_SubmittedResultForm.pdf</code></li><li>Official Evaluation J: <code>CAP-JA-2026_J_OfficialEvaluation.pdf</code></li><li>Official Evaluation Educational: <code>CAP-JA-2026_JE1_OfficialEvaluation_EducationalChallenge.pdf</code></li><li>Participant Summary: <code>CAP-JA-2026_ParticipantSummary_PeerComparison.pdf</code></li><li>Antigram Panel แรก: <code>CAP-JA-2026_AbID_Panel01_Lot8RA453_Antigram.pdf</code></li><li>Antigram Panel ถัดไป: <code>CAP-JA-2026_AbID_Panel02_LotXXXXXX_Antigram.pdf</code></li></ul>
           <p><strong>ชื่อไฟล์สำหรับภาพผลดิบ</strong> ใช้รูปแบบ <code>ผู้ให้บริการ-รอบ_ตัวอย่าง_ชนิดการทดสอบ_RawResult</code> หนึ่งการทดสอบหลายตัวอย่างใช้รหัสโจทย์หลักได้ ไม่ต้องใช้ MultiTest; ใช้ <code>MultiTest</code> เฉพาะภาพเดียวที่มีหลายชนิดการทดสอบ</p>
-          <ul><li>ABO: <code>CAP-JA-2026_J-01_ABO_RawResult.png</code></li><li>Ab screen รวม RT/IAT: <code>CAP-JA-2026_J-01_AbScreen_RawResult.png</code></li><li>Ab identification: <code>CAP-JA-2026_J-01_AbID_PanelA_Cell01-06_RawResult.jpg</code></li><li>Crossmatch หลายตัวอย่างในโจทย์ J-06: <code>CAP-JA-2026_J-06_X-Match_RawResult.png</code></li><li>หลายการทดสอบในภาพเดียว: <code>CAP-JA-2026_J-01_MultiTest_ABO-Rh-AbScreen_RawResult.png</code></li></ul>
-          <p>สำหรับ CAP หากฟอร์มระบุช่องและคู่มือระบุ code กับชื่อ ระบบจะรวมเป็นตัวเลือกแบบ “ชื่อ (CAP code)” โดยไม่สร้างรหัสขึ้นเอง</p>
+          <ul><li>ABO: <code>CAP-JA-2026_J-01_ABO_RawResult.png</code></li><li>Ab screen รวม RT/IAT: <code>CAP-JA-2026_J-01_AbScreen_RawResult.png</code></li><li>Ab identification Panel แรก: <code>CAP-JA-2026_J-01_AbID_Panel01_Cell01-11_RawResult.jpg</code></li><li>Ab identification Panel ถัดไป: <code>CAP-JA-2026_J-01_AbID_Panel02_Cell01-11_RawResult.jpg</code></li><li>Selected/Extra cell: <code>CAP-JA-2026_J-01_AbID_ExtraCell01_Anti-E_RawResult.jpg</code></li><li>Crossmatch หลายตัวอย่างในโจทย์ J-06: <code>CAP-JA-2026_J-06_X-Match_RawResult.png</code></li><li>หลายการทดสอบในภาพเดียว: <code>CAP-JA-2026_J-01_MultiTest_ABO-Rh-AbScreen_RawResult.png</code></li></ul>
+          <p><strong>หลาย Panel ในตัวอย่างเดียว</strong> ให้ใช้ Panel01, Panel02, Panel03 ตามลำดับที่ทำจริง โดย Antigram ไม่ต้องใส่รหัสตัวอย่างหากเป็นน้ำยาชุดเดียวที่ใช้ร่วมกันหลายตัวอย่าง ส่วนภาพผลดิบต้องใส่รหัสตัวอย่างเพื่อจับคู่ให้ถูกต้อง หากใช้ selected cell หรือ extra cell เพิ่มเพื่อ Rule of 3 / rule out ให้ใช้ ExtraCell01, ExtraCell02 และระบุเป้าหมายสั้น ๆ ต่อท้ายชื่อไฟล์</p><p>สำหรับ CAP หากฟอร์มระบุช่องและคู่มือระบุ code กับชื่อ ระบบจะรวมเป็นตัวเลือกแบบ “ชื่อ (CAP code)” โดยไม่สร้างรหัสขึ้นเอง</p>
         </div></details>
         <details><summary>ผลรายบุคคลและสรุปผลห้องปฏิบัติการ</summary><div class="guide-body"><p>ผู้ปฏิบัติแต่ละคนบันทึกผลของตนเองแยกกัน เมื่อส่งครบ ระบบจะเติมค่าที่ตรงกันในสรุปผลห้องให้อัตโนมัติ</p><p>ค่าที่ไม่ตรงกันจะถูกทำเครื่องหมายให้ผู้ทบทวนตรวจและเลือกผลที่ถูกต้องก่อนส่งให้ผู้จัดการคุณภาพ</p></div></details>
         <details><summary>การตรวจ รับรอง และรับทราบ</summary><div class="guide-body"><p>ผู้ทบทวนตรวจผลห้องและหลักฐาน จากนั้นส่งให้ผู้จัดการคุณภาพรับรอง เมื่อรับรองแล้วแพทย์จึงกดรับทราบได้</p><p>ผู้จัดการคุณภาพต้องรับรองทุกรอบ แม้เป็นหนึ่งในผู้ปฏิบัติจริง โดยต้องสลับ “ใช้งานในบทบาท” ให้ตรงกับขั้นตอน เช่น กรอกผลในบทบาทเจ้าหน้าที่ และรับรองในบทบาทผู้จัดการคุณภาพ</p><p>ประวัติการอนุมัติจะแสดงชื่อพร้อมบทบาทที่ใช้ลงนามในแต่ละครั้ง ส่วนผู้ทบทวนยังต้องเป็นคนละคนกับผู้ปฏิบัติจริงทั้งสองคน</p><p>การส่งกลับต้องระบุเหตุผล เพื่อให้ผู้เกี่ยวข้องแก้ไขเฉพาะจุด</p></div></details>
