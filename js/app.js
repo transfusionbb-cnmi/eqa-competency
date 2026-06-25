@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.2.7
+/* CNMI EQA and Competency Management System v2.2.8
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -275,6 +275,16 @@
 
   function labelFrom(map, value, fallback = '-') {
     return map[value] || fallback;
+  }
+
+  function displayQuestionPrompt(value) {
+    return String(value || '')
+      .replace(/CAP-[A-Za-z0-9_.()\-]+\.(?:png|jpe?g|pdf)/gi, '')
+      .replace(/จากภาพ\s*/g, '')
+      .replace(/\(\s*โปรดตอบ[^)]*\)/gi, '')
+      .replace(/\s+/g, ' ')
+      .replace(/^[-–—:,.\s]+|[-–—:,.\s]+$/g, '')
+      .trim();
   }
 
   function friendlyError(error) {
@@ -1463,18 +1473,6 @@
   }
 
   function defaultResultPayload(round = state.currentRound) {
-    if (generatedResultSchema(round)) {
-      return {
-        schema: PROVIDER_GENERATED_SCHEMA,
-        form_schema_version: String(generatedResultSchema(round)?.schema_version || '1'),
-        specimens: {},
-        antigen_typing: {},
-        methods_by_program: {},
-        reagents: '',
-        instrument: '',
-        overall_note: ''
-      };
-    }
     if (isCapJJeRound(round)) {
       return {
         schema: CAP_J_JE_SCHEMA,
@@ -1488,6 +1486,18 @@
           JE: { abo_manufacturer: '', abo_method: '', rh_manufacturer: '', rh_method: '', d_control_manufacturer: '', d_control_method: '', screen_cells: '', screen_manufacturer: '', screen_method: '', antibody_primary_manufacturer: '', antibody_primary_method: '', antibody_secondary_manufacturer: '', antibody_secondary_method: '', crossmatch_method: '', antigen_manufacturer: '' }
         },
         reagents: '', instrument: '', overall_note: ''
+      };
+    }
+    if (generatedResultSchema(round)) {
+      return {
+        schema: PROVIDER_GENERATED_SCHEMA,
+        form_schema_version: String(generatedResultSchema(round)?.schema_version || '1'),
+        specimens: {},
+        antigen_typing: {},
+        methods_by_program: {},
+        reagents: '',
+        instrument: '',
+        overall_note: ''
       };
     }
     return {
@@ -1543,25 +1553,39 @@
   }
 
   function capSpecimenCards(payload, prefix, specimens, disabled) {
-    return `<div class="cap-specimen-grid">${specimens.map((specimen) => {
+    return `<div class="cap-specimen-grid">${specimens.map((specimen, index) => {
       const x = payload.specimens?.[specimen] || defaultCapSpecimenPayload();
-      return `<section class="cap-specimen-card">
-        <div class="cap-specimen-title"><strong>${esc(specimen)}</strong><span class="small muted">กรอกเฉพาะรายการที่ทำจริง</span></div>
-        <div class="cap-field-group"><h4>1) ABO / Rh</h4><div class="form-grid cols-3">
-          <div class="field"><label>ABO</label><select class="select" name="${prefix}_${specimen}_abo" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.abo, x.abo)}</select></div>
-          <div class="field"><label>ABO subgroup</label><select class="select" name="${prefix}_${specimen}_abo_subgroup" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.subgroup, x.abo_subgroup)}</select></div>
-          <div class="field"><label>Rh</label><select class="select" name="${prefix}_${specimen}_rh" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.rh, x.rh)}</select></div>
-        </div></div>
-        <div class="cap-field-group"><h4>2) Antibody screen / Identification</h4><div class="form-grid cols-3">
-          <div class="field"><label>Antibody screen</label><select class="select" name="${prefix}_${specimen}_screen" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.screen, x.screen)}</select></div>
-          <div class="field"><label>Primary antibody</label><input class="input" name="${prefix}_${specimen}_antibody" value="${esc(x.antibody || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Anti-E (CAP 115) หรือ 184"></div>
-          <div class="field"><label>Additional antibodies</label><input class="input" name="${prefix}_${specimen}_additional_antibodies" value="${esc(x.additional_antibodies || '')}" ${disabled ? 'disabled' : ''} placeholder="เว้นว่างถ้าไม่มี"></div>
-        </div>${capAntibodyWorkup(payload, prefix, specimen, disabled)}</div>
-        <div class="cap-field-group"><h4>3) Crossmatch กับ J-06R</h4><div class="form-grid cols-3">
-          <div class="field"><label>ผล Crossmatch</label><select class="select" name="${prefix}_${specimen}_crossmatch" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.crossmatch, x.crossmatch)}</select></div>
-          <div class="field"><label>ชนิด Crossmatch</label><select class="select" name="${prefix}_${specimen}_crossmatch_type" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.crossmatchType, x.crossmatch_type)}</select></div>
-          <div class="field"><label>ความแรง</label><select class="select" name="${prefix}_${specimen}_strength" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.strength, x.strength)}</select></div>
-        </div></div>
+      const hasAbId = Boolean(x.antibody || x.additional_antibodies || x.antibody_workup?.panels?.length || x.antibody_workup?.extra_cells?.length);
+      return `<section class="cap-specimen-card google-form-card" id="result-${esc(prefix)}-${esc(specimen)}">
+        <div class="cap-specimen-title">
+          <div><span class="question-number">${index + 1}</span><strong>ตัวอย่าง ${esc(specimen)}</strong></div>
+          <span class="small muted">เลือกเฉพาะผลที่รายงานจริง</span>
+        </div>
+        <div class="cap-field-group">
+          <div class="form-question-heading"><span>หมู่เลือด ABO และ Rh(D)</span><small>เลือกคำตอบตามรหัส CAP</small></div>
+          <div class="form-grid cols-3">
+            <div class="field"><label>ABO Group</label><select class="select" name="${prefix}_${specimen}_abo" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.abo, x.abo)}</select></div>
+            <div class="field"><label>ABO subgroup</label><select class="select" name="${prefix}_${specimen}_abo_subgroup" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.subgroup, x.abo_subgroup)}</select></div>
+            <div class="field"><label>Rh(D) Type</label><select class="select" name="${prefix}_${specimen}_rh" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.rh, x.rh)}</select></div>
+          </div>
+        </div>
+        <div class="cap-field-group">
+          <div class="form-question-heading"><span>Antibody Screening และ Identification</span><small>ถ้าไม่พบแอนติบอดี ให้เว้นช่องชนิดแอนติบอดี</small></div>
+          <div class="form-grid cols-3">
+            <div class="field"><label>Unexpected Antibody Detection</label><select class="select" name="${prefix}_${specimen}_screen" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.screen, x.screen)}</select></div>
+            <div class="field"><label>Primary antibody</label><input class="input" name="${prefix}_${specimen}_antibody" value="${esc(x.antibody || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Anti-E (CAP 115) หรือ CAP 184"></div>
+            <div class="field"><label>Additional antibodies</label><input class="input" name="${prefix}_${specimen}_additional_antibodies" value="${esc(x.additional_antibodies || '')}" ${disabled ? 'disabled' : ''} placeholder="เว้นว่างถ้าไม่มี"></div>
+          </div>
+          ${capAntibodyWorkup(payload, prefix, specimen, disabled)}
+        </div>
+        <div class="cap-field-group">
+          <div class="form-question-heading"><span>Crossmatch กับ Donor J-06R</span><small>Negative หรือ Would refer ให้เลือก Strength = Not applicable</small></div>
+          <div class="form-grid cols-3">
+            <div class="field"><label>Serologic Crossmatch Result</label><select class="select" name="${prefix}_${specimen}_crossmatch" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.crossmatch, x.crossmatch)}</select></div>
+            <div class="field"><label>Type of Crossmatch</label><select class="select" name="${prefix}_${specimen}_crossmatch_type" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.crossmatchType, x.crossmatch_type)}</select></div>
+            <div class="field"><label>Strength of Reaction</label><select class="select" name="${prefix}_${specimen}_strength" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.strength, x.strength)}</select></div>
+          </div>
+        </div>
       </section>`;
     }).join('')}</div>`;
   }
@@ -1642,16 +1666,68 @@
     p.specimens = { ...base.specimens, ...(payload?.specimens || {}) };
     p.antigen_typing = { ...base.antigen_typing, ...(payload?.antigen_typing || {}) };
     p.methods_by_program = { ...base.methods_by_program, ...(payload?.methods_by_program || {}) };
-    return `<div class="result-grid cap-result-form">
-      <div class="result-instruction"><div><strong>คำแนะนำก่อนกรอกผล</strong><ol><li>กรอกเฉพาะการทดสอบที่ทำจริงตามฟอร์ม CAP ไม่ต้องเติมทุกช่อง</li><li>Antibody screen เลือกผลรวม Detected / Not detected ส่วน phase และรายละเอียด Panel ให้บันทึกในหัวข้อ Antibody Identification</li><li>ถ้า Primary antibody เป็น CAP 184 หรือ 200 ให้เว้น Additional antibodies</li><li>Crossmatch ที่เป็น Negative หรือ Would refer ให้เลือกความแรงเป็น Not applicable</li><li>หนึ่งตัวอย่างเพิ่มได้หลาย Panel และเพิ่ม Selected/Extra cell เพื่อยืนยัน Rule of 3 หรือ rule out ได้</li><li>จำนวนช่อง Antigen typing และ Other antigen มาจากแบบฟอร์มเปล่า ผู้ปฏิบัติเป็นผู้เลือกชนิด Antigen เอง ช่องที่ไม่ได้ใช้เว้นว่างได้</li></ol></div><span class="badge info">J-A: J-01–J-05 · JE-A: JE-07</span></div>
-      <div class="subcard"><h3>J-A 2026 — Comprehensive Transfusion Medicine</h3><p class="small muted">ผู้ป่วย J-01 ถึง J-05 ทำ crossmatch กับ donor J-06R</p>${capSpecimenCards(p, prefix, CAP_J_RESULT_SPECIMENS, disabled)}</div>
-      ${capAntigenTable(p, prefix, 'J-06R', disabled)}
-      <div class="subcard"><h3>JE-A 2026 — Educational Challenge</h3><p class="small muted">JE-07R/JE-07S และ crossmatch กับ donor J-06R</p>${capSpecimenCards(p, prefix, CAP_JE_RESULT_SPECIMENS, disabled)}</div>
-      ${capAntigenTable(p, prefix, 'JE-07R', disabled)}
-      ${capMethodFields(p, prefix, 'J', 'J-A', disabled)}
-      ${capMethodFields(p, prefix, 'JE', 'JE-A', disabled)}
-      <div class="form-grid cols-2"><div class="field"><label>น้ำยา / เลขรุ่นผลิต</label><textarea class="textarea" name="${prefix}_reagents" ${disabled ? 'disabled' : ''}>${esc(p.reagents || '')}</textarea></div><div class="field"><label>เครื่องมือ</label><textarea class="textarea" name="${prefix}_instrument" ${disabled ? 'disabled' : ''}>${esc(p.instrument || '')}</textarea></div></div>
-      <div class="field"><label>หมายเหตุรวม</label><textarea class="textarea" name="${prefix}_overall_note" ${disabled ? 'disabled' : ''}>${esc(p.overall_note || '')}</textarea></div>
+    return `<div class="result-grid cap-result-form cap-google-form">
+      <div class="result-form-hero">
+        <div>
+          <span class="eyebrow">CAP J/JE-A 2026</span>
+          <h3>บันทึกผลที่ห้องปฏิบัติการรายงาน</h3>
+          <p>เลือกผลสรุปและรหัสตามแบบฟอร์ม CAP ไม่ต้องคัดลอกค่าปฏิกิริยาดิบทุกหลุม</p>
+        </div>
+        <span class="badge info">J-A: J-01–J-05 · JE-A: JE-07</span>
+      </div>
+      <details class="result-instruction google-form-help" open>
+        <summary>คำแนะนำก่อนกรอกผล</summary>
+        <ol>
+          <li>กรอกเฉพาะการทดสอบที่ทำจริงตามฟอร์ม CAP ช่องที่ไม่ได้ใช้เว้นว่างได้</li>
+          <li>Antibody screen เลือกผลรวม Detected / Not detected ส่วนรายละเอียด Panel บันทึกเฉพาะเมื่อมีการทำ Antibody Identification</li>
+          <li>ถ้า Primary antibody เป็น CAP 184 หรือ CAP 200 ให้เว้น Additional antibodies</li>
+          <li>Crossmatch ที่เป็น Negative หรือ Would refer ให้เลือก Strength เป็น Not applicable</li>
+          <li>หนึ่งตัวอย่างเพิ่มได้หลาย Panel และ Selected/Extra cell เพื่อยืนยัน Rule of 3 หรือ rule out</li>
+          <li>จำนวนช่อง Other antigen มาจากแบบฟอร์มเปล่า ผู้ปฏิบัติเป็นผู้เลือกชนิด Antigen เอง</li>
+        </ol>
+      </details>
+
+      <nav class="result-jump-nav" aria-label="ทางลัดแบบกรอก">
+        <a href="#result-program-j">J-A</a>
+        ${CAP_J_RESULT_SPECIMENS.map((s) => `<a href="#result-${esc(prefix)}-${esc(s)}">${esc(s)}</a>`).join('')}
+        <a href="#result-antigen-j06">J-06R Antigen</a>
+        <a href="#result-program-je">JE-A</a>
+        <a href="#result-${esc(prefix)}-JE-07">JE-07</a>
+        <a href="#result-antigen-je07">JE-07R Antigen</a>
+      </nav>
+
+      <section class="cap-program-section" id="result-program-j">
+        <div class="section-banner">
+          <div><span class="section-kicker">Program J</span><h3>Comprehensive Transfusion Medicine — J-A 2026</h3></div>
+          <p>ตัวอย่าง J-01 ถึง J-05 และ Crossmatch กับ Donor J-06R</p>
+        </div>
+        ${capSpecimenCards(p, prefix, CAP_J_RESULT_SPECIMENS, disabled)}
+      </section>
+
+      <div id="result-antigen-j06">${capAntigenTable(p, prefix, 'J-06R', disabled)}</div>
+
+      <section class="cap-program-section" id="result-program-je">
+        <div class="section-banner educational">
+          <div><span class="section-kicker">Program JE1</span><h3>Educational Challenge — JE-A 2026</h3></div>
+          <p>ตัวอย่าง JE-07R/JE-07S และ Crossmatch กับ Donor J-06R</p>
+        </div>
+        ${capSpecimenCards(p, prefix, CAP_JE_RESULT_SPECIMENS, disabled)}
+      </section>
+
+      <div id="result-antigen-je07">${capAntigenTable(p, prefix, 'JE-07R', disabled)}</div>
+
+      <details class="result-method-details">
+        <summary>รหัสวิธีตรวจ น้ำยา และเครื่องมือ</summary>
+        <div class="method-details-grid">
+          ${capMethodFields(p, prefix, 'J', 'J-A', disabled)}
+          ${capMethodFields(p, prefix, 'JE', 'JE-A', disabled)}
+        </div>
+        <div class="form-grid cols-2" style="margin-top:14px">
+          <div class="field"><label>น้ำยา / เลขรุ่นผลิต</label><textarea class="textarea" name="${prefix}_reagents" ${disabled ? 'disabled' : ''}>${esc(p.reagents || '')}</textarea></div>
+          <div class="field"><label>เครื่องมือ</label><textarea class="textarea" name="${prefix}_instrument" ${disabled ? 'disabled' : ''}>${esc(p.instrument || '')}</textarea></div>
+        </div>
+        <div class="field"><label>หมายเหตุรวม</label><textarea class="textarea" name="${prefix}_overall_note" ${disabled ? 'disabled' : ''}>${esc(p.overall_note || '')}</textarea></div>
+      </details>
     </div>`;
   }
 
@@ -1678,8 +1754,10 @@
   }
 
   function resultForm(payload, prefix = 'result', disabled = false) {
-    if (payload?.schema === PROVIDER_GENERATED_SCHEMA || (generatedResultSchema(state.currentRound) && !payload?.schema)) return providerGeneratedResultForm(payload, prefix, disabled);
+    // CAP J/JE ใช้แบบกรอกเฉพาะทางที่ยึดตัวเลือกจาก Result Form ของ CAP
+    // ไม่ใช้ตารางช่องปฏิกิริยาดิบจาก schema ทั่วไป เพราะผู้ใช้ต้องกรอก “ผลที่รายงาน”
     if (isCapJJeRound(state.currentRound) || payload?.schema === CAP_J_JE_SCHEMA) return capJJeResultForm(payload, prefix, disabled);
+    if (payload?.schema === PROVIDER_GENERATED_SCHEMA || (generatedResultSchema(state.currentRound) && !payload?.schema)) return providerGeneratedResultForm(payload, prefix, disabled);
     return genericResultForm(payload, prefix, disabled);
   }
 
@@ -2100,31 +2178,85 @@
     const { data: official } = await state.supabase.from('ec_official_results').select('*').eq('round_id', round.id).maybeSingle();
     const ai = official?.official_payload && typeof official.official_payload === 'object' ? official.official_payload : {};
     const reviewTopics = Array.isArray(ai.review_topics) ? ai.review_topics.join('\n') : String(ai.review_topics || '');
+    const specimenRows = Array.isArray(ai.specimen_summaries) ? ai.specimen_summaries : [];
     const evaluationModeLabels = {
       graded: 'มีการให้คะแนน',
       educational: 'Educational Challenge',
       mixed: 'มีทั้ง Graded และ Educational',
       insufficient: 'หลักฐานยังไม่พอ'
     };
-    const structuredView = official ? `<div class="grid cols-2" style="margin-top:16px">
-      <div class="notice"><strong>1. ผลของห้องปฏิบัติการ</strong><div style="white-space:pre-wrap;margin-top:6px">${esc(ai.lab_result_summary || 'ยังไม่มีสรุปแยกส่วน')}</div></div>
-      <div class="notice"><strong>2. ผลที่ควรเป็น / Intended Response</strong><div style="white-space:pre-wrap;margin-top:6px">${esc(ai.intended_response_summary || 'ยังไม่มีสรุปแยกส่วน')}</div></div>
-      <div class="notice"><strong>3. คะแนนและ Grade</strong><div style="white-space:pre-wrap;margin-top:6px">${esc(ai.grade_summary || 'ยังไม่มีสรุปแยกส่วน')}</div></div>
-      <div class="notice"><strong>4. เปรียบเทียบกับผู้เข้าร่วม</strong><div style="white-space:pre-wrap;margin-top:6px">${esc(ai.peer_comparison_summary || 'ยังไม่มี Participant Summary หรือยังไม่ได้สร้างสรุปใหม่')}</div></div>
-      <div class="notice warning" style="grid-column:1/-1"><strong>5. หัวข้อที่ต้องทบทวน</strong><div style="white-space:pre-wrap;margin-top:6px">${esc(reviewTopics || 'ไม่พบหัวข้อที่ต้องทบทวน หรือยังไม่ได้สรุป')}</div></div>
+    const assessmentLabels = {
+      pass: ['ผ่าน', 'success'],
+      fail: ['ไม่ผ่าน', 'danger'],
+      educational: ['Educational', 'info'],
+      not_graded: ['ไม่ให้คะแนน', 'warning'],
+      pending: ['รอตรวจ', 'warning']
+    };
+    const groupedRows = new Map();
+    specimenRows.forEach((row) => {
+      const key = String(row.program || 'ผลประเมิน');
+      if (!groupedRows.has(key)) groupedRows.set(key, []);
+      groupedRows.get(key).push(row);
+    });
+    const specimenTable = specimenRows.length ? [...groupedRows.entries()].map(([program, rows]) => `
+      <section class="official-program-block">
+        <div class="official-program-title"><div><span class="section-kicker">${esc(program)}</span><h3>สรุปผลแยกตามตัวอย่างและรายการทดสอบ</h3></div><span class="badge info">${rows.length} รายการ</span></div>
+        <div class="official-table-wrap"><table class="official-result-table">
+          <thead><tr><th>ตัวอย่าง</th><th>รายการทดสอบ</th><th>ผลที่ห้องรายงาน</th><th>ผลที่ควรเป็น</th><th>เปรียบเทียบผู้เข้าร่วม</th><th>ผลประเมิน</th></tr></thead>
+          <tbody>${rows.map((row) => {
+            const [label, cls] = assessmentLabels[row.assessment] || assessmentLabels.pending;
+            return `<tr>
+              <td><strong>${esc(row.specimen || '-')}</strong></td>
+              <td>${esc(row.test_name || '-')}</td>
+              <td>${esc(row.lab_result || '-')}</td>
+              <td>${esc(row.intended_response || '-')}</td>
+              <td>${esc(row.peer_result || '-')}</td>
+              <td><span class="badge ${cls}">${esc(label)}</span>${row.note ? `<div class="small muted" style="margin-top:5px">${esc(row.note)}</div>` : ''}</td>
+            </tr>`;
+          }).join('')}</tbody>
+        </table></div>
+      </section>`).join('') : `<div class="notice warning">ยังไม่มีตารางสรุปแบบแยกรายการ กด “สร้างเฉลยและสรุปผล” ใหม่หลังอัปเดตระบบ เพื่อให้ AI จัดผลเป็นตารางตามตัวอย่าง</div>`;
+
+    const structuredView = official ? `<div class="official-report-preview">
+      <div class="official-report-head">
+        <div><span class="eyebrow">External Quality Assessment</span><h2>สรุปผลห้องปฏิบัติการ</h2><p>${esc(round.provider || '')} · ${esc(round.program_name || '')} · ${esc(round.round_code || '')}</p></div>
+        <div class="official-overall-result">
+          <span class="small muted">ผลรวม</span>
+          <strong>${esc(labelFrom(OFFICIAL_OUTCOME_LABELS, official.outcome))}</strong>
+          <span>${official.score ?? '-'}${official.score !== null && official.score !== undefined ? ' คะแนน' : ''}</span>
+        </div>
+      </div>
+      ${specimenTable}
+      <div class="official-summary-grid">
+        <section class="official-summary-card"><span class="summary-index">1</span><div><h3>ผลของห้องปฏิบัติการ</h3><p>${esc(ai.lab_result_summary || 'ยังไม่มีสรุป')}</p></div></section>
+        <section class="official-summary-card"><span class="summary-index">2</span><div><h3>ผลที่ควรเป็น / Intended Response</h3><p>${esc(ai.intended_response_summary || 'ยังไม่มีสรุป')}</p></div></section>
+        <section class="official-summary-card"><span class="summary-index">3</span><div><h3>คะแนนและ Grade</h3><p>${esc(ai.grade_summary || 'ยังไม่มีสรุป')}</p></div></section>
+        <section class="official-summary-card"><span class="summary-index">4</span><div><h3>เปรียบเทียบกับผู้เข้าร่วม</h3><p>${esc(ai.peer_comparison_summary || 'ยังไม่มี Participant Summary หรือยังไม่ได้สรุป')}</p></div></section>
+        <section class="official-summary-card review"><span class="summary-index">5</span><div><h3>หัวข้อที่ต้องทบทวน</h3>${reviewTopics ? `<ul>${reviewTopics.split('\n').filter(Boolean).map((topic) => `<li>${esc(topic)}</li>`).join('')}</ul>` : '<p>ไม่พบหัวข้อที่ต้องทบทวน</p>'}</div></section>
+      </div>
     </div>` : '';
-    return `<div class="card"><div class="card-header"><div><h2>ผลประเมินอย่างเป็นทางการ</h2><div class="small muted">Official Evaluation ใช้ตัดสิน Intended Response และ Grade ส่วน Participant Summary ใช้เปรียบเทียบกับห้องอื่นและประเมิน Educational Challenge</div></div>${ai.evaluation_mode ? `<span class="badge info">${esc(evaluationModeLabels[ai.evaluation_mode] || ai.evaluation_mode)}</span>` : ''}</div>
-      ${canManage() ? `<form id="official-form" class="form-grid cols-2">
-        <div class="field"><label>คะแนนรวมของห้อง</label><input class="input" type="number" step="0.01" name="score" value="${esc(official?.score ?? '')}"><div class="help">กรอกเฉพาะเมื่อ Official Evaluation ระบุคะแนนรวมชัดเจน ห้ามใช้ร้อยละใน Participant Summary</div></div>
-        <div class="field"><label>ผลสรุปอย่างเป็นทางการ</label><select class="select" name="outcome"><option value="pending">รอผล / Educational</option><option value="pass" ${official?.outcome==='pass'?'selected':''}>ผ่าน</option><option value="fail" ${official?.outcome==='fail'?'selected':''}>ไม่ผ่าน</option><option value="partial" ${official?.outcome==='partial'?'selected':''}>ผ่านบางส่วน</option></select></div>
-        <div class="field"><label>1. ผลของห้องปฏิบัติการ</label><textarea class="textarea" name="lab_result_summary">${esc(ai.lab_result_summary || '')}</textarea></div>
-        <div class="field"><label>2. ผลที่ควรเป็น / Intended Response</label><textarea class="textarea" name="intended_response_summary">${esc(ai.intended_response_summary || '')}</textarea></div>
-        <div class="field"><label>3. คะแนนและ Grade</label><textarea class="textarea" name="grade_summary">${esc(ai.grade_summary || '')}</textarea></div>
-        <div class="field"><label>4. เปรียบเทียบกับผู้เข้าร่วม</label><textarea class="textarea" name="peer_comparison_summary">${esc(ai.peer_comparison_summary || '')}</textarea></div>
-        <div class="field" style="grid-column:1/-1"><label>5. หัวข้อที่ต้องทบทวน — 1 บรรทัดต่อ 1 หัวข้อ</label><textarea class="textarea" name="review_topics">${esc(reviewTopics)}</textarea></div>
-        <div class="field" style="grid-column:1/-1"><label>สรุปรวมสำหรับรายงาน</label><textarea class="textarea" name="summary">${esc(official?.summary || '')}</textarea></div>
-        <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="published" ${official?.published_to_staff?'checked':''}> เปิดผลและเฉลยให้บุคลากร</label>
-      </form><div class="modal-footer"><button class="btn btn-primary" id="save-official">บันทึกผลประเมิน</button></div>${structuredView}` : official ? `<div class="grid cols-3"><div><strong>คะแนนรวม</strong><div class="stat-value">${official.score ?? '-'}</div></div><div><strong>ผล</strong><p>${esc(labelFrom(OFFICIAL_OUTCOME_LABELS, official.outcome))}</p></div><div><strong>เปิดให้บุคลากร</strong><p>${official.published_to_staff ? 'เปิดแล้ว' : 'ยังไม่เปิด'}</p></div></div><div class="notice info" style="margin-top:14px;white-space:pre-wrap">${esc(official.summary || 'ยังไม่มีสรุปรวม')}</div>${structuredView}` : empty('ยังไม่ได้รับผลประเมินอย่างเป็นทางการ')}
+
+    return `<div class="card official-page-card">
+      <div class="card-header"><div><h2>ผลประเมินอย่างเป็นทางการ</h2><div class="small muted">สรุปแบบตารางตามตัวอย่างและรายการทดสอบ คล้ายแบบฟอร์มสรุปผลห้องปฏิบัติการ</div></div>${ai.evaluation_mode ? `<span class="badge info">${esc(evaluationModeLabels[ai.evaluation_mode] || ai.evaluation_mode)}</span>` : ''}</div>
+      ${canManage() ? `<form id="official-form" class="official-editor-form">
+        <div class="official-top-fields">
+          <div class="field"><label>คะแนนรวมของห้อง</label><input class="input" type="number" step="0.01" name="score" value="${esc(official?.score ?? '')}"><div class="help">กรอกเฉพาะคะแนนรวมจาก Official Evaluation เท่านั้น</div></div>
+          <div class="field"><label>ผลสรุปอย่างเป็นทางการ</label><select class="select" name="outcome"><option value="pending">รอผล / Educational</option><option value="pass" ${official?.outcome==='pass'?'selected':''}>ผ่าน</option><option value="fail" ${official?.outcome==='fail'?'selected':''}>ไม่ผ่าน</option><option value="partial" ${official?.outcome==='partial'?'selected':''}>ผ่านบางส่วน</option></select></div>
+          <label class="publish-toggle"><input type="checkbox" name="published" ${official?.published_to_staff?'checked':''}><span><strong>เปิดผลและเฉลยให้บุคลากร</strong><small>บุคลากรจะเห็นหลังส่งคำตอบตามเงื่อนไขของรอบ</small></span></label>
+        </div>
+        ${structuredView}
+        <details class="official-source-editor">
+          <summary>แก้ไขข้อความสรุปที่ AI สร้าง</summary>
+          <div class="official-edit-grid">
+            <div class="field"><label>1. ผลของห้องปฏิบัติการ</label><textarea class="textarea" name="lab_result_summary">${esc(ai.lab_result_summary || '')}</textarea></div>
+            <div class="field"><label>2. ผลที่ควรเป็น / Intended Response</label><textarea class="textarea" name="intended_response_summary">${esc(ai.intended_response_summary || '')}</textarea></div>
+            <div class="field"><label>3. คะแนนและ Grade</label><textarea class="textarea" name="grade_summary">${esc(ai.grade_summary || '')}</textarea></div>
+            <div class="field"><label>4. เปรียบเทียบกับผู้เข้าร่วม</label><textarea class="textarea" name="peer_comparison_summary">${esc(ai.peer_comparison_summary || '')}</textarea></div>
+            <div class="field" style="grid-column:1/-1"><label>5. หัวข้อที่ต้องทบทวน — 1 บรรทัดต่อ 1 หัวข้อ</label><textarea class="textarea" name="review_topics">${esc(reviewTopics)}</textarea></div>
+            <div class="field" style="grid-column:1/-1"><label>สรุปรวมสำหรับรายงาน</label><textarea class="textarea" name="summary">${esc(official?.summary || '')}</textarea></div>
+          </div>
+        </details>
+      </form><div class="modal-footer"><button class="btn btn-primary" id="save-official">บันทึกผลประเมิน</button></div>` : official ? `${structuredView}` : empty('ยังไม่ได้รับผลประเมินอย่างเป็นทางการ')}
     </div>`;
   }
 
@@ -2204,7 +2336,7 @@
           <button class="btn btn-outline" id="add-question">＋ เพิ่มเอง</button>
         </div>` : ''}
         ${latestRun ? (() => { const stale = latestRun.status === 'processing' && Date.now() - new Date(latestRun.created_at).getTime() > 5 * 60 * 1000; const statusText = latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' || stale ? 'ไม่สำเร็จ/หมดเวลา' : 'กำลังประมวลผล'; return `<div class="small muted" style="margin-bottom:10px">การสร้างล่าสุด: ${latestRun.generation_type === 'document_extract' ? 'อ่านเอกสาร' : latestRun.generation_type === 'form_instructions' ? 'แบบกรอก/คำแนะนำ' : latestRun.generation_type === 'questions' ? 'ข้อสอบ' : 'เฉลยและสรุป'} · ${statusText} · ${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}${latestRun.error_message ? `<br>${esc(latestRun.error_message)}` : ''}</div>`; })() : ''}
-        ${(questions || []).length ? questions.map((q) => {
+        ${(questions || []).length ? `<div class="admin-question-list">${questions.map((q) => {
           const key = keyMap.get(q.id);
           const hasKey = Boolean(key?.correct_choice_ids?.length || key?.answer_key_json?.text);
           const needsManualReview = Boolean(key?.answer_key_json?.needs_manual_review);
@@ -2213,17 +2345,30 @@
             participant_consensus: 'อิง Participant consensus',
             insufficient: 'หลักฐานไม่พอ'
           }[key?.answer_key_json?.answer_basis] || '';
-          return `<div style="padding:12px 0;border-bottom:1px solid var(--line)">
-            <span class="badge ${q.published?'success':'warning'}">${q.published?'เผยแพร่':'ฉบับร่าง'}</span>
-            ${q.generated_by_ai ? '<span class="badge info">สร้างจากไฟล์</span>' : ''}
-            <span class="badge ${hasKey?'success':'warning'}">${hasKey?'มีเฉลย':'รอเฉลย'}</span>
-            ${needsManualReview ? '<span class="badge danger">ต้องตรวจเอง</span>' : ''}
-            ${answerBasisLabel ? `<span class="badge info">${esc(answerBasisLabel)}</span>` : ''}
-            <strong>${q.question_order}. ${esc(q.prompt)}</strong><br>
-            <span class="small muted">${esc(labelFrom(QUESTION_TYPE_LABELS, q.question_type))} · ${q.points} คะแนน ${q.is_critical?'· ข้อสำคัญ':''}${q.image_document_id ? ` · รูป: ${esc(imageName(q.image_document_id) || 'ไฟล์รูป')}` : ''}</span>
-            ${canManage()?`<div class="table-actions" style="margin-top:7px"><button class="btn btn-outline btn-sm" data-edit-question="${q.id}">แก้ไข</button><button class="btn btn-danger btn-sm" data-delete-question="${q.id}" data-question-label="${esc(`${q.question_order}. ${q.prompt}`)}">ลบ</button></div>`:''}
-          </div>`;
-        }).join('') : empty('ยังไม่มีคำถาม')}
+          const sortedChoices = (q.ec_question_choices || []).slice().sort((a, b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
+          return `<article class="admin-question-card">
+            <div class="admin-question-top">
+              <div class="question-order-badge">${q.question_order}</div>
+              <div class="admin-question-title"><span class="question-section">${esc(q.section || 'การแปลผล EQA')}</span><h3>${esc(displayQuestionPrompt(q.prompt) || q.prompt)}</h3></div>
+              <div class="question-status-stack">
+                <span class="badge ${q.published?'success':'warning'}">${q.published?'เผยแพร่แล้ว':'ฉบับร่าง'}</span>
+                <span class="badge ${hasKey?'success':'warning'}">${hasKey?'มีเฉลย':'รอเฉลย'}</span>
+              </div>
+            </div>
+            ${q.image_document_id ? `<div class="question-source-chip">รูปประกอบ: ${esc(imageName(q.image_document_id) || 'ไฟล์รูป')}</div>` : ''}
+            ${sortedChoices.length ? `<div class="question-choice-preview">${sortedChoices.map((choice) => `<div><span class="choice-dot"></span>${esc(choice.choice_text)}</div>`).join('')}</div>` : ''}
+            <div class="admin-question-footer">
+              <div class="question-meta">
+                <span>${esc(labelFrom(QUESTION_TYPE_LABELS, q.question_type))}</span>
+                <span>${q.points} คะแนน</span>
+                ${q.is_critical ? '<span class="danger-text">ข้อสำคัญ</span>' : ''}
+                ${needsManualReview ? '<span class="danger-text">ต้องตรวจเอง</span>' : ''}
+                ${answerBasisLabel ? `<span>${esc(answerBasisLabel)}</span>` : ''}
+              </div>
+              ${canManage()?`<div class="table-actions"><button class="btn btn-outline btn-sm" data-edit-question="${q.id}">แก้ไข</button><button class="btn btn-danger btn-sm" data-delete-question="${q.id}" data-question-label="${esc(`${q.question_order}. ${q.prompt}`)}">ลบ</button></div>`:''}
+            </div>
+          </article>`;
+        }).join('')}</div>` : empty('ยังไม่มีคำถาม')}
       </div>
       <div class="card">
         <div class="card-header"><div><h2>การมอบหมายและตรวจประเมิน</h2></div>${canCreateCompetency?`<button class="btn btn-primary" id="assign-all-competency">สร้างรายการประเมิน</button>`:''}</div>
@@ -3149,7 +3294,7 @@
       const correctText = (key?.correct_choice_ids || []).map(choiceName).join(', ') || key?.answer_key_json?.text || key?.explanation || 'ให้ผู้ทบทวนพิจารณา';
       const image = imageMap.get(question.image_document_id);
       return `<div class="card" style="box-shadow:none;border:1px solid var(--line)">
-        <h3>${question.question_order}. ${esc(question.prompt)}</h3>
+        <h3>${question.question_order}. ${esc(displayQuestionPrompt(question.prompt) || question.prompt)}</h3>
         ${image ? `<div style="margin:12px 0;text-align:center"><img src="${esc(image.url)}" alt="${esc(image.title || 'รูปประกอบคำถาม')}" style="max-width:100%;max-height:520px;border:1px solid var(--line);border-radius:12px;object-fit:contain"></div>` : ''}
         <div class="grid cols-2"><div><strong>คำตอบของผู้ทำ</strong><p>${esc(userAnswer)}</p></div><div><strong>แนวคำตอบ/เฉลย</strong><p>${esc(correctText)}</p></div></div>
         <div class="form-grid cols-2">
@@ -3322,17 +3467,36 @@
       const { data: reflectionData, error: reflectionError } = await state.supabase.from('ec_reflections').select('*').eq('assignment_id', id).order('created_at');
       if (!reflectionError) reflections = reflectionData || [];
     }
+    let previousSection = '';
     const questionHtml = (questions || []).map((question) => {
       const answerPayload = answerMap.get(question.id)?.answer_payload || {};
-      const questionChoices = (choices || []).filter((choice) => choice.question_id === question.id);
+      const questionChoices = (choices || [])
+        .filter((choice) => choice.question_id === question.id)
+        .sort((a, b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
       const image = imageMap.get(question.image_document_id);
+      const section = String(question.section || 'การแปลผล EQA');
+      const sectionDivider = section !== previousSection
+        ? `<div class="quiz-section-divider"><span>${esc(section)}</span></div>`
+        : '';
+      previousSection = section;
       let input = '';
       if (question.question_type === 'single_choice') {
-        input = questionChoices.map((choice) => `<label style="display:flex;gap:9px;align-items:flex-start;padding:8px 0"><input type="radio" name="q_${question.id}" value="${choice.id}" ${answerPayload.choice_id===choice.id?'checked':''} ${editable?'':'disabled'}>${esc(choice.choice_text)}</label>`).join('');
+        input = `<div class="quiz-choice-list">${questionChoices.map((choice) => `<label class="quiz-choice">
+          <input type="radio" name="q_${question.id}" value="${choice.id}" ${answerPayload.choice_id===choice.id?'checked':''} ${editable?'':'disabled'}>
+          <span class="quiz-radio-ui"></span><span>${esc(choice.choice_text)}</span>
+        </label>`).join('')}</div>`;
       } else {
-        input = `<textarea class="textarea" name="q_${question.id}" ${editable?'':'disabled'}>${esc(answerPayload.text || '')}</textarea>`;
+        input = `<textarea class="textarea quiz-text-answer" name="q_${question.id}" ${editable?'':'disabled'} placeholder="พิมพ์คำตอบของคุณ">${esc(answerPayload.text || '')}</textarea>`;
       }
-      return `<div class="card"><span class="badge">${esc(question.section || '')}</span>${question.is_critical?'<span class="badge danger">ข้อสำคัญ</span>':''}<h3>${question.question_order}. ${esc(question.prompt)}</h3>${image ? `<div style="margin:14px 0;text-align:center"><img src="${esc(image.url)}" alt="${esc(image.title || 'รูปประกอบคำถาม')}" style="max-width:100%;max-height:620px;border:1px solid var(--line);border-radius:12px;object-fit:contain"></div>` : ''}${input}</div>`;
+      return `${sectionDivider}<article class="quiz-question-card">
+        <div class="quiz-question-head">
+          <span class="quiz-question-number">${question.question_order}</span>
+          <div><span class="small muted">${esc(section)}</span><h3>${esc(displayQuestionPrompt(question.prompt) || question.prompt)}</h3></div>
+          ${question.is_critical?'<span class="badge danger">ข้อสำคัญ</span>':''}
+        </div>
+        ${image ? `<figure class="quiz-image-frame"><img src="${esc(image.url)}" alt="${esc(image.title || 'รูปประกอบคำถาม')}"><figcaption>${esc(image.title || 'รูปประกอบคำถาม')}</figcaption></figure>` : ''}
+        ${input}
+      </article>`;
     }).join('');
     const reviewQuestions = Array.isArray(releasedReview?.questions) ? releasedReview.questions : [];
     const releasedReviewHtml = releasedReview ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>เฉลยหลังส่งคำตอบ</h2><div class="small muted">แสดงเฉพาะหลังส่งคำตอบแล้ว</div></div><span class="badge info">คะแนน ${releasedReview.score ?? '-'}%</span></div>${releasedReview.official_summary ? `<div class="notice info">${esc(releasedReview.official_summary)}</div><div style="height:12px"></div>` : ''}${reviewQuestions.map((item) => `<div class="answer-review-row ${item.is_correct === true ? 'correct' : item.is_correct === false ? 'incorrect' : ''}"><div><strong>${item.question_order}. ${esc(item.prompt || '')}</strong></div><div class="grid cols-2" style="margin-top:8px"><div><span class="small muted">คำตอบของคุณ</span><div>${esc(item.user_answer || '-')}</div></div><div><span class="small muted">เฉลย</span><div>${esc(item.correct_answer || '-')}</div></div></div>${item.explanation ? `<div class="small" style="margin-top:8px"><strong>คำอธิบาย:</strong> ${esc(item.explanation)}</div>` : ''}</div>`).join('')}</div>` : '';
@@ -3347,7 +3511,13 @@
         }).join('')}${reflectionEditable && releasedReview ? `<div class="modal-footer"><button class="btn btn-primary" id="submit-reflection">ส่งแบบทบทวน</button></div>` : ''}</div>`
       : '';
     const driveButton = !['not_started','in_progress'].includes(assignment.status) ? `<button class="btn btn-outline" id="archive-my-competency">เก็บ PDF ใน Google Drive</button>` : '';
-    const content = `<section class="page"><div class="page-header"><div><h1>แบบทดสอบ</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div><form id="quiz-form" class="grid">${questionHtml || empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form>${editable && questions?.length ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>` : ''}${releasedReviewHtml}${reflectionHtml}</section>`;
+    const answeredCount = (questions || []).filter((question) => {
+      const payload = answerMap.get(question.id)?.answer_payload || {};
+      return Boolean(payload.choice_id || payload.text);
+    }).length;
+    const content = `<section class="page quiz-page"><div class="page-header"><div><h1>แบบทดสอบ EQA Competency</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div>
+      <div class="quiz-intro-card"><div><span class="eyebrow">แบบประเมินจากผลทดสอบจริง</span><h2>อ่านภาพและเลือกคำตอบที่ถูกต้องที่สุด</h2><p>คำถามแยกตามหมวดเหมือน Google Form สามารถบันทึกร่างแล้วกลับมาทำต่อได้ก่อนวันปิดรับคำตอบ</p></div><div class="quiz-progress-box"><strong>${answeredCount}/${(questions || []).length}</strong><span>ข้อที่บันทึกแล้ว</span></div></div>
+      <form id="quiz-form" class="quiz-form-shell">${questionHtml || empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form>${editable && questions?.length ? `<div class="quiz-submit-bar"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>` : ''}${releasedReviewHtml}${reflectionHtml}</section>`;
     appEl.innerHTML = shell(content, 'แบบทดสอบ');
     bindShell();
     document.getElementById('back-my').onclick = () => navigate('my-competency');
