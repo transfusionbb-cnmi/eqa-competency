@@ -185,7 +185,11 @@
     ec_competency_assignments: 'การมอบหมายการประเมิน',
     ec_competency_answers: 'คำตอบการประเมิน',
     ec_profile_change_requests: 'คำขอเปลี่ยนข้อมูลส่วนตัว',
-    ec_historical_result_confirmations: 'การยืนยันข้อมูลย้อนหลัง'
+    ec_historical_result_confirmations: 'การยืนยันข้อมูลย้อนหลัง',
+    ec_reflections: 'แบบทบทวนข้อผิดพลาด',
+    ec_notification_settings: 'ตั้งค่าการแจ้งเตือน',
+    ec_notification_logs: 'ประวัติการแจ้งเตือน',
+    ec_report_archives: 'ทะเบียนไฟล์ Google Drive'
   };
   const METHOD_LABELS = {
     abo: 'หมู่เลือด ABO',
@@ -398,6 +402,32 @@
     setTimeout(() => el.remove(), duration);
   }
 
+  async function invokeAutomation(body) {
+    const { data, error } = await state.supabase.functions.invoke('eqa-automation', { body });
+    if (error) {
+      let detail = error.message || 'เรียกบริการแจ้งเตือนและ Google Drive ไม่สำเร็จ';
+      try {
+        const payload = error.context && typeof error.context.json === 'function' ? await error.context.json() : null;
+        if (payload?.error) detail = payload.error;
+      } catch (_) { /* keep original message */ }
+      throw new Error(detail);
+    }
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }
+
+  async function archiveReportToDrive(options, silent = false) {
+    try {
+      const result = await invokeAutomation({ action: 'archive_report', ...options });
+      if (!silent) toast('สร้าง PDF และเก็บใน Google Drive แล้ว', 'success');
+      return result?.archive || null;
+    } catch (error) {
+      if (!silent) toast(friendlyError(error), 'danger');
+      else console.warn('Auto archive failed', error);
+      return null;
+    }
+  }
+
   function showModal(title, bodyHtml, footerHtml = '', large = false) {
     closeModal();
     const wrap = document.createElement('div');
@@ -542,6 +572,7 @@
           <div class="nav-section">การจัดการ</div>
           ${navItem('users', '♙', 'ผู้ใช้งานและสิทธิ์', route)}
           ${navItem('audit', '◷', 'ประวัติการใช้งาน', route)}
+          ${canManage() ? navItem('automation', '◉', 'แจ้งเตือน / Google Drive', route) : ''}
           ${navItem('settings', '⚙', 'ตั้งค่าของฉัน', route)}
           <div class="nav-section">ช่วยเหลือ</div>
           ${navItem('help', '?', 'คู่มือการใช้งาน', route)}
@@ -1927,15 +1958,21 @@
       : 'ยังไม่ได้กำหนดวันปิด Competency';
 
     const actionFor = (assignment) => {
+      const actions = [];
       if (hasRole('reviewer')) {
         const canReviewQuiz = assignment.assignment_type === 'quiz' && assignment.status === 'submitted';
         const canReviewPractical = assignment.assignment_type === 'practical' && ['not_started','in_progress','submitted'].includes(assignment.status);
-        if (canReviewQuiz || canReviewPractical) return `<button class="btn btn-primary btn-sm" data-review-competency="${assignment.id}" data-type="${assignment.assignment_type}">ตรวจประเมิน</button>`;
+        if (canReviewQuiz || canReviewPractical) actions.push(`<button class="btn btn-primary btn-sm" data-review-competency="${assignment.id}" data-type="${assignment.assignment_type}">ตรวจประเมิน</button>`);
+        if (assignment.status === 'reflection_submitted') actions.push(`<button class="btn btn-primary btn-sm" data-review-reflection="${assignment.id}">ตรวจแบบทบทวน</button>`);
       }
       if (hasRole('qm') && assignment.status === 'under_review') {
-        return `<button class="btn btn-success btn-sm" data-qm-approve-competency="${assignment.id}">รับรองผล</button><button class="btn btn-warning btn-sm" data-qm-return-competency="${assignment.id}">ส่งกลับผู้ทบทวน</button>`;
+        actions.push(`<button class="btn btn-success btn-sm" data-qm-approve-competency="${assignment.id}">รับรองผล</button>`);
+        actions.push(`<button class="btn btn-warning btn-sm" data-qm-return-competency="${assignment.id}">ส่งกลับผู้ทบทวน</button>`);
       }
-      return '<span class="small muted">รอตามลำดับงาน</span>';
+      if (!['not_started','in_progress','cancelled'].includes(assignment.status) && canReview()) {
+        actions.push(`<button class="btn btn-outline btn-sm" data-archive-competency="${assignment.id}" data-archive-stage="${assignment.status}">เก็บ PDF ใน Drive</button>`);
+      }
+      return actions.length ? actions.join('') : '<span class="small muted">รอตามลำดับงาน</span>';
     };
 
     const aiNotice = canManage() ? `<div class="compact-status">
@@ -2601,7 +2638,45 @@
       if (!confirm(`สร้างรายการประเมินให้เจ้าหน้าที่ทั้งหมดหรือไม่\nปิดรับคำตอบ: ${fmtDate(round.competency_close_at, true)}`)) return;
       await createAssignments();
     });
+
+    document.querySelectorAll('[data-archive-competency]').forEach((button) => button.addEventListener('click', async () => {
+      button.disabled = true;
+      await archiveReportToDrive({
+        report_type: 'competency',
+        assignment_id: button.dataset.archiveCompetency,
+        stage: button.dataset.archiveStage || 'current'
+      });
+      button.disabled = false;
+    }));
   }
+
+  async function openPracticalReview(assignmentId) {
+    const [{ data: assignment, error: assignmentError }, { data: assessment, error: assessmentError }] = await Promise.all([
+      state.supabase.from('ec_competency_assignments').select('*, ec_profiles!ec_competency_assignments_user_id_fkey(full_name)').eq('id', assignmentId).single(),
+      state.supabase.from('ec_practical_assessments').select('*').eq('assignment_id', assignmentId).maybeSingle()
+    ]);
+    if (assignmentError || assessmentError) return toast(friendlyError(assignmentError || assessmentError), 'danger');
+    const fields = [
+      ['result_accuracy', 'ความถูกต้องของผล'],
+      ['procedure_compliance', 'ปฏิบัติตามวิธีและขั้นตอน'],
+      ['method_selection', 'เลือกวิธีตรวจเหมาะสม'],
+      ['interpretation', 'การแปลผล'],
+      ['documentation', 'การบันทึกข้อมูล'],
+      ['problem_solving', 'การแก้ปัญหา']
+    ];
+    const body = `<div class="notice">ผู้ทบทวนประเมินครบทุกหัวข้อ แล้วส่งต่อให้ผู้จัดการคุณภาพรับรอง</div><div style="height:12px"></div><form id="practical-review-form" class="form-grid">${fields.map(([key,label]) => `<div class="field"><label>${esc(label)}</label><select class="select" name="${key}" required><option value="">เลือกผล</option><option value="true" ${assessment?.[key]===true?'selected':''}>ผ่าน</option><option value="false" ${assessment?.[key]===false?'selected':''}>ต้องทบทวน</option></select></div>`).join('')}<div class="field"><label>ข้อคิดเห็นผู้ทบทวน</label><textarea class="textarea" name="note">${esc(assessment?.reviewer_note || '')}</textarea></div></form>`;
+    showModal(`ประเมินการปฏิบัติจริง — ${assignment.ec_profiles?.full_name || ''}`, body, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-practical-review">ผ่านการทบทวนและส่งให้ผู้จัดการคุณภาพ</button>`, true);
+    document.getElementById('save-practical-review').addEventListener('click', async () => {
+      const form = document.getElementById('practical-review-form'); if (!form.reportValidity()) return;
+      const fd = new FormData(form);
+      const payload = Object.fromEntries(fields.map(([key]) => [key, fd.get(key) === 'true']));
+      const { error } = await state.supabase.rpc('ec_reviewer_review_practical', { p_assignment_id: assignmentId, p_assessment: payload, p_note: String(fd.get('note') || '') || null });
+      if (error) return toast(friendlyError(error), 'danger');
+      await archiveReportToDrive({ report_type: 'competency', assignment_id: assignmentId, stage: 'reviewed' }, true);
+      closeModal(); toast('ตรวจทานแล้ว ส่งให้ผู้จัดการคุณภาพเรียบร้อย', 'success'); route();
+    });
+  }
+
   async function openQuizReview(assignmentId) {
     const [{ data: assignment, error: assignmentError }, { data: answers, error: answersError }, { data: questions }, { data: choices }, { data: keys }] = await Promise.all([
       state.supabase.from('ec_competency_assignments').select('*, ec_profiles!ec_competency_assignments_user_id_fkey(full_name)').eq('id', assignmentId).single(),
@@ -2643,7 +2718,41 @@
       if (reviewRows.some((row) => !row.answer_id || row.is_correct === null)) return toast('กรุณาตรวจทุกข้อให้ครบ', 'warning');
       const { error } = await state.supabase.rpc('ec_reviewer_review_quiz', { p_assignment_id: assignmentId, p_reviews: reviewRows, p_note: document.getElementById('quiz-review-note').value || null });
       if (error) return toast(friendlyError(error), 'danger');
+      await archiveReportToDrive({ report_type: 'competency', assignment_id: assignmentId, stage: 'reviewed' }, true);
       closeModal(); toast('ตรวจทานแล้ว ส่งให้ผู้จัดการคุณภาพเรียบร้อย', 'success'); route();
+    });
+  }
+
+  async function openReflectionReview(assignmentId) {
+    const [{ data: assignment, error: assignmentError }, { data: reflections, error: reflectionError }, { data: answers }, { data: questions }] = await Promise.all([
+      state.supabase.from('ec_competency_assignments').select('*, ec_profiles!ec_competency_assignments_user_id_fkey(full_name)').eq('id', assignmentId).single(),
+      state.supabase.from('ec_reflections').select('*').eq('assignment_id', assignmentId).order('created_at'),
+      state.supabase.from('ec_competency_answers').select('id,question_id').eq('assignment_id', assignmentId),
+      state.supabase.from('ec_questions').select('id,question_order,prompt')
+    ]);
+    if (assignmentError || reflectionError) return toast(friendlyError(assignmentError || reflectionError), 'danger');
+    const answerMap = new Map((answers || []).map((row) => [row.id, row]));
+    const questionMap = new Map((questions || []).map((row) => [row.id, row]));
+    const rows = (reflections || []).map((row) => {
+      const answer = answerMap.get(row.answer_id);
+      const question = answer ? questionMap.get(answer.question_id) : null;
+      const heading = row.answer_id ? `${question?.question_order || '-'}. ${question?.prompt || 'รายการทบทวน'}` : 'การทบทวนผลประเมินจากการปฏิบัติจริง';
+      return `<div class="card" style="box-shadow:none;border:1px solid var(--line)"><h3>${esc(heading)}</h3><div class="grid cols-3"><div><span class="small muted">สาเหตุหรือปัจจัย</span><p>${esc(row.reason_for_error)}</p></div><div><span class="small muted">ความเข้าใจ/วิธีที่ถูกต้อง</span><p>${esc(row.corrected_understanding)}</p></div><div><span class="small muted">การนำไปใช้</span><p>${esc(row.application_to_work)}</p></div></div></div>`;
+    }).join('');
+    showModal(`ตรวจแบบทบทวน — ${assignment.ec_profiles?.full_name || ''}`, `<div class="notice info">ตรวจว่าผู้รับการประเมินเข้าใจสาเหตุ แนวคิดที่ถูกต้อง และการนำไปใช้ครบถ้วน</div><div style="height:12px"></div>${rows || empty('ไม่พบแบบทบทวน')}<div class="field"><label>ข้อคิดเห็นผู้ทบทวน</label><textarea class="textarea" id="reflection-review-note"></textarea></div>`, `<button class="btn btn-warning" id="return-reflection">ส่งกลับแก้ไข</button><button class="btn btn-success" id="accept-reflection">รับรองและปิดการประเมิน</button>`, true);
+    document.getElementById('return-reflection').addEventListener('click', async () => {
+      const note = String(document.getElementById('reflection-review-note').value || '').trim();
+      if (!note) return toast('กรุณาระบุเหตุผลที่ส่งกลับ', 'warning');
+      const { error } = await state.supabase.rpc('ec_reviewer_decide_reflection', { p_assignment_id: assignmentId, p_decision: 'returned', p_note: note });
+      if (error) return toast(friendlyError(error), 'danger');
+      closeModal(); toast('ส่งแบบทบทวนกลับให้แก้ไขแล้ว', 'success'); route();
+    });
+    document.getElementById('accept-reflection').addEventListener('click', async () => {
+      const note = String(document.getElementById('reflection-review-note').value || '').trim() || null;
+      const { error } = await state.supabase.rpc('ec_reviewer_decide_reflection', { p_assignment_id: assignmentId, p_decision: 'accepted', p_note: note });
+      if (error) return toast(friendlyError(error), 'danger');
+      await archiveReportToDrive({ report_type: 'competency', assignment_id: assignmentId, stage: 'final' }, true);
+      closeModal(); toast('รับรองแบบทบทวนและปิดการประเมินแล้ว', 'success'); route();
     });
   }
 
@@ -2652,11 +2761,13 @@
       if (button.dataset.type === 'practical') openPracticalReview(button.dataset.reviewCompetency);
       else openQuizReview(button.dataset.reviewCompetency);
     }));
+    document.querySelectorAll('[data-review-reflection]').forEach((button) => button.addEventListener('click', () => openReflectionReview(button.dataset.reviewReflection)));
     document.querySelectorAll('[data-qm-approve-competency]').forEach((button) => button.addEventListener('click', async () => {
       const note = prompt('หมายเหตุผู้จัดการคุณภาพ (เว้นว่างได้)') || '';
-      const { error } = await state.supabase.rpc('ec_qm_decide_competency', { p_assignment_id: button.dataset.qmApproveCompetency, p_decision: 'approved', p_note: note || null });
+      const { data, error } = await state.supabase.rpc('ec_qm_decide_competency', { p_assignment_id: button.dataset.qmApproveCompetency, p_decision: 'approved', p_note: note || null });
       if (error) return toast(friendlyError(error), 'danger');
-      toast('ผู้จัดการคุณภาพรับรองผลแล้ว', 'success'); route();
+      await archiveReportToDrive({ report_type: 'competency', assignment_id: button.dataset.qmApproveCompetency, stage: data?.status === 'passed' ? 'certified' : 'certified' }, true);
+      toast(data?.status === 'needs_reflection' ? 'รับรองผลแล้ว และส่งให้เจ้าหน้าที่ทำแบบทบทวน' : 'ผู้จัดการคุณภาพรับรองผลแล้ว', 'success'); route();
     }));
     document.querySelectorAll('[data-qm-return-competency]').forEach((button) => button.addEventListener('click', async () => {
       const note = prompt('กรุณาระบุเหตุผลที่ส่งกลับผู้ทบทวน');
@@ -2696,11 +2807,51 @@
         ? `<div class="notice danger">ปิดรับคำตอบเมื่อ ${fmtDate(closeAt, true)} แล้ว กรุณาติดต่อผู้จัดการคุณภาพหากต้องขยายเวลา</div>`
         : closeAt ? `<div class="notice info">กรุณาส่งคำตอบภายใน ${fmtDate(closeAt, true)}</div>` : '';
     if (assignment.assignment_type === 'practical') {
-      const content = `<section class="page"><div class="page-header"><div><h1>การประเมินจากการปฏิบัติจริง</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><button class="btn btn-outline" id="back-my">กลับ</button></div>${windowNotice}<div style="height:12px"></div><div class="card"><h2>การประเมินผู้ปฏิบัติจริง</h2><p>ผลการประเมินเชื่อมจากผล EQA รายบุคคล วิธีตรวจ การแปลผล การบันทึก และการแก้ปัญหา</p>${assignmentBadge(assignment.status)}<div style="height:12px"></div><button class="btn btn-primary" id="open-round-practical">เปิดรอบ EQA</button></div></section>`;
+      let practicalReflections = [];
+      if (['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status)) {
+        const { data: reflectionData, error: reflectionError } = await state.supabase.from('ec_reflections').select('*').eq('assignment_id', id).is('answer_id', null).order('created_at');
+        if (!reflectionError) practicalReflections = reflectionData || [];
+      }
+      const reflection = practicalReflections[0] || null;
+      const reflectionEditable = assignment.status === 'needs_reflection';
+      const reflectionDue = assignment.reflection_due_at ? `<div class="notice info">กรุณาส่งแบบทบทวนภายใน ${fmtDate(assignment.reflection_due_at, true)}</div><div style="height:12px"></div>` : '';
+      const reflectionHtml = ['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status) ? `
+        <div class="card">
+          <div class="card-header"><div><h2>แบบทบทวนการปฏิบัติจริง</h2><div class="small muted">ใช้เมื่อมีหัวข้อประเมินที่ต้องปรับปรุง</div></div>${assignmentBadge(assignment.status)}</div>
+          ${reflectionDue}
+          <div class="reflection-item" data-practical-reflection>
+            <div class="form-grid">
+              <div class="field"><label>สาเหตุหรือปัจจัยที่ทำให้หัวข้อนี้ไม่ผ่าน</label><textarea class="textarea" data-practical-reflection-field="reason_for_error" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.reason_for_error || '')}</textarea></div>
+              <div class="field"><label>ความเข้าใจหรือวิธีปฏิบัติที่ถูกต้อง</label><textarea class="textarea" data-practical-reflection-field="corrected_understanding" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.corrected_understanding || '')}</textarea></div>
+              <div class="field"><label>แผนการนำไปใช้กับงานจริง</label><textarea class="textarea" data-practical-reflection-field="application_to_work" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.application_to_work || '')}</textarea></div>
+              ${reflection?.reviewer_note ? `<div class="notice warning"><strong>ข้อคิดเห็นผู้ทบทวน:</strong> ${esc(reflection.reviewer_note)}</div>` : ''}
+            </div>
+          </div>
+          ${reflectionEditable ? `<div class="modal-footer"><button class="btn btn-primary" id="submit-practical-reflection">ส่งแบบทบทวน</button></div>` : ''}
+        </div>` : '';
+      const driveButton = !['not_started','in_progress'].includes(assignment.status) ? `<button class="btn btn-outline" id="archive-practical-competency">เก็บ PDF ใน Google Drive</button>` : '';
+      const content = `<section class="page"><div class="page-header"><div><h1>การประเมินจากการปฏิบัติจริง</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div><div class="card"><div class="card-header"><div><h2>การประเมินผู้ปฏิบัติจริง</h2><p class="muted">ผลเชื่อมจากการทำ EQA รายบุคคล วิธีตรวจ การแปลผล การบันทึก และการแก้ปัญหา</p></div>${assignmentBadge(assignment.status)}</div>${assignment.reviewer_note ? `<div class="notice info"><strong>หมายเหตุจากผู้ประเมิน:</strong> ${esc(assignment.reviewer_note)}</div><div style="height:12px"></div>` : ''}<button class="btn btn-primary" id="open-round-practical">เปิดรอบ EQA</button></div><div style="height:16px"></div>${reflectionHtml}</section>`;
       appEl.innerHTML = shell(content, 'การประเมินจากการปฏิบัติจริง');
       bindShell();
       document.getElementById('back-my').onclick = () => navigate('my-competency');
       document.getElementById('open-round-practical').onclick = () => navigate(`round/${assignment.round_id}/individual`);
+      document.getElementById('archive-practical-competency')?.addEventListener('click', async () => {
+        await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: assignment.status });
+      });
+      document.getElementById('submit-practical-reflection')?.addEventListener('click', async () => {
+        const item = {
+          answer_id: null,
+          reason_for_error: String(document.querySelector('[data-practical-reflection-field="reason_for_error"]')?.value || '').trim(),
+          corrected_understanding: String(document.querySelector('[data-practical-reflection-field="corrected_understanding"]')?.value || '').trim(),
+          application_to_work: String(document.querySelector('[data-practical-reflection-field="application_to_work"]')?.value || '').trim()
+        };
+        if (!item.reason_for_error || !item.corrected_understanding || !item.application_to_work) return toast('กรุณากรอกแบบทบทวนให้ครบทุกช่อง', 'warning');
+        if (!confirm('ยืนยันส่งแบบทบทวนการปฏิบัติจริงให้ผู้ทบทวนตรวจหรือไม่')) return;
+        const { error: reflectionError } = await state.supabase.rpc('ec_submit_reflection', { p_assignment_id: id, p_items: [item] });
+        if (reflectionError) return toast(friendlyError(reflectionError), 'danger');
+        await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: 'reflection' }, true);
+        toast('ส่งแบบทบทวนแล้ว', 'success'); route();
+      });
       return;
     }
     const [{ data: questions }, { data: choices }, { data: answers }] = await Promise.all([
@@ -2716,6 +2867,11 @@
       const { data: reviewData, error: reviewError } = await state.supabase.rpc('ec_get_my_competency_review', { p_assignment_id: id });
       if (!reviewError) releasedReview = reviewData;
     }
+    let reflections = [];
+    if (['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status)) {
+      const { data: reflectionData, error: reflectionError } = await state.supabase.from('ec_reflections').select('*').eq('assignment_id', id).order('created_at');
+      if (!reflectionError) reflections = reflectionData || [];
+    }
     const questionHtml = (questions || []).map((question) => {
       const answerPayload = answerMap.get(question.id)?.answer_payload || {};
       const questionChoices = (choices || []).filter((choice) => choice.question_id === question.id);
@@ -2730,10 +2886,38 @@
     }).join('');
     const reviewQuestions = Array.isArray(releasedReview?.questions) ? releasedReview.questions : [];
     const releasedReviewHtml = releasedReview ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>เฉลยหลังส่งคำตอบ</h2><div class="small muted">แสดงเฉพาะหลังส่งคำตอบแล้ว</div></div><span class="badge info">คะแนน ${releasedReview.score ?? '-'}%</span></div>${releasedReview.official_summary ? `<div class="notice info">${esc(releasedReview.official_summary)}</div><div style="height:12px"></div>` : ''}${reviewQuestions.map((item) => `<div class="answer-review-row ${item.is_correct === true ? 'correct' : item.is_correct === false ? 'incorrect' : ''}"><div><strong>${item.question_order}. ${esc(item.prompt || '')}</strong></div><div class="grid cols-2" style="margin-top:8px"><div><span class="small muted">คำตอบของคุณ</span><div>${esc(item.user_answer || '-')}</div></div><div><span class="small muted">เฉลย</span><div>${esc(item.correct_answer || '-')}</div></div></div>${item.explanation ? `<div class="small" style="margin-top:8px"><strong>คำอธิบาย:</strong> ${esc(item.explanation)}</div>` : ''}</div>`).join('')}</div>` : '';
-    const content = `<section class="page"><div class="page-header"><div><h1>แบบทดสอบ</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div><form id="quiz-form" class="grid">${questionHtml || empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form>${editable && questions?.length ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>` : ''}${releasedReviewHtml}</section>`;
+    const reflectionMap = new Map((reflections || []).map((row) => [row.answer_id, row]));
+    const incorrectReviewQuestions = reviewQuestions.filter((item) => item.is_correct === false);
+    const reflectionEditable = assignment.status === 'needs_reflection';
+    const reflectionHtml = ['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status)
+      ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>แบบทบทวนข้อผิดพลาด</h2><div class="small muted">บันทึกสาเหตุ ความเข้าใจที่ถูกต้อง และการนำไปใช้กับงาน</div></div>${assignmentBadge(assignment.status)}</div>${!releasedReview ? `<div class="notice warning">ผู้จัดการคุณภาพยังไม่ได้เปิดเฉลย จึงยังกรอกแบบทบทวนไม่ได้</div>` : incorrectReviewQuestions.map((item) => {
+          const answer = answerMap.get(item.question_id);
+          const reflection = answer ? reflectionMap.get(answer.id) : null;
+          return `<div class="reflection-item" data-reflection-answer="${answer?.id || ''}"><h3>${item.question_order}. ${esc(item.prompt || '')}</h3><div class="grid cols-2"><div><span class="small muted">คำตอบของคุณ</span><div>${esc(item.user_answer || '-')}</div></div><div><span class="small muted">เฉลย</span><div>${esc(item.correct_answer || '-')}</div></div></div><div class="form-grid" style="margin-top:12px"><div class="field"><label>สาเหตุที่ตอบผิด</label><textarea class="textarea" data-reflection-field="reason_for_error" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.reason_for_error || '')}</textarea></div><div class="field"><label>ความเข้าใจที่ถูกต้อง</label><textarea class="textarea" data-reflection-field="corrected_understanding" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.corrected_understanding || '')}</textarea></div><div class="field"><label>จะนำไปใช้กับงานอย่างไร</label><textarea class="textarea" data-reflection-field="application_to_work" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.application_to_work || '')}</textarea></div>${reflection?.reviewer_note ? `<div class="notice warning"><strong>ข้อคิดเห็นผู้ทบทวน:</strong> ${esc(reflection.reviewer_note)}</div>` : ''}</div></div>`;
+        }).join('')}${reflectionEditable && releasedReview ? `<div class="modal-footer"><button class="btn btn-primary" id="submit-reflection">ส่งแบบทบทวน</button></div>` : ''}</div>`
+      : '';
+    const driveButton = !['not_started','in_progress'].includes(assignment.status) ? `<button class="btn btn-outline" id="archive-my-competency">เก็บ PDF ใน Google Drive</button>` : '';
+    const content = `<section class="page"><div class="page-header"><div><h1>แบบทดสอบ</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div><form id="quiz-form" class="grid">${questionHtml || empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form>${editable && questions?.length ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>` : ''}${releasedReviewHtml}${reflectionHtml}</section>`;
     appEl.innerHTML = shell(content, 'แบบทดสอบ');
     bindShell();
     document.getElementById('back-my').onclick = () => navigate('my-competency');
+    document.getElementById('archive-my-competency')?.addEventListener('click', async () => {
+      await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: assignment.status });
+    });
+    document.getElementById('submit-reflection')?.addEventListener('click', async () => {
+      const items = [...document.querySelectorAll('[data-reflection-answer]')].map((card) => ({
+        answer_id: card.dataset.reflectionAnswer,
+        reason_for_error: String(card.querySelector('[data-reflection-field="reason_for_error"]')?.value || '').trim(),
+        corrected_understanding: String(card.querySelector('[data-reflection-field="corrected_understanding"]')?.value || '').trim(),
+        application_to_work: String(card.querySelector('[data-reflection-field="application_to_work"]')?.value || '').trim()
+      }));
+      if (!items.length || items.some((item) => !item.answer_id || !item.reason_for_error || !item.corrected_understanding || !item.application_to_work)) return toast('กรุณากรอกแบบทบทวนให้ครบทุกข้อและทุกช่อง', 'warning');
+      if (!confirm('ยืนยันส่งแบบทบทวนให้ผู้ทบทวนตรวจหรือไม่')) return;
+      const { error: reflectionError } = await state.supabase.rpc('ec_submit_reflection', { p_assignment_id: id, p_items: items });
+      if (reflectionError) return toast(friendlyError(reflectionError), 'danger');
+      await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: 'reflection' }, true);
+      toast('ส่งแบบทบทวนแล้ว', 'success'); route();
+    });
     if (editable) {
       const startResult = await state.supabase.rpc('ec_start_competency', { p_assignment_id: id });
       if (startResult.error) toast(friendlyError(startResult.error), 'danger');
@@ -2761,6 +2945,7 @@
           await save();
           const { error: submitError } = await state.supabase.rpc('ec_submit_competency', { p_assignment_id: id });
           if (submitError) throw submitError;
+          await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: 'submitted' }, true);
           toast('ส่งคำตอบแล้ว', 'success');
           if (assignment.ec_eqa_rounds?.answer_released_at) route();
           else navigate('my-competency');
@@ -2769,8 +2954,169 @@
     }
   }
   async function renderReports() {
-    const {data:rounds,error}=await state.supabase.from('ec_eqa_rounds').select('*').order('survey_year',{ascending:false});if(error)return renderError(error);
-    const content=`<section class="page"><div class="page-header"><div><h1>รายงาน / ทะเบียน EQA</h1><p>กดปุ่มพิมพ์ แล้วเลือกบันทึกเป็นไฟล์ PDF</p></div><button class="btn btn-primary no-print" id="print-report">พิมพ์ / บันทึกเป็น PDF</button></div><div class="print-only"><h1>ทะเบียน EQA ประจำปี</h1><p>${esc(cfg.ORGANIZATION_NAME)}</p></div><div class="card"><div class="table-wrap"><table><thead><tr><th>ปี</th><th>ผู้ให้บริการ / รอบ</th><th>ประเภทข้อมูล</th><th>โปรแกรม</th><th>วันครบกำหนด</th><th>สถานะ</th><th>เลขเอกสาร</th></tr></thead><tbody>${(rounds||[]).map(r=>`<tr><td>${r.survey_year}</td><td>${esc(r.provider)} ${esc(r.round_code)}</td><td>${isHistoricalRound(r)?'ข้อมูลย้อนหลัง':'รอบใหม่'}</td><td>${esc(r.program_name)}</td><td>${fmtDate(r.due_date)}</td><td>${STATUS_LABELS[r.status]||'ไม่ทราบสถานะ'}${isHistoricalRound(r)?`<br><span class="small muted">${esc(labelFrom(HISTORICAL_REVIEW_LABELS,r.historical_review_status))}</span>`:''}</td><td>${esc(r.document_number||'-')} ฉบับแก้ไขที่ ${esc(r.document_revision||'1')}</td></tr>`).join('')}</tbody></table></div><div class="small muted" style="margin-top:12px">พิมพ์จากระบบวันที่ ${fmtDate(new Date(),true)}</div></div></section>`;appEl.innerHTML=shell(content,'รายงาน');bindShell();document.getElementById('print-report').onclick=()=>window.print();
+    const [{ data: rounds, error: roundError }, { data: archives, error: archiveError }] = await Promise.all([
+      state.supabase.from('ec_eqa_rounds').select('*').order('survey_year', { ascending: false }).order('due_date', { ascending: false }),
+      state.supabase.from('ec_report_archives').select('*').order('generated_at', { ascending: false }).limit(100)
+    ]);
+    if (roundError || archiveError) return renderError(roundError || archiveError);
+    const archiveRows = archives || [];
+    const roundArchiveMap = new Map();
+    archiveRows.filter((row) => row.report_type === 'round_summary' && row.round_id).forEach((row) => {
+      if (!roundArchiveMap.has(row.round_id)) roundArchiveMap.set(row.round_id, row);
+    });
+    const reportTypeLabel = { registry: 'ทะเบียน EQA', round_summary: 'สรุปรอบ EQA', competency: 'รายงาน Competency' };
+    const sourceLabel = { manual: 'สร้างด้วยตนเอง', automatic: 'ระบบสร้างอัตโนมัติ' };
+    const canArchiveAll = hasRole('admin','qm','reviewer','physician','viewer');
+    const content = `<section class="page">
+      <div class="page-header">
+        <div><h1>รายงาน / ทะเบียน EQA</h1><p>พิมพ์จากหน้าเว็บ หรือสร้าง PDF ที่มีทะเบียนและลิงก์เก็บใน Google Drive</p></div>
+        <div class="header-actions no-print">
+          ${canArchiveAll ? '<button class="btn btn-secondary" id="archive-registry">เก็บทะเบียนใน Google Drive</button>' : ''}
+          <button class="btn btn-primary" id="print-report">พิมพ์ / บันทึกเป็น PDF</button>
+        </div>
+      </div>
+      <div class="print-only"><h1>ทะเบียน EQA ประจำปี</h1><p>${esc(cfg.ORGANIZATION_NAME)}</p></div>
+      <div class="card">
+        <div class="card-header"><div><h2>ทะเบียนรอบ EQA</h2><div class="small muted">ปุ่มเก็บ PDF จะสร้างไฟล์ฉบับใหม่ ไม่เขียนทับไฟล์เดิม</div></div></div>
+        <div class="table-wrap"><table><thead><tr><th>ปี</th><th>ผู้ให้บริการ / รอบ</th><th>ประเภทข้อมูล</th><th>โปรแกรม</th><th>วันครบกำหนด</th><th>สถานะ</th><th>เลขเอกสาร</th><th class="no-print">Google Drive</th></tr></thead><tbody>${(rounds || []).map((r) => {
+          const latest = roundArchiveMap.get(r.id);
+          return `<tr><td>${r.survey_year}</td><td><strong>${esc(r.provider)} ${esc(r.round_code)}</strong></td><td>${isHistoricalRound(r) ? 'ข้อมูลย้อนหลัง' : 'รอบใหม่'}</td><td>${esc(r.program_name)}</td><td>${fmtDate(r.due_date)}</td><td>${statusBadge(r.status)}${isHistoricalRound(r) ? `<br><span class="small muted">${esc(labelFrom(HISTORICAL_REVIEW_LABELS, r.historical_review_status))}</span>` : ''}</td><td>${esc(r.document_number || '-')} ฉบับแก้ไขที่ ${esc(r.document_revision || '1')}</td><td class="no-print"><div class="table-actions">${canArchiveAll ? `<button class="btn btn-outline btn-sm" data-archive-round="${r.id}" data-stage="${esc(r.status || 'current')}">เก็บ PDF รอบ</button>` : ''}${latest ? `<a class="btn btn-outline btn-sm" href="${esc(latest.drive_url)}" target="_blank" rel="noopener">เปิดไฟล์ล่าสุด</a>` : '<span class="small muted">ยังไม่มีไฟล์</span>'}</div></td></tr>`;
+        }).join('')}</tbody></table></div>
+        <div class="small muted" style="margin-top:12px">พิมพ์จากระบบวันที่ ${fmtDate(new Date(), true)}</div>
+      </div>
+      <div class="card no-print">
+        <div class="card-header"><div><h2>ไฟล์ที่เก็บใน Google Drive</h2><div class="small muted">แสดงสูงสุด 100 ไฟล์ล่าสุดตามสิทธิ์ของบัญชี</div></div><span class="badge info">${archiveRows.length} ไฟล์</span></div>
+        ${archiveRows.length ? `<div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>ประเภท</th><th>ชื่อไฟล์</th><th>ขั้นตอน / ฉบับ</th><th>แหล่งที่มา</th><th>เปิดไฟล์</th></tr></thead><tbody>${archiveRows.map((row) => `<tr><td>${fmtDate(row.generated_at, true)}</td><td>${esc(reportTypeLabel[row.report_type] || row.report_type)}</td><td><strong>${esc(row.file_name)}</strong><div class="small muted">${esc(row.drive_folder_path || '-')}</div></td><td>${esc(row.stage || '-')} · v${row.version || 1}</td><td>${esc(sourceLabel[row.source] || row.source || '-')}</td><td><a class="btn btn-outline btn-sm" href="${esc(row.drive_url)}" target="_blank" rel="noopener">เปิดใน Drive</a></td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่มีไฟล์ที่เก็บใน Google Drive')}
+      </div>
+    </section>`;
+    appEl.innerHTML = shell(content, 'รายงาน');
+    bindShell();
+    document.getElementById('print-report').onclick = () => window.print();
+    document.getElementById('archive-registry')?.addEventListener('click', async (event) => {
+      event.currentTarget.disabled = true;
+      const archive = await archiveReportToDrive({ report_type: 'registry', stage: `registry_${new Date().getFullYear()}` });
+      event.currentTarget.disabled = false;
+      if (archive) route();
+    });
+    document.querySelectorAll('[data-archive-round]').forEach((button) => button.addEventListener('click', async () => {
+      button.disabled = true;
+      const archive = await archiveReportToDrive({ report_type: 'round_summary', round_id: button.dataset.archiveRound, stage: button.dataset.stage || 'current' });
+      button.disabled = false;
+      if (archive) route();
+    }));
+  }
+
+  function parseDayList(value, fallback = []) {
+    const values = String(value || '').split(',').map((item) => Number(item.trim())).filter((item) => Number.isInteger(item) && item >= 0 && item <= 365);
+    return values.length ? [...new Set(values)] : fallback;
+  }
+
+  async function renderAutomation() {
+    if (!canManage()) {
+      const content = `<section class="page"><div class="page-header"><div><h1>แจ้งเตือน / Google Drive</h1></div></div><div class="notice warning">หน้านี้ตั้งค่าได้เฉพาะโหมดผู้ดูแลระบบหรือผู้จัดการคุณภาพ กรุณาเปลี่ยนบทบาทจากเมนูด้านซ้าย</div></section>`;
+      appEl.innerHTML = shell(content, 'แจ้งเตือน / Google Drive'); bindShell(); return;
+    }
+    const [{ data: settings, error: settingsError }, { data: logs, error: logError }, { data: archives, error: archiveError }] = await Promise.all([
+      state.supabase.from('ec_notification_settings').select('*').eq('id', 1).single(),
+      state.supabase.from('ec_notification_logs').select('*').order('created_at', { ascending: false }).limit(50),
+      state.supabase.from('ec_report_archives').select('*').order('generated_at', { ascending: false }).limit(20)
+    ]);
+    if (settingsError || logError || archiveError) return renderError(settingsError || logError || archiveError);
+    const categoryLabel = {
+      eqa_due: 'EQA ใกล้ครบกำหนด', competency_due: 'Competency ใกล้ครบกำหนด', reflection_due: 'แบบทบทวนใกล้ครบกำหนด',
+      reviewer_pending: 'รอผู้ทบทวน', qm_pending: 'รอผู้จัดการคุณภาพ', reflection_review_pending: 'รอตรวจแบบทบทวน',
+      daily_chat_summary: 'สรุปรายวัน', system_test: 'ทดสอบระบบ'
+    };
+    const channelLabel = { email: 'Email', google_chat: 'Google Chat' };
+    const logBadge = (status) => `<span class="badge ${status === 'sent' ? 'success' : status === 'failed' ? 'danger' : status === 'skipped' ? '' : 'warning'}">${esc({ sent: 'ส่งสำเร็จ', failed: 'ส่งไม่สำเร็จ', pending: 'กำลังส่ง', skipped: 'ข้าม' }[status] || status || '-')}</span>`;
+    const content = `<section class="page">
+      <div class="page-header"><div><h1>แจ้งเตือน / Google Drive</h1><p>ติดตาม EQA, Competency, Reflection, Reviewer และ QM พร้อมสำรองรายงาน PDF</p></div><div class="header-actions"><button class="btn btn-outline" id="automation-health">ตรวจการเชื่อมต่อ</button><button class="btn btn-secondary" id="automation-test">ส่งข้อความทดสอบ</button><button class="btn btn-primary" id="automation-run">ตรวจและส่งตอนนี้</button></div></div>
+      <div id="automation-result"></div>
+      <div class="grid cols-2 automation-grid">
+        <div class="card">
+          <div class="card-header"><div><h2>เปิด–ปิดการทำงาน</h2><div class="small muted">ค่าตั้งนี้ใช้กับการตรวจอัตโนมัติทุกวัน</div></div></div>
+          <form id="automation-settings-form" class="form-grid">
+            <label class="toggle-row"><input type="checkbox" name="enabled" ${settings.enabled ? 'checked' : ''}><span><strong>เปิดระบบแจ้งเตือน</strong><small>ปิดไว้ได้ชั่วคราวโดยไม่ลบ Trigger</small></span></label>
+            <label class="toggle-row"><input type="checkbox" name="send_email" ${settings.send_email ? 'checked' : ''}><span><strong>ส่ง Email</strong><small>ส่งถึงผู้รับผิดชอบตามขั้นตอน</small></span></label>
+            <label class="toggle-row"><input type="checkbox" name="send_google_chat" ${settings.send_google_chat ? 'checked' : ''}><span><strong>ส่ง Google Chat</strong><small>ส่งภาพรวมเข้าห้องหน่วยงาน</small></span></label>
+            <label class="toggle-row"><input type="checkbox" name="auto_archive" ${settings.auto_archive ? 'checked' : ''}><span><strong>เก็บ PDF อัตโนมัติใน Google Drive</strong><small>สร้างเมื่อสถานะสำคัญเปลี่ยนและไม่เขียนทับฉบับเดิม</small></span></label>
+            <label class="toggle-row"><input type="checkbox" name="chat_include_person_names" ${settings.chat_include_person_names ? 'checked' : ''}><span><strong>แสดงชื่อบุคลากรใน Google Chat</strong><small>แนะนำให้ปิด เพื่อคงความเป็นส่วนตัวของผลประเมินรายบุคคล</small></span></label>
+            <div class="field"><label>ลิงก์หน้าเว็บ</label><input class="input" name="app_url" type="url" value="${esc(settings.app_url || cfg.DEFAULT_DOMAIN || '')}" required></div>
+            <div class="field"><label>เขตเวลา</label><input class="input" name="timezone" value="${esc(settings.timezone || 'Asia/Bangkok')}" required></div>
+            <button class="btn btn-primary" type="submit">บันทึกการตั้งค่า</button>
+          </form>
+        </div>
+        <div class="card">
+          <div class="card-header"><div><h2>ระยะเวลาแจ้งเตือน</h2><div class="small muted">กรอกหลายวันโดยคั่นด้วยเครื่องหมายจุลภาค</div></div></div>
+          <form id="automation-days-form" class="form-grid cols-2">
+            <div class="field"><label>EQA ก่อนครบกำหนด</label><input class="input" name="eqa_before_days" value="${esc((settings.eqa_before_days || [7,3,1,0]).join(', '))}"><small>เช่น 7, 3, 1, 0</small></div>
+            <div class="field"><label>Competency ก่อนครบกำหนด</label><input class="input" name="competency_before_days" value="${esc((settings.competency_before_days || [7,3,1,0]).join(', '))}"></div>
+            <div class="field"><label>Reflection ก่อนครบกำหนด</label><input class="input" name="reflection_before_days" value="${esc((settings.reflection_before_days || [3,1,0]).join(', '))}"></div>
+            <div class="field"><label>แจ้งเมื่อเลยกำหนด</label><input class="input" name="overdue_days" value="${esc((settings.overdue_days || [1,3,7]).join(', '))}"></div>
+            <div class="field"><label>หลังจากนั้นเตือนซ้ำทุกกี่วัน</label><input class="input" type="number" min="1" max="60" name="overdue_repeat_days" value="${settings.overdue_repeat_days || 7}" required></div>
+            <div class="field"><label>Reviewer: เตือนภายในกี่วัน</label><input class="input" type="number" min="1" max="60" name="reviewer_reminder_days" value="${settings.reviewer_reminder_days || 3}" required></div>
+            <div class="field"><label>Reviewer: ส่งต่อ QM เมื่อค้างกี่วัน</label><input class="input" type="number" min="1" max="60" name="reviewer_escalation_days" value="${settings.reviewer_escalation_days || 5}" required></div>
+            <div class="field"><label>QM: เตือนภายในกี่วัน</label><input class="input" type="number" min="1" max="60" name="qm_reminder_days" value="${settings.qm_reminder_days || 3}" required></div>
+            <div class="field"><label>กำหนดเวลาทำ Reflection กี่วัน</label><input class="input" type="number" min="1" max="60" name="reflection_due_days" value="${settings.reflection_due_days || 7}" required></div>
+            <div style="grid-column:1/-1"><button class="btn btn-primary" type="submit">บันทึกระยะเวลา</button></div>
+          </form>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div><h2>ประวัติการแจ้งเตือนล่าสุด</h2><div class="small muted">ระบบป้องกันข้อความซ้ำด้วยรหัสการแจ้งเตือนแต่ละช่วง</div></div><span class="badge info">${(logs || []).length} รายการ</span></div>
+        ${(logs || []).length ? `<div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>ประเภท</th><th>ช่องทาง</th><th>ผู้รับ</th><th>หัวข้อ</th><th>ผล</th></tr></thead><tbody>${logs.map((row) => `<tr><td>${fmtDate(row.created_at, true)}</td><td>${esc(categoryLabel[row.category] || row.category)}</td><td>${esc(channelLabel[row.channel] || row.channel)}</td><td>${esc(row.target || '-')}</td><td>${esc(row.subject || '-')} ${row.error_message ? `<div class="small danger-text">${esc(row.error_message)}</div>` : ''}</td><td>${logBadge(row.status)}</td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่มีประวัติการแจ้งเตือน')}
+      </div>
+      <div class="card">
+        <div class="card-header"><div><h2>PDF ที่ระบบสำรองล่าสุด</h2><div class="small muted">เปิดดูไฟล์จริงจาก Google Drive ได้โดยตรง</div></div><a class="btn btn-outline btn-sm" href="#/reports">ดูทั้งหมด</a></div>
+        ${(archives || []).length ? `<div class="archive-list">${archives.map((row) => `<a class="archive-row" href="${esc(row.drive_url)}" target="_blank" rel="noopener"><span><strong>${esc(row.file_name)}</strong><small>${fmtDate(row.generated_at, true)} · ${esc(row.source === 'automatic' ? 'อัตโนมัติ' : 'สร้างด้วยตนเอง')}</small></span><span>เปิดไฟล์ ↗</span></a>`).join('')}</div>` : empty('ยังไม่มีไฟล์ PDF ในทะเบียน')}
+      </div>
+    </section>`;
+    appEl.innerHTML = shell(content, 'แจ้งเตือน / Google Drive');
+    bindShell();
+    const showResult = (message, type = 'info') => {
+      const box = document.getElementById('automation-result');
+      box.innerHTML = `<div class="notice ${type}">${message}</div><div style="height:12px"></div>`;
+      box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    };
+    const saveSettings = async (payload, successMessage) => {
+      const { error } = await state.supabase.from('ec_notification_settings').update({ ...payload, updated_by: state.user.id, updated_at: new Date().toISOString() }).eq('id', 1);
+      if (error) return toast(friendlyError(error), 'danger');
+      toast(successMessage, 'success'); route();
+    };
+    document.getElementById('automation-settings-form').addEventListener('submit', async (event) => {
+      event.preventDefault(); const fd = new FormData(event.currentTarget);
+      await saveSettings({ enabled: fd.get('enabled') === 'on', send_email: fd.get('send_email') === 'on', send_google_chat: fd.get('send_google_chat') === 'on', auto_archive: fd.get('auto_archive') === 'on', chat_include_person_names: fd.get('chat_include_person_names') === 'on', app_url: String(fd.get('app_url') || '').trim().replace(/\/$/, ''), timezone: String(fd.get('timezone') || 'Asia/Bangkok').trim() }, 'บันทึกการตั้งค่าแล้ว');
+    });
+    document.getElementById('automation-days-form').addEventListener('submit', async (event) => {
+      event.preventDefault(); const fd = new FormData(event.currentTarget);
+      await saveSettings({
+        eqa_before_days: parseDayList(fd.get('eqa_before_days'), [7,3,1,0]), competency_before_days: parseDayList(fd.get('competency_before_days'), [7,3,1,0]), reflection_before_days: parseDayList(fd.get('reflection_before_days'), [3,1,0]), overdue_days: parseDayList(fd.get('overdue_days'), [1,3,7]),
+        overdue_repeat_days: Number(fd.get('overdue_repeat_days')), reviewer_reminder_days: Number(fd.get('reviewer_reminder_days')), reviewer_escalation_days: Number(fd.get('reviewer_escalation_days')), qm_reminder_days: Number(fd.get('qm_reminder_days')), reflection_due_days: Number(fd.get('reflection_due_days'))
+      }, 'บันทึกระยะเวลาแจ้งเตือนแล้ว');
+    });
+    document.getElementById('automation-health').addEventListener('click', async (event) => {
+      event.currentTarget.disabled = true;
+      try { const result = await invokeAutomation({ action: 'health' }); showResult(`<strong>เชื่อมต่อสำเร็จ</strong><br>Edge Function: พร้อมใช้งาน<br>Apps Script: ${esc(result?.apps_script?.message || 'พร้อมใช้งาน')}`, 'success'); }
+      catch (error) { showResult(`<strong>เชื่อมต่อไม่สำเร็จ</strong><br>${esc(friendlyError(error))}`, 'danger'); }
+      finally { event.currentTarget.disabled = false; }
+    });
+    document.getElementById('automation-test').addEventListener('click', async (event) => {
+      if (!confirm('ระบบจะส่งอีเมลทดสอบถึงคุณ และส่งข้อความเข้าห้อง Google Chat หากเปิดใช้งาน ยืนยันหรือไม่')) return;
+      event.currentTarget.disabled = true;
+      try { const result = await invokeAutomation({ action: 'test_notification' }); const ok = (result.results || []).filter((row) => row.ok).length; showResult(`<strong>ส่งข้อความทดสอบแล้ว</strong><br>สำเร็จ ${ok} จาก ${(result.results || []).length} ช่องทาง`, ok ? 'success' : 'warning'); setTimeout(() => route(), 1400); }
+      catch (error) { showResult(`<strong>ส่งข้อความทดสอบไม่สำเร็จ</strong><br>${esc(friendlyError(error))}`, 'danger'); }
+      finally { event.currentTarget.disabled = false; }
+    });
+    document.getElementById('automation-run').addEventListener('click', async (event) => {
+      if (!confirm('ตรวจรายการค้าง ส่งการแจ้งเตือนที่ถึงกำหนด และสำรอง PDF ตอนนี้หรือไม่')) return;
+      event.currentTarget.disabled = true;
+      try {
+        const result = await invokeAutomation({ action: 'run_now' });
+        showResult(`<strong>ตรวจรอบปัจจุบันเสร็จแล้ว</strong><br>รายการที่เข้าเงื่อนไข ${result.candidate_notifications || 0} · ส่งใหม่ ${result.sent_now || 0} · ข้ามข้อความซ้ำ ${result.skipped_duplicate || 0} · สร้าง PDF ${result.archives_created || 0}`, 'success');
+        setTimeout(() => route(), 1400);
+      } catch (error) { showResult(`<strong>ตรวจรายการไม่สำเร็จ</strong><br>${esc(friendlyError(error))}`, 'danger'); }
+      finally { event.currentTarget.disabled = false; }
+    });
   }
 
   async function invokeAdminUserAction(body) {
@@ -3031,6 +3377,9 @@
         <details><summary>ผลรายบุคคลและสรุปผลห้องปฏิบัติการ</summary><div class="guide-body"><p>ผู้ปฏิบัติแต่ละคนบันทึกผลของตนเองแยกกัน เมื่อส่งครบ ระบบจะเติมค่าที่ตรงกันในสรุปผลห้องให้อัตโนมัติ</p><p>ค่าที่ไม่ตรงกันจะถูกทำเครื่องหมายให้ผู้ทบทวนตรวจและเลือกผลที่ถูกต้องก่อนส่งให้ผู้จัดการคุณภาพ</p></div></details>
         <details><summary>การตรวจ รับรอง และรับทราบ</summary><div class="guide-body"><p>ผู้ทบทวนตรวจผลห้องและหลักฐาน จากนั้นส่งให้ผู้จัดการคุณภาพรับรอง เมื่อรับรองแล้วแพทย์จึงกดรับทราบได้</p><p>ผู้จัดการคุณภาพต้องรับรองทุกรอบ แม้เป็นหนึ่งในผู้ปฏิบัติจริง โดยต้องสลับ “ใช้งานในบทบาท” ให้ตรงกับขั้นตอน เช่น กรอกผลในบทบาทเจ้าหน้าที่ และรับรองในบทบาทผู้จัดการคุณภาพ</p><p>ประวัติการอนุมัติจะแสดงชื่อพร้อมบทบาทที่ใช้ลงนามในแต่ละครั้ง ส่วนผู้ทบทวนยังต้องเป็นคนละคนกับผู้ปฏิบัติจริงทั้งสองคน</p><p>การส่งกลับต้องระบุเหตุผล เพื่อให้ผู้เกี่ยวข้องแก้ไขเฉพาะจุด</p></div></details>
         <details><summary>การสร้างจากเอกสารและรายงานผล</summary><div class="guide-body"><p><strong>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</strong> ใช้กับรอบใหม่ ระบบอ่านฟอร์มเปล่า คู่มือ และภาพผลดิบ แล้วสร้างฉบับร่างให้ QM ตรวจ</p><p><strong>สร้างเฉลยและสรุปผลจากรายงาน</strong> ใช้เมื่อรายงานผลอย่างเป็นทางการมาถึงภายหลัง</p><p><strong>สร้างย้อนหลังครบชุดจากเอกสารและรายงานผล</strong> ใช้กับรอบที่ได้รับผลแล้ว ระบบสร้างครบทั้งแบบกรอก คำแนะนำ ข้อสอบ เฉลย และสรุป พร้อมตั้งให้เจ้าหน้าที่เห็นเฉลยทันทีหลังส่งคำตอบ</p><p>ข้อสอบทุกข้อยังเป็นฉบับร่างจนกว่า QM จะตรวจและกดเผยแพร่ รอบย้อนหลังต้องกำหนดวันเปิดและวันปิด Competency ก่อนสร้างรายการประเมิน</p></div></details>
+        <details><summary>การแจ้งเตือน EQA และ Competency</summary><div class="guide-body"><p>ผู้ดูแลระบบหรือผู้จัดการคุณภาพตั้งค่าได้ที่เมนู <strong>แจ้งเตือน / Google Drive</strong> ระบบตรวจรายการ EQA ใกล้ครบกำหนด แบบทดสอบที่ยังไม่ส่ง แบบทบทวน ผู้ทบทวนที่ยังไม่ตรวจ และรายการรอผู้จัดการคุณภาพ</p><p>Email ส่งถึงผู้เกี่ยวข้องตามหน้าที่ ส่วน Google Chat ใช้แจ้งภาพรวมของหน่วยงาน โดยค่าเริ่มต้นไม่แสดงชื่อผู้รับการประเมินรายบุคคล</p><p>ปุ่ม <strong>ตรวจและส่งตอนนี้</strong> ใช้ทดสอบหรือตรวจรายการทันที ส่วน Trigger ใน Google Apps Script จะเรียกตรวจอัตโนมัติทุกวัน</p></div></details>
+        <details><summary>แบบทบทวนหลังผลประเมินไม่ผ่าน</summary><div class="guide-body"><p>เมื่อผู้จัดการคุณภาพรับรองแล้วพบข้อที่ตอบไม่ถูกหรือหัวข้อการปฏิบัติที่ต้องปรับปรุง ระบบจะเปลี่ยนสถานะเป็น <strong>ต้องทบทวน</strong></p><p>เจ้าหน้าที่บันทึกสาเหตุ ความเข้าใจหรือวิธีที่ถูกต้อง และแผนการนำไปใช้กับงาน จากนั้นส่งให้ผู้ทบทวนตรวจ ผู้ทบทวนสามารถรับรองหรือส่งกลับแก้ไขได้</p></div></details>
+        <details><summary>การเก็บ PDF ใน Google Drive</summary><div class="guide-body"><p>รายงานทะเบียน รอบ EQA และ Competency สามารถกดเก็บใน Google Drive ได้จากหน้า รายงาน / ทะเบียน หรือหน้าการประเมิน ระบบจะสร้างไฟล์ฉบับใหม่พร้อมเลขเวอร์ชัน และเก็บลิงก์ไว้ในระบบ</p><p>เมื่อเปิดการเก็บอัตโนมัติ ระบบจะสำรองไฟล์ในจุดสำคัญ เช่น ส่งคำตอบ ผู้ทบทวนตรวจ ผู้จัดการคุณภาพรับรอง ส่ง Reflection และปิดรอบ โดยไม่เขียนทับไฟล์เดิม</p></div></details>
         <details><summary>การยืนยันตัวตนสองขั้นตอน</summary><div class="guide-body"><p>ผู้ใช้งานทุกคนเปิดใช้งานได้จากเมนู ตั้งค่าของฉัน โดยสแกน QR Code ด้วยแอปยืนยันตัวตน แล้วกรอกรหัส 6 หลักเพื่อยืนยัน</p><p>ควรเก็บบัญชีและโทรศัพท์ที่ใช้สร้างรหัสไว้กับเจ้าของบัญชีเท่านั้น</p></div></details>
         <details><summary>การลบข้อมูล</summary><div class="guide-body"><p>ปุ่มลบที่ระบุว่าเป็นการลบถาวรจะลบข้อมูลจริงและกู้คืนไม่ได้ ควรตรวจชื่อรอบ เอกสาร หรือคำถามก่อนยืนยันทุกครั้ง</p></div></details>
       </div>
@@ -3054,6 +3403,7 @@
       else if(parts[0]==='reports')await renderReports();
       else if(parts[0]==='users')await renderUsers();
       else if(parts[0]==='audit')await renderAudit();
+      else if(parts[0]==='automation')await renderAutomation();
       else if(parts[0]==='settings')await renderSettings();
       else if(parts[0]==='help')renderHelp();
       else navigate('dashboard');
