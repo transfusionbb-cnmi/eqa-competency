@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.2.5
+/* CNMI EQA and Competency Management System v2.2.6
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -1377,7 +1377,7 @@
     }).join('')}</div>`;
 
     return `<div class="result-grid provider-generated-result-form">
-      <div class="notice info"><strong>${esc(schema.title || 'แบบกรอกที่สร้างจากเอกสารผู้ให้บริการ')}</strong><br><span class="small">สร้างจากเอกสารต้นฉบับและคู่มือของรอบนี้ ผู้จัดการคุณภาพต้องตรวจทานก่อนใช้งาน</span>${instruction ? `<details style="margin-top:8px"><summary>ดูคำแนะนำภาษาไทย</summary><div class="small" style="white-space:pre-wrap;margin-top:8px">${esc(instruction)}</div></details>` : ''}</div>
+      <div class="notice info"><strong>${esc(schema.title || 'แบบกรอกที่สร้างจากเอกสารผู้ให้บริการ')}</strong><br><span class="small">โครงสร้าง จำนวนช่อง หน่วย และตัวเลือกสร้างจากแบบฟอร์มเปล่าของผู้ให้บริการ ส่วนคู่มือใช้ประกอบคำอธิบาย ผู้จัดการคุณภาพต้องตรวจทานก่อนใช้งาน</span>${instruction ? `<details style="margin-top:8px"><summary>ดูคำแนะนำภาษาไทย</summary><div class="small" style="white-space:pre-wrap;margin-top:8px">${esc(instruction)}</div></details>` : ''}</div>
       ${programHtml}${antigenHtml}${generalHtml}
     </div>`;
   }
@@ -1426,6 +1426,37 @@
     };
   }
 
+  const CAP_OTHER_ANTIGEN_SLOT_COUNT = Object.freeze({
+    'J-06R': 3,
+    'JE-07R': 3
+  });
+
+  function normalizeOtherAntigens(value, slotCount = 0) {
+    const rows = Array.isArray(value?.other_antigens)
+      ? value.other_antigens.map((row) => ({
+          antigen: String(row?.antigen || row?.name || row?.antisera || '').trim(),
+          result: String(row?.result || '').trim()
+        }))
+      : [];
+    if (!rows.length && (value?.other_antigen || value?.other_result)) {
+      rows.push({
+        antigen: String(value?.other_antigen || '').trim(),
+        result: String(value?.other_result || '').trim()
+      });
+    }
+    const target = Math.max(Number(slotCount || 0), rows.length);
+    while (rows.length < target) rows.push({ antigen: '', result: '' });
+    return rows;
+  }
+
+  function defaultCapAntigenPayload(specimen) {
+    return {
+      C: '', E: '', c: '', e: '',
+      other_antigens: normalizeOtherAntigens({}, CAP_OTHER_ANTIGEN_SLOT_COUNT[specimen] || 0),
+      notes: ''
+    };
+  }
+
   function defaultResultPayload(round = state.currentRound) {
     if (generatedResultSchema(round)) {
       return {
@@ -1444,8 +1475,8 @@
         schema: CAP_J_JE_SCHEMA,
         specimens: Object.fromEntries([...CAP_J_RESULT_SPECIMENS, ...CAP_JE_RESULT_SPECIMENS].map((s) => [s, defaultCapSpecimenPayload()])),
         antigen_typing: {
-          'J-06R': { C: '', E: '', c: '', e: '', other_antigen: '', other_result: '', notes: '' },
-          'JE-07R': { C: '', E: '', c: '', e: '', other_antigen: '', other_result: '', notes: '' }
+          'J-06R': defaultCapAntigenPayload('J-06R'),
+          'JE-07R': defaultCapAntigenPayload('JE-07R')
         },
         methods_by_program: {
           J: { abo_manufacturer: '', abo_method: '', rh_manufacturer: '', rh_method: '', d_control_manufacturer: '', d_control_method: '', screen_cells: '', screen_manufacturer: '', screen_method: '', antibody_primary_manufacturer: '', antibody_primary_method: '', antibody_secondary_manufacturer: '', antibody_secondary_method: '', crossmatch_method: '', antigen_manufacturer: '' },
@@ -1562,14 +1593,24 @@
   }
 
   function capAntigenTable(payload, prefix, specimen, disabled) {
-    const x = payload.antigen_typing?.[specimen] || { C: '', E: '', c: '', e: '', other_antigen: '', other_result: '', notes: '' };
-    return `<div class="subcard">
+    const raw = payload.antigen_typing?.[specimen] || defaultCapAntigenPayload(specimen);
+    const slotCount = CAP_OTHER_ANTIGEN_SLOT_COUNT[specimen] || 0;
+    const x = { ...defaultCapAntigenPayload(specimen), ...raw };
+    const otherAntigens = normalizeOtherAntigens(raw, slotCount);
+    return `<div class="subcard antigen-entry-section">
       <h3>การตรวจแอนติเจนเม็ดเลือดแดง — ${esc(specimen)}</h3>
-      <div class="table-wrap"><table class="compact-table" style="min-width:920px"><thead><tr><th>Anti-C</th><th>Anti-E</th><th>Anti-c</th><th>Anti-e</th><th>แอนติเจนอื่น/รหัส antisera</th><th>ผลแอนติเจนอื่น</th></tr></thead><tbody><tr>
-        ${['C','E','c','e'].map((field) => `<td><select class="select" name="${prefix}_antigen_${specimen}_${field}" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.antigen, x[field])}</select></td>`).join('')}
-        <td><input class="input" name="${prefix}_antigen_${specimen}_other_antigen" value="${esc(x.other_antigen || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Anti-K / CAP 124"></td>
-        <td><select class="select" name="${prefix}_antigen_${specimen}_other_result" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.antigen, x.other_result)}</select></td>
-      </tr></tbody></table></div>
+      <div class="notice info small">จำนวนช่องและชนิดการตรวจสร้างจากแบบฟอร์มเปล่าของผู้ให้บริการ ช่อง C, E, c, e เป็นรายการคงที่ ส่วน “แอนติเจนอื่น” ให้ผู้ปฏิบัติเลือกชนิดที่เหมาะสมเอง ไม่ต้องกรอกครบทุกตำแหน่ง</div>
+      <div class="antigen-fixed-grid">
+        ${['C','E','c','e'].map((field) => `<div class="field"><label>Anti-${field}</label><select class="select" name="${prefix}_antigen_${specimen}_${field}" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.antigen, x[field])}</select></div>`).join('')}
+      </div>
+      <div class="other-antigen-heading"><strong>แอนติเจนอื่นตามจำนวนช่องในฟอร์มเปล่า</strong><span class="small muted">เว้นตำแหน่งที่ไม่ได้ใช้ได้</span></div>
+      <div class="other-antigen-grid">
+        ${otherAntigens.slice(0, slotCount).map((row, index) => `<section class="other-antigen-card">
+          <div class="other-antigen-title">ตำแหน่งที่ ${index + 1}</div>
+          <div class="field"><label>ชื่อ Antigen / รหัส antisera</label><input class="input" name="${prefix}_antigen_${specimen}_other_${index}_antigen" value="${esc(row.antigen || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Anti-K (CAP 124)"></div>
+          <div class="field"><label>ผล</label><select class="select" name="${prefix}_antigen_${specimen}_other_${index}_result" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.antigen, row.result)}</select></div>
+        </section>`).join('')}
+      </div>
     </div>`;
   }
 
@@ -1597,7 +1638,7 @@
     p.antigen_typing = { ...base.antigen_typing, ...(payload?.antigen_typing || {}) };
     p.methods_by_program = { ...base.methods_by_program, ...(payload?.methods_by_program || {}) };
     return `<div class="result-grid cap-result-form">
-      <div class="result-instruction"><div><strong>คำแนะนำก่อนกรอกผล</strong><ol><li>กรอกเฉพาะการทดสอบที่ทำจริงตามฟอร์ม CAP ไม่ต้องเติมทุกช่อง</li><li>Antibody screen เลือกผลรวม Detected / Not detected ส่วน phase และรายละเอียด Panel ให้บันทึกในหัวข้อ Antibody Identification</li><li>ถ้า Primary antibody เป็น CAP 184 หรือ 200 ให้เว้น Additional antibodies</li><li>Crossmatch ที่เป็น Negative หรือ Would refer ให้เลือกความแรงเป็น Not applicable</li><li>หนึ่งตัวอย่างเพิ่มได้หลาย Panel และเพิ่ม Selected/Extra cell เพื่อยืนยัน Rule of 3 หรือ rule out ได้</li></ol></div><span class="badge info">J-A: J-01–J-05 · JE-A: JE-07</span></div>
+      <div class="result-instruction"><div><strong>คำแนะนำก่อนกรอกผล</strong><ol><li>กรอกเฉพาะการทดสอบที่ทำจริงตามฟอร์ม CAP ไม่ต้องเติมทุกช่อง</li><li>Antibody screen เลือกผลรวม Detected / Not detected ส่วน phase และรายละเอียด Panel ให้บันทึกในหัวข้อ Antibody Identification</li><li>ถ้า Primary antibody เป็น CAP 184 หรือ 200 ให้เว้น Additional antibodies</li><li>Crossmatch ที่เป็น Negative หรือ Would refer ให้เลือกความแรงเป็น Not applicable</li><li>หนึ่งตัวอย่างเพิ่มได้หลาย Panel และเพิ่ม Selected/Extra cell เพื่อยืนยัน Rule of 3 หรือ rule out ได้</li><li>จำนวนช่อง Antigen typing และ Other antigen มาจากแบบฟอร์มเปล่า ผู้ปฏิบัติเป็นผู้เลือกชนิด Antigen เอง ช่องที่ไม่ได้ใช้เว้นว่างได้</li></ol></div><span class="badge info">J-A: J-01–J-05 · JE-A: JE-07</span></div>
       <div class="subcard"><h3>J-A 2026 — Comprehensive Transfusion Medicine</h3><p class="small muted">ผู้ป่วย J-01 ถึง J-05 ทำ crossmatch กับ donor J-06R</p>${capSpecimenCards(p, prefix, CAP_J_RESULT_SPECIMENS, disabled)}</div>
       ${capAntigenTable(p, prefix, 'J-06R', disabled)}
       <div class="subcard"><h3>JE-A 2026 — Educational Challenge</h3><p class="small muted">JE-07R/JE-07S และ crossmatch กับ donor J-06R</p>${capSpecimenCards(p, prefix, CAP_JE_RESULT_SPECIMENS, disabled)}</div>
@@ -1659,13 +1700,16 @@
     });
     const antigen_typing = {};
     ['J-06R','JE-07R'].forEach((specimen) => {
+      const slotCount = CAP_OTHER_ANTIGEN_SLOT_COUNT[specimen] || 0;
       antigen_typing[specimen] = {
         C: String(fd.get(`${prefix}_antigen_${specimen}_C`) || '').trim(),
         E: String(fd.get(`${prefix}_antigen_${specimen}_E`) || '').trim(),
         c: String(fd.get(`${prefix}_antigen_${specimen}_c`) || '').trim(),
         e: String(fd.get(`${prefix}_antigen_${specimen}_e`) || '').trim(),
-        other_antigen: String(fd.get(`${prefix}_antigen_${specimen}_other_antigen`) || '').trim(),
-        other_result: String(fd.get(`${prefix}_antigen_${specimen}_other_result`) || '').trim(),
+        other_antigens: Array.from({ length: slotCount }, (_, index) => ({
+          antigen: String(fd.get(`${prefix}_antigen_${specimen}_other_${index}_antigen`) || '').trim(),
+          result: String(fd.get(`${prefix}_antigen_${specimen}_other_${index}_result`) || '').trim()
+        })),
         notes: ''
       };
     });
@@ -1848,7 +1892,10 @@
 
   function antigenSummary(payload, specimen) {
     const x = payload?.antigen_typing?.[specimen] || {};
-    return [`C: ${x.C || '-'}`, `E: ${x.E || '-'}`, `c: ${x.c || '-'}`, `e: ${x.e || '-'}`, `อื่น: ${x.other_antigen || '-'} = ${x.other_result || '-'}`].join('<br>');
+    const otherRows = normalizeOtherAntigens(x, 0)
+      .filter((row) => row.antigen || row.result)
+      .map((row, index) => `อื่น ${index + 1}: ${row.antigen || '-'} = ${row.result || '-'}`);
+    return [`C: ${x.C || '-'}`, `E: ${x.E || '-'}`, `c: ${x.c || '-'}`, `e: ${x.e || '-'}`, ...otherRows].join('<br>');
   }
 
   function resultComparison(rows, consensus) {
@@ -3736,7 +3783,7 @@
           <p><strong>แบบฟอร์มผลที่ส่งผู้ให้บริการ</strong> ใช้ยืนยันว่าห้องปฏิบัติการส่งคำตอบอะไร แต่ระบบห้ามใช้เป็นเฉลย</p>
           <p><strong>รายงานผลประเมินอย่างเป็นทางการ (Official Evaluation)</strong> ใช้ Intended Response, Grade และคะแนนเป็นแหล่งหลักของเฉลย</p>
           <p><strong>รายงานเปรียบเทียบผู้เข้าร่วม (Participant Summary)</strong> ใช้ดูสัดส่วน/consensus ของห้องอื่น และใช้ประเมิน Educational Challenge หรือรายการ See Note [26] เท่านั้น ร้อยละในเอกสารนี้ไม่ใช่คะแนนของห้องเรา</p>
-          <p><strong>กรณีหนึ่งตัวอย่างมีหลายการทดสอบ</strong></p><ul><li>ระบบแยกเป็นกลุ่มการทดสอบ เช่น ABO/Rh, Antibody screen, Antibody identification, Eluate identification, Crossmatch, DAT, CBC, WBC count, Titer และ Antigen typing</li><li>ตัวอย่างเดียวกันปรากฏในหลายกลุ่มได้ ไม่ถือว่าซ้ำ</li><li>ต้องยึดฟอร์มต้นฉบับว่าแต่ละตัวอย่างทำอะไร ห้ามนำทุกการทดสอบไปใส่ทุกตัวอย่าง</li><li>ผลเชิงตัวเลขต้องคงหน่วยและจำนวนทศนิยมตามฟอร์ม</li><li>Antigen typing แบบเลือกชนิด antigen ต้องมีช่อง “ชื่อ antigen” คู่กับ “ผล” ตามจำนวนตำแหน่งจริง</li></ul>
+          <p><strong>กรณีหนึ่งตัวอย่างมีหลายการทดสอบ</strong></p><ul><li><strong>ฟอร์มเปล่าจากผู้ให้บริการเป็นตัวกำหนดโครงสร้าง จำนวนช่อง และรายการทดสอบ</strong> แบบฟอร์มที่ห้องส่งและรายงานผลใช้ตรวจคำตอบภายหลัง แต่ห้ามนำมาสร้างช่องหรือบอกคำตอบล่วงหน้า</li><li>ระบบแยกเป็นกลุ่มการทดสอบ เช่น ABO/Rh, Antibody screen, Antibody identification, Eluate identification, Crossmatch, DAT, CBC, WBC count, Titer และ Antigen typing</li><li>ตัวอย่างเดียวกันปรากฏในหลายกลุ่มได้ ไม่ถือว่าซ้ำ</li><li>ต้องยึดฟอร์มต้นฉบับว่าแต่ละตัวอย่างทำอะไร ห้ามนำทุกการทดสอบไปใส่ทุกตัวอย่าง</li><li>ผลเชิงตัวเลขต้องคงหน่วยและจำนวนทศนิยมตามฟอร์ม</li><li>Antigen typing แบบเลือกชนิด antigen ต้องมีช่อง “ชื่อ antigen” คู่กับ “ผล” ตามจำนวนตำแหน่งจริง ผู้ปฏิบัติเป็นผู้เลือก antigen เอง และเว้นช่องที่ไม่ได้ใช้ได้</li></ul>
           <p><strong>ชื่อไฟล์สำหรับเอกสารทั้งฉบับ</strong> ใช้รูปแบบ <code>ผู้ให้บริการ-รอบ_โปรแกรม_บทบาทเอกสาร.pdf</code></p>
           <ul><li>ฟอร์มเปล่า J: <code>CAP-JA-2026_J_BlankResultForm.pdf</code></li><li>ฟอร์มเปล่า JE1: <code>CAP-JA-2026_JE1_BlankResultForm.pdf</code></li><li>คู่มือ: <code>CAP-JA-2026_KitInstruction_J-JE1.pdf</code></li><li>ผลที่ห้องส่ง J: <code>CAP-JA-2026_J_SubmittedResultForm.pdf</code></li><li>ผลที่ห้องส่ง JE1: <code>CAP-JA-2026_JE1_SubmittedResultForm.pdf</code></li><li>Official Evaluation J: <code>CAP-JA-2026_J_OfficialEvaluation.pdf</code></li><li>Official Evaluation Educational: <code>CAP-JA-2026_JE1_OfficialEvaluation_EducationalChallenge.pdf</code></li><li>Participant Summary: <code>CAP-JA-2026_ParticipantSummary_PeerComparison.pdf</code></li><li>Antigram Panel แรก: <code>CAP-JA-2026_AbID_Panel01_Lot8RA453_Antigram.pdf</code></li><li>Antigram Panel ถัดไป: <code>CAP-JA-2026_AbID_Panel02_LotXXXXXX_Antigram.pdf</code></li></ul>
           <p><strong>ชื่อไฟล์สำหรับภาพผลดิบ</strong> ใช้รูปแบบ <code>ผู้ให้บริการ-รอบ_ตัวอย่าง_ชนิดการทดสอบ_RawResult</code> หนึ่งการทดสอบหลายตัวอย่างใช้รหัสโจทย์หลักได้ ไม่ต้องใช้ MultiTest; ใช้ <code>MultiTest</code> เฉพาะภาพเดียวที่มีหลายชนิดการทดสอบ</p>
