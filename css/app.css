@@ -707,7 +707,7 @@ tr:last-child td { border-bottom: 0; }
   .cap-specimen-title { align-items: flex-start; }
 }
 
-/* v2.2.6 — antigen slots follow the blank provider form */
+/* v2.2.7 — antigen slots follow the blank provider form */
 .antigen-entry-section { display: grid; gap: 14px; }
 .antigen-fixed-grid {
   display: grid;

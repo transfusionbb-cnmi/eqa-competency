@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.2.6
+/* CNMI EQA and Competency Management System v2.2.7
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -1222,21 +1222,26 @@
     const submittedResultDocuments = (docs || []).filter((doc) => doc.category === 'submission_form');
     const officialDocuments = (docs || []).filter((doc) => doc.category === 'official_result');
     const participantSummaryDocuments = (docs || []).filter((doc) => doc.category === 'participant_summary');
-    const documentBundleReady = sourceDocuments.length > 0 && instructionDocuments.length > 0;
+    const formReady = sourceDocuments.length > 0;
+    const instructionReady = instructionDocuments.length > 0;
+    const questionReady = sourceDocuments.length + instructionDocuments.length + rawResultDocuments.length + antibodyPanelDocuments.length > 0;
     const answerBundleReady = officialDocuments.length > 0;
-    const historicalBundleReady = documentBundleReady && answerBundleReady;
+    const historicalBundleReady = formReady && instructionReady && answerBundleReady;
     const generatedAt = round.generated_form_generated_at ? fmtDate(round.generated_form_generated_at, true) : '';
-    const generatedFormStatus = round.generated_result_form_schema
-      ? `<div class="notice success"><strong>มีแบบกรอกและคำแนะนำที่สร้างจากเอกสารแล้ว</strong><br><span class="small">สร้างเมื่อ ${esc(generatedAt || '-')} · ระบบใช้ “ประเภทเอกสาร” เป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่เท่านั้น</span>${round.generated_instruction_th ? `<details style="margin-top:8px"><summary>ดูคำแนะนำภาษาไทย</summary><div class="small" style="white-space:pre-wrap;margin-top:8px">${esc(round.generated_instruction_th)}</div></details>` : ''}</div><div style="height:12px"></div>`
-      : `<div class="compact-status"><span>ฟอร์มต้นฉบับ <strong>${sourceDocuments.length}</strong></span><span>คู่มือ/คำแนะนำ <strong>${instructionDocuments.length}</strong></span><span>ภาพผลดิบ <strong>${rawResultDocuments.length}</strong></span><span>Panel/Antigram <strong>${antibodyPanelDocuments.length}</strong></span><span>ผลที่ส่ง <strong>${submittedResultDocuments.length}</strong></span><span>Official Evaluation <strong>${officialDocuments.length}</strong></span><span>Participant Summary <strong>${participantSummaryDocuments.length}</strong></span></div>`;
+    const generatedFormStatus = `<div class="compact-status"><span>ฟอร์มต้นฉบับ <strong>${sourceDocuments.length}</strong></span><span>คู่มือ/คำแนะนำ <strong>${instructionDocuments.length}</strong></span><span>ภาพผลดิบ <strong>${rawResultDocuments.length}</strong></span><span>Panel/Antigram <strong>${antibodyPanelDocuments.length}</strong></span><span>ผลที่ส่ง <strong>${submittedResultDocuments.length}</strong></span><span>Official Evaluation <strong>${officialDocuments.length}</strong></span><span>Participant Summary <strong>${participantSummaryDocuments.length}</strong></span></div>
+      <div style="height:10px"></div>
+      <div class="compact-status"><span>แบบกรอก <strong>${round.generated_result_form_schema ? 'สร้างแล้ว' : 'ยังไม่สร้าง'}</strong></span><span>คำแนะนำ <strong>${round.generated_instruction_th ? 'สร้างแล้ว' : 'ยังไม่สร้าง'}</strong></span>${generatedAt ? `<span>อัปเดตแบบกรอก <strong>${esc(generatedAt)}</strong></span>` : ''}</div>
+      ${round.generated_instruction_th ? `<details class="notice success" style="margin-top:10px"><summary><strong>เปิดดูคำแนะนำภาษาไทย</strong></summary><div class="small" style="white-space:pre-wrap;margin-top:8px">${esc(round.generated_instruction_th)}</div></details>` : ''}`;
     return `<div class="card">
       <div class="card-header"><div><h2>เอกสารและภาพ</h2></div>
       <div class="table-actions">${uploadAllowed ? `<button class="btn btn-primary" id="upload-doc-btn">＋ อัปโหลดไฟล์</button>` : ''}<button class="btn btn-outline" id="go-auto-competency">จัดการข้อสอบ</button></div></div>
       ${canManage() ? `<div class="ai-action-grid">
-        <button class="btn btn-primary" id="generate-document-bundle" ${documentBundleReady ? '' : 'disabled'}>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</button>
-        <button class="btn btn-success" id="generate-answer-bundle" ${answerBundleReady ? '' : 'disabled'}>สร้างเฉลยและสรุปจาก Evaluation / Participant Summary</button>
-        <button class="btn btn-secondary" id="generate-historical-bundle" ${historicalBundleReady ? '' : 'disabled'}>สร้างย้อนหลังครบชุดจากเอกสารและรายงานผล</button>
-      </div><div class="small muted" style="margin:8px 0 14px">ระบบจะอ่านไฟล์ทีละฉบับและแสดงสถานะในตาราง หากรอบมี Antibody Identification ให้อัปโหลด Antigram/Panel cell แยกจากภาพผลดิบ Official Evaluation ใช้เป็นแหล่งหลักของเฉลย/คะแนน ส่วน Participant Summary ใช้เทียบกับห้องอื่นและประเมิน Educational Challenge</div>` : ''}
+        <button class="btn btn-primary" id="generate-form-only" ${formReady ? '' : 'disabled'}>1. สร้างแบบกรอกจากฟอร์มเปล่า</button>
+        <button class="btn btn-outline" id="generate-instruction-only" ${instructionReady ? '' : 'disabled'}>2. สร้างคำแนะนำจากคู่มือ</button>
+        <button class="btn btn-secondary" id="generate-questions-only" ${questionReady ? '' : 'disabled'}>3. สร้างข้อสอบจากภาพ/เอกสาร</button>
+        <button class="btn btn-success" id="generate-answer-bundle" ${answerBundleReady ? '' : 'disabled'}>4. สร้างเฉลยและสรุปผล</button>
+        <button class="btn btn-outline" id="generate-historical-bundle" ${historicalBundleReady ? '' : 'disabled'}>สร้างย้อนหลังครบชุดอัตโนมัติ</button>
+      </div><div class="small muted" style="margin:8px 0 14px">แยกเป็นขั้นตอนเพื่อไม่ให้ชนเวลาของ Supabase: แบบกรอกยึดฟอร์มเปล่า, คำแนะนำยึดคู่มือ, ข้อสอบสร้างเป็นชุดย่อยจากภาพผลและ Antigram ส่วน Official Evaluation/Participant Summary ใช้สร้างเฉลยภายหลัง</div>` : ''}
       ${participantSummaryDocuments.length && !officialDocuments.length ? `<div class="notice warning"><strong>มี Participant Summary แต่ยังไม่มี Official Evaluation</strong><br>ระบบยังไม่เปิดสร้างเฉลย เพื่อป้องกันการนำร้อยละของผู้เข้าร่วมมาใช้แทนผลของห้องปฏิบัติการ</div><div style="height:12px"></div>` : ''}
       ${officialDocuments.length && !participantSummaryDocuments.length ? `<div class="notice info"><strong>สร้างผลแบบให้คะแนนได้แล้ว</strong><br>หากรอบนี้มี Educational Challenge ให้เพิ่ม Participant Summary เพื่อให้ระบบประเมินเทียบ consensus ของผู้เข้าร่วมได้ถูกต้อง</div><div style="height:12px"></div>` : ''}
       ${generatedFormStatus}
@@ -2198,7 +2203,7 @@
           <button class="btn btn-outline" id="publish-all-questions" ${(questions || []).length ? '' : 'disabled'}>เผยแพร่ทั้งหมด</button>
           <button class="btn btn-outline" id="add-question">＋ เพิ่มเอง</button>
         </div>` : ''}
-        ${latestRun ? `<div class="small muted" style="margin-bottom:10px">การสร้างล่าสุด: ${latestRun.generation_type === 'document_extract' ? 'อ่านเอกสาร' : latestRun.generation_type === 'form_instructions' ? 'แบบกรอกและคำแนะนำ' : latestRun.generation_type === 'questions' ? 'ข้อสอบ' : 'เฉลยและสรุป'} · ${latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' ? 'ไม่สำเร็จ' : 'กำลังประมวลผล'} · ${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}</div>` : ''}
+        ${latestRun ? (() => { const stale = latestRun.status === 'processing' && Date.now() - new Date(latestRun.created_at).getTime() > 5 * 60 * 1000; const statusText = latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' || stale ? 'ไม่สำเร็จ/หมดเวลา' : 'กำลังประมวลผล'; return `<div class="small muted" style="margin-bottom:10px">การสร้างล่าสุด: ${latestRun.generation_type === 'document_extract' ? 'อ่านเอกสาร' : latestRun.generation_type === 'form_instructions' ? 'แบบกรอก/คำแนะนำ' : latestRun.generation_type === 'questions' ? 'ข้อสอบ' : 'เฉลยและสรุป'} · ${statusText} · ${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}${latestRun.error_message ? `<br>${esc(latestRun.error_message)}` : ''}</div>`; })() : ''}
         ${(questions || []).length ? questions.map((q) => {
           const key = keyMap.get(q.id);
           const hasKey = Boolean(key?.correct_choice_ids?.length || key?.answer_key_json?.text);
@@ -2332,7 +2337,7 @@
           if (payload?.error) detail = payload.error;
         } catch (_) { /* use original message */ }
         if (status === 546 || /546|WORKER_RESOURCE_LIMIT/i.test(detail)) {
-          detail = 'การอ่านไฟล์ใช้เวลานานเกินขีดจำกัดของ Supabase ระบบจะจำไฟล์ที่อ่านเสร็จแล้ว กรุณากดสร้างอีกครั้งเพื่ออ่านต่อเฉพาะไฟล์ที่ยังไม่เสร็จ';
+          detail = 'ขั้นตอน AI นี้ใช้เวลานานเกินขีดจำกัดของ Supabase ข้อมูลและขั้นตอนที่สำเร็จก่อนหน้าไม่หาย กรุณากดเริ่มใหม่เฉพาะขั้นตอนที่ยังไม่สำเร็จ';
         }
         throw new Error(detail);
       }
@@ -2341,7 +2346,9 @@
     };
 
     const AI_DOCUMENT_CATEGORIES = {
-      documents: ['source_document', 'instruction', 'raw_result_image', 'antibody_panel'],
+      form: ['source_document', 'instruction'],
+      instructions: ['instruction'],
+      questions: ['source_document', 'instruction', 'raw_result_image', 'antibody_panel'],
       answers: ['source_document', 'instruction', 'raw_result_image', 'antibody_panel', 'submission_form', 'official_result', 'participant_summary'],
       historical: ['source_document', 'instruction', 'raw_result_image', 'antibody_panel', 'submission_form', 'official_result', 'participant_summary'],
     };
@@ -2363,7 +2370,7 @@
     };
 
     const loadDocumentsForAI = async (mode) => {
-      const categories = AI_DOCUMENT_CATEGORIES[mode] || AI_DOCUMENT_CATEGORIES.documents;
+      const categories = AI_DOCUMENT_CATEGORIES[mode] || AI_DOCUMENT_CATEGORIES.questions;
       const { data, error } = await state.supabase
         .from('ec_round_documents')
         .select('id,category,title,file_name,file_size,ai_extraction_status,ai_extraction_file_size')
@@ -2422,23 +2429,88 @@
       });
     };
 
+    const selectEvenly = (items, count) => {
+      if (count >= items.length) return [...items];
+      if (count <= 0) return [];
+      const result = [];
+      const used = new Set();
+      for (let i = 0; i < count; i += 1) {
+        const index = count === 1 ? 0 : Math.round((i * (items.length - 1)) / (count - 1));
+        if (!used.has(index)) { used.add(index); result.push(items[index]); }
+      }
+      return result;
+    };
+    const chunkArray = (items, size) => {
+      const chunks = [];
+      for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+      return chunks;
+    };
+    const planQuestionBatches = (docs, requestedCount) => {
+      const rawDocs = docs.filter((doc) => doc.category === 'raw_result_image');
+      const knowledgeDocs = docs.filter((doc) => ['source_document','instruction'].includes(doc.category));
+      const reserveKnowledge = knowledgeDocs.length && requestedCount >= 4 ? Math.min(2, requestedCount) : 0;
+      const rawTarget = Math.min(rawDocs.length, Math.max(0, requestedCount - reserveKnowledge));
+      const selectedRaw = selectEvenly(rawDocs, rawTarget);
+      const batches = chunkArray(selectedRaw, 3).map((batch) => ({ ids: batch.map((doc) => doc.id), count: batch.length, knowledge: false }));
+      const remaining = Math.max(0, requestedCount - selectedRaw.length);
+      if (remaining > 0 && knowledgeDocs.length) batches.push({ ids: knowledgeDocs.map((doc) => doc.id), count: Math.min(5, remaining), knowledge: true });
+      if (!batches.length && knowledgeDocs.length) batches.push({ ids: knowledgeDocs.map((doc) => doc.id), count: Math.min(5, requestedCount), knowledge: true });
+      return batches;
+    };
+
+    const pendingFormDocuments = (docs) => {
+      const sourceDocs = docs.filter((doc) => doc.category === 'source_document');
+      const completedIds = new Set(Array.isArray(round.generated_form_source_document_ids) ? round.generated_form_source_document_ids : []);
+      const pending = sourceDocs.filter((doc) => !completedIds.has(doc.id));
+      return pending.length ? { targets: pending, reset: !round.generated_result_form_schema } : { targets: sourceDocs, reset: true };
+    };
+    const generateFormsOneByOne = async (docs, progressState) => {
+      const { targets, reset } = pendingFormDocuments(docs);
+      if (!targets.length) throw new Error('ยังไม่มีฟอร์มเปล่าจากผู้ให้บริการ');
+      let latest = null;
+      for (let index = 0; index < targets.length; index += 1) {
+        const doc = targets[index];
+        progressState.step += 1;
+        updateAiProgress(progressState.step, progressState.total, `กำลังสร้างแบบกรอก ${index + 1}/${targets.length}`, doc.file_name);
+        latest = await invokeDocumentAI({ action: 'generate_form_schema', round_id: round.id, document_id: doc.id, reset_form_schema: reset && index === 0 });
+      }
+      return latest;
+    };
+
+    const generateQuestionsInBatches = async (docs, questionCount, replaceDrafts, progressState) => {
+      const batches = planQuestionBatches(docs, questionCount);
+      if (!batches.length) throw new Error('ยังไม่มีภาพผลหรือเอกสารที่เหมาะสำหรับสร้างข้อสอบ');
+      let totalCreated = 0;
+      for (let index = 0; index < batches.length; index += 1) {
+        const batch = batches[index];
+        progressState.step += 1;
+        updateAiProgress(progressState.step, progressState.total, `กำลังสร้างข้อสอบชุด ${index + 1}/${batches.length}`, batch.knowledge ? 'คำถามจากคู่มือและฟอร์มต้นฉบับ' : `ภาพผลดิบ ${batch.ids.length} ไฟล์`);
+        const result = await invokeDocumentAI({ action: 'generate_questions_batch', round_id: round.id, document_ids: batch.ids, knowledge_batch: batch.knowledge, question_count: batch.count, replace_ai_drafts: index === 0 ? replaceDrafts : false });
+        totalCreated += Number(result.generated_count || 0);
+      }
+      return { generated_count: totalCreated, batch_count: batches.length };
+    };
+
     const openBundleModal = (mode) => {
       const isHistoricalBundle = mode === 'historical';
-      const title = mode === 'documents'
-        ? 'สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร'
-        : mode === 'answers'
-          ? 'สร้างเฉลยและสรุปจาก Evaluation / Participant Summary'
-          : 'สร้างย้อนหลังครบชุดจากเอกสารและรายงานผล';
-      const countField = mode === 'answers' ? '' : `<div class="field"><label>จำนวนข้อโดยประมาณ</label><input class="input" type="number" name="question_count" min="3" max="25" value="12" required></div>`;
-      const replaceField = mode === 'answers' ? '' : `<label><input type="checkbox" name="replace_drafts" checked> แทนที่เฉพาะข้อสอบฉบับร่างที่ AI เคยสร้างไว้</label>`;
+      const title = mode === 'form'
+        ? 'สร้างแบบกรอกจากฟอร์มเปล่า'
+        : mode === 'instructions'
+          ? 'สร้างคำแนะนำจากคู่มือ'
+          : mode === 'questions'
+            ? 'สร้างข้อสอบจากภาพและเอกสาร'
+            : mode === 'answers'
+              ? 'สร้างเฉลยและสรุปจาก Evaluation / Participant Summary'
+              : 'สร้างย้อนหลังครบชุดแบบแบ่งขั้นตอน';
+      const needsQuestionSettings = mode === 'questions' || isHistoricalBundle;
+      const countField = needsQuestionSettings ? `<div class="field"><label>จำนวนข้อโดยประมาณ</label><input class="input" type="number" name="question_count" min="3" max="25" value="12" required></div>` : '';
+      const replaceField = needsQuestionSettings ? `<label><input type="checkbox" name="replace_drafts" checked> แทนที่เฉพาะข้อสอบฉบับร่างที่ AI เคยสร้างไว้</label>` : '';
       showModal(title, `<form id="document-ai-bundle-form" class="form-grid">
-        ${countField}
-        ${replaceField}
-        ${isHistoricalBundle ? '<div class="notice info">เมื่อน้องส่งคำตอบ ระบบจะแสดงเฉลยและคำอธิบายทันทีสำหรับรอบย้อนหลังนี้</div>' : ''}
+        ${countField}${replaceField}
+        ${isHistoricalBundle ? '<div class="notice info">ระบบจะเรียกแต่ละขั้นตอนแยกกัน: ฟอร์มทีละฉบับ → คำแนะนำ → ข้อสอบชุดย่อย → เฉลย</div>' : ''}
         <label><input type="checkbox" name="confirm_privacy" required> ยืนยันว่าไฟล์ไม่มีชื่อผู้ป่วย HN หรือข้อมูลส่วนบุคคลที่ไม่ควรส่งไปประมวลผล</label>
-        ${mode === 'answers' || isHistoricalBundle ? '<div class="notice info">ระบบใช้ Official Evaluation สำหรับ Intended Response/Grade และใช้ Participant Summary เฉพาะ peer comparison หรือ Educational Challenge ผลที่ห้องส่งจะไม่ถูกใช้เป็นเฉลย</div>' : ''}
-        <div class="notice"><strong>ระบบรุ่นนี้อ่านไฟล์ทีละฉบับ</strong><br><span class="small">หาก Supabase ตัดการทำงาน ระบบจะจำไฟล์ที่อ่านสำเร็จแล้ว เมื่อกดใหม่จะทำต่อเฉพาะไฟล์ที่เหลือ ไม่เริ่มทั้งหมดใหม่</span></div>
-        <div class="small muted">Antigram/Panel cell ให้เลือกประเภท “แผงเซลล์ Antibody Identification / Antigram” เพื่อใช้คู่กับภาพผล Ab ID</div>
+        ${mode === 'answers' || isHistoricalBundle ? '<div class="notice info">Official Evaluation ใช้ Intended Response/Grade ส่วน Participant Summary ใช้ peer comparison หรือ Educational Challenge ผลที่ห้องส่งจะไม่ถูกใช้เป็นเฉลย</div>' : ''}
+        <div class="notice"><strong>ขั้นตอนนี้เริ่มต่อได้</strong><br><span class="small">ไฟล์ที่ AI อ่านแล้วจะไม่ถูกอ่านใหม่ และงานที่เสร็จในแต่ละขั้นจะถูกบันทึกทันที</span></div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="confirm-document-ai-bundle">เริ่มสร้าง</button>`, true);
 
       document.getElementById('confirm-document-ai-bundle')?.addEventListener('click', async () => {
@@ -2447,75 +2519,52 @@
         const fd = new FormData(form);
         const questionCount = Number(fd.get('question_count') || 12);
         const replaceDrafts = fd.get('replace_drafts') === 'on';
-
         try {
           setBusy(true);
           const currentDocs = await loadDocumentsForAI(mode);
-          const pendingCount = currentDocs.filter((doc) =>
-            doc.ai_extraction_status !== 'completed'
-            || Number(doc.ai_extraction_file_size || 0) !== Number(doc.file_size || 0)).length;
-          const actionCount = mode === 'documents' ? 2 : mode === 'answers' ? 1 : 3;
-          const progressState = { step: 0, total: pendingCount + actionCount };
-
-          showModal('กำลังประมวลผลเอกสาร', '<div id="document-ai-progress"></div>', '', true, true);
+          const pendingCount = currentDocs.filter((doc) => doc.ai_extraction_status !== 'completed' || Number(doc.ai_extraction_file_size || 0) !== Number(doc.file_size || 0)).length;
+          const sourceDocCount = pendingFormDocuments(currentDocs).targets.length;
+          const questionBatches = (mode === 'questions' || isHistoricalBundle) ? planQuestionBatches(currentDocs, questionCount) : [];
+          const actionCount = mode === 'form' ? sourceDocCount : mode === 'instructions' ? 1 : mode === 'questions' ? questionBatches.length : mode === 'answers' ? 1 : sourceDocCount + 1 + questionBatches.length + 1;
+          const progressState = { step: 0, total: pendingCount + Math.max(1, actionCount) };
+          showModal('กำลังประมวลผล', '<div id="document-ai-progress"></div>', '', true, true);
           updateAiProgress(0, progressState.total, 'กำลังเตรียมรายการไฟล์', `พบไฟล์ที่ต้องอ่านใหม่ ${pendingCount} ไฟล์`);
-
           await extractDocumentsOneByOne(mode, progressState);
 
+          let formResult = null;
+          let instructionResult = null;
           let questionResult = null;
-          if (mode === 'documents' || mode === 'historical') {
+          if (mode === 'form' || isHistoricalBundle) formResult = await generateFormsOneByOne(currentDocs, progressState);
+          if (mode === 'instructions' || isHistoricalBundle) {
             progressState.step += 1;
-            updateAiProgress(progressState.step, progressState.total, 'กำลังสร้างแบบกรอกและคำแนะนำ', 'ใช้ข้อมูลสกัดจากฟอร์มต้นฉบับและคู่มือ');
-            await invokeDocumentAI({ action: 'generate_form_instructions', round_id: round.id });
-
-            progressState.step += 1;
-            updateAiProgress(progressState.step, progressState.total, 'กำลังสร้างข้อสอบ Competency', `เป้าหมายประมาณ ${questionCount} ข้อ`);
-            questionResult = await invokeDocumentAI({
-              action: 'generate_questions',
-              round_id: round.id,
-              question_count: questionCount,
-              replace_ai_drafts: replaceDrafts,
-            });
-
-            if (mode === 'documents') {
-              setBusy(false);
-              showAiSuccess('สร้างเอกสารและข้อสอบสำเร็จ', `สร้างข้อสอบฉบับร่าง ${questionResult.generated_count || 0} ข้อแล้ว`);
-              return;
-            }
+            updateAiProgress(progressState.step, progressState.total, 'กำลังสร้างคำแนะนำภาษาไทย', 'สรุปเฉพาะข้อมูลจากคู่มือผู้ให้บริการ');
+            instructionResult = await invokeDocumentAI({ action: 'generate_instruction_summary', round_id: round.id });
           }
-
-          progressState.step += 1;
-          updateAiProgress(progressState.step, progressState.total, 'กำลังสร้างเฉลยและสรุปผล', 'กำลังเทียบ Official Evaluation กับ Participant Summary');
-          const answerResult = await invokeDocumentAI({
-            action: 'generate_answers',
-            round_id: round.id,
-            release_answers_after_submit: isHistoricalBundle,
-          });
-
-          const manualReviewHint = Number(answerResult.manual_review_count || 0) > 0
-            ? ` มี ${answerResult.manual_review_count} ข้อที่หลักฐานไม่พอและต้องตรวจเอง`
-            : '';
+          if (mode === 'questions' || isHistoricalBundle) questionResult = await generateQuestionsInBatches(currentDocs, questionCount, replaceDrafts, progressState);
+          if (mode === 'answers' || isHistoricalBundle) {
+            progressState.step += 1;
+            updateAiProgress(progressState.step, progressState.total, 'กำลังสร้างเฉลยและสรุปผล', 'เทียบ Official Evaluation กับ Participant Summary');
+            const answerResult = await invokeDocumentAI({ action: 'generate_answers', round_id: round.id, release_answers_after_submit: isHistoricalBundle });
+            const manualReviewHint = Number(answerResult.manual_review_count || 0) > 0 ? ` มี ${answerResult.manual_review_count} ข้อที่ต้องตรวจเอง` : '';
+            setBusy(false);
+            showAiSuccess(isHistoricalBundle ? 'สร้างย้อนหลังครบชุดสำเร็จ' : 'สร้างเฉลยและสรุปผลสำเร็จ', `สร้างเฉลย ${answerResult.generated_count || 0} ข้อแล้ว.${manualReviewHint}`);
+            return;
+          }
           setBusy(false);
-          showAiSuccess(
-            isHistoricalBundle ? 'สร้างย้อนหลังครบชุดสำเร็จ' : 'สร้างเฉลยและสรุปผลสำเร็จ',
-            isHistoricalBundle
-              ? `สร้างเฉลย ${answerResult.generated_count || 0} ข้อและตั้งให้แสดงหลังส่งคำตอบแล้ว.${manualReviewHint}`
-              : `สร้างเฉลย ${answerResult.generated_count || 0} ข้อและสรุปผลแล้ว.${manualReviewHint}`,
-          );
+          if (mode === 'form') showAiSuccess('สร้างแบบกรอกสำเร็จ', `รวม ${formResult?.program_count || 0} กลุ่มการทดสอบจากฟอร์มเปล่าแล้ว`);
+          else if (mode === 'instructions') showAiSuccess('สร้างคำแนะนำสำเร็จ', 'สร้างคำแนะนำภาษาไทยจากคู่มือแล้ว');
+          else showAiSuccess('สร้างข้อสอบสำเร็จ', `สร้างข้อสอบฉบับร่าง ${questionResult?.generated_count || 0} ข้อ จาก ${questionResult?.batch_count || 0} ชุดย่อย`);
         } catch (generationError) {
           setBusy(false);
           const message = friendlyError(generationError);
-          showModal('สร้างข้อมูลไม่สำเร็จ',
-            `<div class="notice danger"><strong>ระบบหยุดที่ขั้นตอนปัจจุบัน</strong><br>${esc(message)}</div>
-             <div style="height:12px"></div>
-             <div class="notice info">ไฟล์ที่ AI อ่านสำเร็จก่อนเกิดปัญหาถูกบันทึกไว้แล้ว กดสร้างใหม่เพื่อทำต่อเฉพาะไฟล์ที่เหลือ</div>`,
-            `<button class="btn btn-primary" data-close-modal>ปิดและกลับไปตรวจไฟล์</button>`,
-            true);
+          showModal('สร้างข้อมูลไม่สำเร็จ', `<div class="notice danger"><strong>ระบบหยุดเฉพาะขั้นตอนปัจจุบัน</strong><br>${esc(message)}</div><div style="height:12px"></div><div class="notice info">ไฟล์และขั้นตอนที่สำเร็จก่อนหน้านี้ถูกบันทึกแล้ว กลับไปกดเฉพาะปุ่มของขั้นตอนที่ยังไม่สำเร็จได้เลย</div>`, `<button class="btn btn-primary" data-close-modal>ปิดและกลับไปตรวจ</button>`, true);
         }
       });
     };
 
-    document.getElementById('generate-document-bundle')?.addEventListener('click', () => openBundleModal('documents'));
+    document.getElementById('generate-form-only')?.addEventListener('click', () => openBundleModal('form'));
+    document.getElementById('generate-instruction-only')?.addEventListener('click', () => openBundleModal('instructions'));
+    document.getElementById('generate-questions-only')?.addEventListener('click', () => openBundleModal('questions'));
     document.getElementById('generate-answer-bundle')?.addEventListener('click', () => openBundleModal('answers'));
     document.getElementById('generate-historical-bundle')?.addEventListener('click', () => openBundleModal('historical'));
     const acceptedTypes = new Set(['application/pdf','image/jpeg','image/png','image/webp']);
