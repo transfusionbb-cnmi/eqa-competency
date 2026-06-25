@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.3.3
+/* CNMI EQA and Competency Management System v2.4.0
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -21,6 +21,26 @@
 
   const SIDEBAR_COLLAPSED_KEY = 'cnmi-eqa-sidebar-collapsed';
   const AI_EXTRACTION_SCHEMA_VERSION = 'v2.3.2';
+
+  const PROGRAM_PROFILE_DEFINITIONS = Object.freeze({
+    CAP_J_JE: { code:'CAP_J_JE', label:'CAP Comprehensive Transfusion Medicine J/JE', form_strategy:'cap_j_je', answer_strategy:'official_then_majority', summary_strategy:'cap_j_je_matrix' },
+    CAP_ELU: { code:'CAP_ELU', label:'CAP Elution / Eluate Antibody Identification', form_strategy:'document_driven', answer_strategy:'official_then_majority', summary_strategy:'generic_matrix' },
+    CAP_TRC: { code:'CAP_TRC', label:'CAP Transfusion Reaction', form_strategy:'document_driven', answer_strategy:'official_then_majority', summary_strategy:'generic_matrix' },
+    CAP_AABT: { code:'CAP_AABT', label:'CAP Antibody Titer', form_strategy:'document_driven', answer_strategy:'official_then_majority', summary_strategy:'generic_matrix' },
+    CAP_EXM: { code:'CAP_EXM', label:'CAP Electronic Crossmatch', form_strategy:'document_driven', answer_strategy:'official_then_majority', summary_strategy:'generic_matrix' },
+    GENERIC_DOCUMENT_DRIVEN: { code:'GENERIC_DOCUMENT_DRIVEN', label:'EQA แบบกำหนดโครงสร้างจากฟอร์มผู้ให้บริการ', form_strategy:'document_driven', answer_strategy:'official_then_majority', summary_strategy:'generic_matrix' }
+  });
+
+  function resolveProgramProfile(round = state.currentRound) {
+    const provider = String(round?.provider || '').toUpperCase();
+    const text = `${round?.program_code || ''} ${round?.round_code || ''} ${round?.program_name || ''}`.toUpperCase();
+    if (provider.includes('CAP') && ((/J\s*\/\s*JE/.test(text)) || (/\bJ[-\s]?A\b/.test(text) && /\bJE\b/.test(text)) || /COMPREHENSIVE TRANSFUSION/.test(text))) return PROGRAM_PROFILE_DEFINITIONS.CAP_J_JE;
+    if (provider.includes('CAP') && /\bELU\b|ELUATE|ELUTION/.test(text)) return PROGRAM_PROFILE_DEFINITIONS.CAP_ELU;
+    if (provider.includes('CAP') && /\bTRC\b|TRANSFUSION REACTION/.test(text)) return PROGRAM_PROFILE_DEFINITIONS.CAP_TRC;
+    if (provider.includes('CAP') && /\bAABT\b|ANTIBODY TITER/.test(text)) return PROGRAM_PROFILE_DEFINITIONS.CAP_AABT;
+    if (provider.includes('CAP') && /\bEXM\b|ELECTRONIC CROSSMATCH/.test(text)) return PROGRAM_PROFILE_DEFINITIONS.CAP_EXM;
+    return PROGRAM_PROFILE_DEFINITIONS.GENERIC_DOCUMENT_DRIVEN;
+  }
 
   function desktopSidebarCollapsed() {
     return window.innerWidth > 900 && localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
@@ -390,10 +410,7 @@
   }
 
   function isCapJJeRound(round = state.currentRound) {
-    if (!round) return false;
-    const provider = String(round.provider || '').toUpperCase();
-    const code = `${round.program_code || ''} ${round.round_code || ''} ${round.program_name || ''}`.toUpperCase();
-    return provider.includes('CAP') && (code.includes('J/JE') || code.includes('J / JE') || (code.includes('J-A') && code.includes('JE')));
+    return resolveProgramProfile(round).code === 'CAP_J_JE';
   }
 
   function resultSpecimensForRound(round = state.currentRound, payload = null) {
@@ -2523,12 +2540,19 @@
   }
 
   function officialTestRank(name) {
-    const text = String(name || '').toLowerCase();
+    const raw = String(name || '').trim();
+    const text = raw.toLowerCase();
     if (text.includes('abo')) return 10;
     if (text.includes('rh')) return 20;
     if (text.includes('screen') || text.includes('detection')) return 30;
     if (text.includes('identification')) return 40;
-    if (text.includes('crossmatch') || text.includes('compatibility')) return 50;
+    if (text.includes('crossmatch') || text.includes('compatibility')) return text.includes('strength') ? 55 : 50;
+    if (/^C\s+Type$/i.test(raw) && raw.startsWith('C')) return 60;
+    if (/^E\s+Type$/i.test(raw) && raw.startsWith('E')) return 61;
+    if (/^c\s+Type$/.test(raw)) return 62;
+    if (/^e\s+Type$/.test(raw)) return 63;
+    if (/^K\s+Type$/i.test(raw)) return 64;
+    if (/Type$|antigen/i.test(raw)) return 70;
     return 100;
   }
 
@@ -2797,7 +2821,7 @@
         </div>
         ${structuredView}
         <details class="official-source-editor">
-          <summary>แก้ไขข้อความสรุปที่ AI สร้าง</summary>
+          <summary>แก้ไขข้อความสรุปที่ระบบสร้าง</summary>
           <div class="official-edit-grid">
             <div class="field"><label>1. ผลของห้องปฏิบัติการ</label><textarea class="textarea" name="lab_result_summary">${esc(ai.lab_result_summary || '')}</textarea></div>
             <div class="field"><label>2. ผลที่ควรเป็น / Intended Response / Participant consensus</label><textarea class="textarea" name="intended_response_summary">${esc(ai.intended_response_summary || '')}</textarea></div>
@@ -2875,6 +2899,7 @@
       <span>Official Evaluation <strong>${officialDocs.length}</strong></span>
       <span>Participant Summary <strong>${participantSummaryDocs.length}</strong></span>
       <span>ข้อสอบ <strong>${(questions || []).length}</strong></span>
+      <span>รูปแบบ <strong>${esc(resolveProgramProfile(round).label)}</strong></span>
       <button class="text-link" type="button" data-nav="help">ดูคู่มือ</button>
     </div>` : '';
 
@@ -3060,7 +3085,7 @@
       answers: ['official_result', 'participant_summary'],
       // The official summary may additionally use the submitted-result evidence, but it does not
       // need to re-read every raw-result image or panel document.
-      summary: ['official_result', 'participant_summary', 'submission_form'],
+      summary: ['official_result', 'participant_summary'],
       historical: ['source_document', 'instruction', 'raw_result_image', 'antibody_panel', 'submission_form', 'official_result', 'participant_summary'],
     };
 
@@ -3257,6 +3282,8 @@
     const generateAnswerKeysInBatches = async (progressState, forceRegenerate = false) => {
       const batches = await loadAnswerQuestionBatches(forceRegenerate);
       let generatedCount = 0;
+      let deterministicCount = 0;
+      let aiCount = 0;
       let manualReviewCount = 0;
       if (progressState.total < progressState.step + batches.length) progressState.total = progressState.step + batches.length;
       for (let index = 0; index < batches.length; index += 1) {
@@ -3274,9 +3301,11 @@
           question_ids: batch.map((question) => question.id),
         });
         generatedCount += Number(result.generated_count || 0);
+        deterministicCount += Number(result.deterministic_count || 0);
+        aiCount += Number(result.ai_count || 0);
         manualReviewCount += Number(result.manual_review_count || 0);
       }
-      return { generated_count: generatedCount, manual_review_count: manualReviewCount, batch_count: batches.length };
+      return { generated_count: generatedCount, deterministic_count: deterministicCount, ai_count: aiCount, manual_review_count: manualReviewCount, batch_count: batches.length };
     };
 
     const generateOfficialSummary = async (progressState, releaseAnswersAfterSubmit = false) => {
@@ -3285,7 +3314,7 @@
         progressState.step,
         progressState.total,
         'กำลังสร้างสรุปผลอย่างเป็นทางการ',
-        'จัดตาราง J-01–J-05, J-06R, JE-07 และ JE-07R',
+        `จัดตารางตามรูปแบบ ${resolveProgramProfile(round).label} โดยไม่เรียก AI`,
       );
       return invokeDocumentAI({
         action: 'generate_official_summary',
@@ -3321,7 +3350,7 @@
       const roleNotice = mode === 'answers'
         ? '<div class="notice info"><strong>สร้างเฉลยแบบเร็ว</strong><br>ระบบอ่านเฉพาะ Official Evaluation และ Participant Summary แล้วสร้างเฉลยครั้งละไม่เกิน 5 ข้อ โดยไม่อ่านภาพผลดิบหรือ Antigram ซ้ำ</div>'
         : mode === 'summary'
-          ? '<div class="notice info">ขั้นตอนนี้สร้างเฉพาะตารางและข้อความสรุปอย่างเป็นทางการ ไม่สร้างเฉลยรายข้อ จึงลดโอกาสเกิดรหัส 546</div>'
+          ? '<div class="notice success"><strong>การจัดตารางขั้นนี้ไม่เรียก OpenAI API</strong><br>ระบบใช้ผลที่บันทึกไว้ + Official Evaluation + Participant Summary หากเอกสารสองประเภทนี้เคยอ่านแล้วจะไม่เกิดค่าอ่านไฟล์ซ้ำ</div>'
           : (mode === 'answers' || mode === 'summary' || isHistoricalBundle)
             ? '<div class="notice info">Official Evaluation ใช้ Intended Response/Grade ส่วน Participant Summary ใช้ peer comparison หรือ Educational Challenge</div>'
             : '';
@@ -3330,7 +3359,7 @@
         ${isHistoricalBundle ? '<div class="notice info">ระบบจะทำทีละส่วน: ฟอร์ม → คำแนะนำ → ข้อสอบ → เฉลยชุดย่อย → สรุปอย่างเป็นทางการ</div>' : ''}
         <label><input type="checkbox" name="confirm_privacy" required> ยืนยันว่าไฟล์ไม่มีชื่อผู้ป่วย HN หรือข้อมูลส่วนบุคคลที่ไม่ควรส่งไปประมวลผล</label>
         ${roleNotice}
-        <div class="notice"><strong>งานแต่ละส่วนบันทึกแยกกัน</strong><br><span class="small">ไฟล์ที่ AI อ่านแล้วจะไม่ถูกอ่านใหม่ และสามารถเริ่มต่อเฉพาะส่วนที่ยังไม่สำเร็จได้</span></div>
+        <div class="notice"><strong>งานแต่ละส่วนบันทึกแยกกัน</strong><br><span class="small">ไฟล์ที่ AI อ่านแล้วจะไม่ถูกอ่านใหม่ ส่วนการจัดสรุปใช้ข้อมูลที่บันทึกไว้และไม่เรียก AI</span></div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="confirm-document-ai-bundle">เริ่มสร้าง</button>`, true);
 
       document.getElementById('confirm-document-ai-bundle')?.addEventListener('click', async () => {
@@ -3384,7 +3413,7 @@
             const answerResult = await generateAnswerKeysInBatches(progressState, forceRegenerateAnswers);
             const manualReviewHint = answerResult.manual_review_count > 0 ? ` มี ${answerResult.manual_review_count} ข้อที่ต้องตรวจเอง` : '';
             setBusy(false);
-            showAiSuccess('สร้างเฉลยข้อสอบสำเร็จ', `สร้างเฉลย ${answerResult.generated_count} ข้อ จาก ${answerResult.batch_count} ชุด.${manualReviewHint}`);
+            showAiSuccess('สร้างเฉลยข้อสอบสำเร็จ', `สร้างเฉลย ${answerResult.generated_count} ข้อ · ใช้ข้อมูลเดิมโดยไม่เรียก AI ${answerResult.deterministic_count} ข้อ · เรียก AI ${answerResult.ai_count} ข้อ.${manualReviewHint}`);
             return;
           }
           if (mode === 'summary') {
