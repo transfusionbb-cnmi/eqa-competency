@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.3.2
+/* CNMI EQA and Competency Management System v2.3.3
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -3055,8 +3055,12 @@
       form: ['source_document', 'instruction'],
       instructions: ['instruction'],
       questions: ['source_document', 'instruction', 'raw_result_image', 'antibody_panel'],
-      answers: ['source_document', 'instruction', 'raw_result_image', 'antibody_panel', 'submission_form', 'official_result', 'participant_summary'],
-      summary: ['source_document', 'instruction', 'raw_result_image', 'antibody_panel', 'submission_form', 'official_result', 'participant_summary'],
+      // Answer keys use only evaluation evidence. Raw-result images and Antigrams were already
+      // used when questions were created and must not be re-extracted here.
+      answers: ['official_result', 'participant_summary'],
+      // The official summary may additionally use the submitted-result evidence, but it does not
+      // need to re-read every raw-result image or panel document.
+      summary: ['official_result', 'participant_summary', 'submission_form'],
       historical: ['source_document', 'instruction', 'raw_result_image', 'antibody_panel', 'submission_form', 'official_result', 'participant_summary'],
     };
 
@@ -3096,12 +3100,13 @@
         || Number(doc.ai_extraction_file_size || 0) !== Number(doc.file_size || 0)
         || String(doc.ai_extraction?.schema_version || '') !== AI_EXTRACTION_SCHEMA_VERSION);
 
-      for (const doc of pending) {
+      for (let index = 0; index < pending.length; index += 1) {
+        const doc = pending[index];
         progressState.step += 1;
         updateAiProgress(
           progressState.step,
           progressState.total,
-          `กำลังอ่านไฟล์ ${progressState.step}/${progressState.total}`,
+          `กำลังอ่านเอกสารอ้างอิง ${index + 1}/${pending.length}`,
           `${DOCUMENT_CATEGORY_LABELS[doc.category] || doc.category} · ${doc.file_name}`,
         );
         try {
@@ -3314,7 +3319,7 @@
         ? '<label><input type="checkbox" name="regenerate_answers"> สร้างเฉลยใหม่ทุกข้อ แม้ข้อที่มีเฉลยแล้ว</label>'
         : '';
       const roleNotice = mode === 'answers'
-        ? '<div class="notice info">ระบบสร้างเฉลยครั้งละไม่เกิน 5 ข้อ และบันทึกทันที หากหยุดกลางทาง ชุดที่เสร็จแล้วจะไม่หาย</div>'
+        ? '<div class="notice info"><strong>สร้างเฉลยแบบเร็ว</strong><br>ระบบอ่านเฉพาะ Official Evaluation และ Participant Summary แล้วสร้างเฉลยครั้งละไม่เกิน 5 ข้อ โดยไม่อ่านภาพผลดิบหรือ Antigram ซ้ำ</div>'
         : mode === 'summary'
           ? '<div class="notice info">ขั้นตอนนี้สร้างเฉพาะตารางและข้อความสรุปอย่างเป็นทางการ ไม่สร้างเฉลยรายข้อ จึงลดโอกาสเกิดรหัส 546</div>'
           : (mode === 'answers' || mode === 'summary' || isHistoricalBundle)
@@ -3358,7 +3363,10 @@
                     : sourceDocCount + 1 + questionBatches.length + 1;
           const progressState = { step: 0, total: pendingCount + Math.max(1, actionCount) };
           showModal('กำลังประมวลผล', '<div id="document-ai-progress"></div>', '', true, true);
-          updateAiProgress(0, progressState.total, 'กำลังเตรียมรายการไฟล์', `พบไฟล์ที่ต้องอ่านใหม่ ${pendingCount} ไฟล์`);
+          const pendingLabel = mode === 'answers'
+            ? `พบเอกสารอ้างอิงที่ต้องอ่านใหม่ ${pendingCount} ไฟล์ (เฉพาะ Official Evaluation / Participant Summary)`
+            : `พบไฟล์ที่ต้องอ่านใหม่ ${pendingCount} ไฟล์`;
+          updateAiProgress(0, progressState.total, 'กำลังเตรียมรายการไฟล์', pendingLabel);
           await extractDocumentsOneByOne(mode, progressState);
 
           let formResult = null;
