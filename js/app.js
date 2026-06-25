@@ -36,6 +36,14 @@
     viewer: 'อ่านรายงานและประวัติการใช้งานโดยไม่แก้ไขข้อมูล'
   };
   const ROLE_PRIORITY = ['admin', 'qm', 'reviewer', 'physician', 'viewer', 'staff'];
+  const SIGNING_ROLE_LABELS = {
+    staff: 'นักเทคนิคการแพทย์ / เจ้าหน้าที่ผู้ปฏิบัติ',
+    reviewer: 'ผู้ทบทวนผล',
+    qm: 'ผู้จัดการคุณภาพ',
+    physician: 'แพทย์ผู้รับทราบ',
+    admin: 'ผู้ดูแลระบบ',
+    viewer: 'ผู้ตรวจติดตาม'
+  };
   const STATUS_LABELS = {
     preparing: 'เตรียมดำเนินการ',
     in_progress: 'กำลังดำเนินการ',
@@ -188,7 +196,41 @@
     antigen: 'การตรวจแอนติเจน'
   };
 
-  const RESULT_SPECIMENS = ['J-08', 'J-09', 'J-10', 'J-11', 'J-12'];
+  const LEGACY_RESULT_SPECIMENS = ['J-08', 'J-09', 'J-10', 'J-11', 'J-12'];
+  const CAP_J_RESULT_SPECIMENS = ['J-01', 'J-02', 'J-03', 'J-04', 'J-05'];
+  const CAP_JE_RESULT_SPECIMENS = ['JE-07'];
+  const CAP_J_JE_SCHEMA = 'cap-j-je-a-2026-v1';
+  const PROVIDER_GENERATED_SCHEMA = 'provider-generated-v1';
+
+  const CAP_RESULT_OPTIONS = {
+    abo: [
+      ['', '— เลือกผล —'], ['A', 'A (CAP 188)'], ['B', 'B (CAP 191)'], ['AB', 'AB (CAP 192)'], ['O', 'O (CAP 195)'],
+      ['ไม่สอดคล้อง ต้องตรวจเพิ่ม', 'Cell/serum ไม่สอดคล้อง ต้องตรวจเพิ่ม (CAP 199)']
+    ],
+    subgroup: [
+      ['', '— ไม่ระบุ —'], ['ไม่ได้ตรวจ subgroup', 'ไม่ได้ตรวจ subgroup (CAP 105)'], ['A1', 'A1 (CAP 189)'],
+      ['Asub', 'Asub (CAP 124)'], ['A1B', 'A1B (CAP 193)'], ['AsubB', 'AsubB (CAP 125)']
+    ],
+    rh: [['', '— เลือกผล —'], ['Rh positive', 'Rh positive (CAP 207)'], ['Rh negative', 'Rh negative (CAP 208)']],
+    screen: [['', '— เลือกผล —'], ['ไม่พบแอนติบอดี', 'ไม่พบ unexpected antibody (CAP 110)'], ['พบแอนติบอดี', 'พบ unexpected antibody (CAP 111)']],
+    crossmatch: [['', '— เลือกผล —'], ['Negative', 'Negative (CAP 29)'], ['Positive', 'Positive (CAP 30)'], ['Would refer for testing', 'Would refer for testing (CAP 20)']],
+    crossmatchType: [['', '— เลือกวิธี —'], ['Immediate spin only', 'Immediate spin only (CAP 58)'], ['Antiglobulin crossmatch with IgG AHG', 'Antiglobulin crossmatch with IgG AHG (CAP 59)'], ['Antiglobulin crossmatch with polyspecific AHG', 'Antiglobulin crossmatch with polyspecific AHG (CAP 60)']],
+    strength: [['', '— เลือกความแรง —'], ['Microscopic', 'Microscopic (CAP 24)'], ['1+', '1+ (CAP 25)'], ['2+', '2+ (CAP 26)'], ['3+', '3+ (CAP 27)'], ['4+', '4+ (CAP 28)'], ['Not applicable', 'Not applicable (CAP 80)']],
+    antigen: [['', '— เลือกผล —'], ['Negative', 'Negative (CAP 209)'], ['Positive', 'Positive (CAP 210)'], ['Reagent not available', 'Reagent not available (CAP 235)'], ['Test not indicated', 'Test not indicated (CAP 435)']]
+  };
+
+  function isCapJJeRound(round = state.currentRound) {
+    if (!round) return false;
+    const provider = String(round.provider || '').toUpperCase();
+    const code = `${round.program_code || ''} ${round.round_code || ''} ${round.program_name || ''}`.toUpperCase();
+    return provider.includes('CAP') && (code.includes('J/JE') || code.includes('J / JE') || (code.includes('J-A') && code.includes('JE')));
+  }
+
+  function resultSpecimensForRound(round = state.currentRound, payload = null) {
+    if (isCapJJeRound(round) || payload?.schema === CAP_J_JE_SCHEMA) return [...CAP_J_RESULT_SPECIMENS, ...CAP_JE_RESULT_SPECIMENS];
+    const keys = Object.keys(payload?.specimens || {});
+    return keys.length ? keys : LEGACY_RESULT_SPECIMENS;
+  }
 
   function configReady() {
     return cfg.SUPABASE_URL && cfg.SUPABASE_PUBLISHABLE_KEY
@@ -276,6 +318,14 @@
 
   function roleOptions(selected = state.activeRole) {
     return state.roles.map((role) => `<option value="${esc(role)}" ${role === selected ? 'selected' : ''}>${esc(ROLE_LABELS[role] || 'บทบาทอื่น')}</option>`).join('');
+  }
+
+  function signingRoleText(role) {
+    return SIGNING_ROLE_LABELS[role] || ROLE_LABELS[role] || 'ไม่ระบุบทบาท';
+  }
+
+  function approvalSignerText(nameText, approval) {
+    return `${nameText || '-'} (ลงนามในบทบาท: ${signingRoleText(approval?.acting_role)})`;
   }
 
   function roleChoices(currentRoles = [], lockedRoles = []) {
@@ -1100,9 +1150,26 @@
     const { data: docs, error } = await state.supabase.from('ec_round_documents').select('*').eq('round_id', round.id).order('created_at', { ascending: false });
     if (error) throw error;
     const uploadAllowed = canManage() || canReview() || round.receiver_id === state.user.id || await isAssigned(round.id);
+    const sourceDocuments = (docs || []).filter((doc) => doc.category === 'source_document');
+    const instructionDocuments = (docs || []).filter((doc) => doc.category === 'instruction');
+    const rawResultDocuments = (docs || []).filter((doc) => doc.category === 'raw_result_image');
+    const officialDocuments = (docs || []).filter((doc) => doc.category === 'official_result');
+    const documentBundleReady = sourceDocuments.length > 0 && instructionDocuments.length > 0;
+    const answerBundleReady = officialDocuments.length > 0;
+    const historicalBundleReady = documentBundleReady && answerBundleReady;
+    const generatedAt = round.generated_form_generated_at ? fmtDate(round.generated_form_generated_at, true) : '';
+    const generatedFormStatus = round.generated_result_form_schema
+      ? `<div class="notice success"><strong>มีแบบกรอกและคำแนะนำที่สร้างจากเอกสารแล้ว</strong><br><span class="small">สร้างเมื่อ ${esc(generatedAt || '-')} · ระบบใช้ “ประเภทเอกสาร” เป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่เท่านั้น</span>${round.generated_instruction_th ? `<details style="margin-top:8px"><summary>ดูคำแนะนำภาษาไทย</summary><div class="small" style="white-space:pre-wrap;margin-top:8px">${esc(round.generated_instruction_th)}</div></details>` : ''}</div><div style="height:12px"></div>`
+      : `<div class="compact-status"><span>ฟอร์มต้นฉบับ <strong>${sourceDocuments.length}</strong></span><span>คู่มือ/คำแนะนำ <strong>${instructionDocuments.length}</strong></span><span>ภาพผลดิบ <strong>${rawResultDocuments.length}</strong></span><span>รายงานผล <strong>${officialDocuments.length}</strong></span></div>`;
     return `<div class="card">
       <div class="card-header"><div><h2>เอกสารและภาพ</h2></div>
-      <div class="table-actions">${canManage() ? `<button class="btn btn-success" id="go-auto-competency">สร้างจากไฟล์</button>` : ''}${uploadAllowed ? `<button class="btn btn-primary" id="upload-doc-btn">＋ อัปโหลดไฟล์</button>` : ''}</div></div>
+      <div class="table-actions">${uploadAllowed ? `<button class="btn btn-primary" id="upload-doc-btn">＋ อัปโหลดไฟล์</button>` : ''}<button class="btn btn-outline" id="go-auto-competency">จัดการข้อสอบ</button></div></div>
+      ${canManage() ? `<div class="ai-action-grid">
+        <button class="btn btn-primary" id="generate-document-bundle" ${documentBundleReady ? '' : 'disabled'}>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</button>
+        <button class="btn btn-success" id="generate-answer-bundle" ${answerBundleReady ? '' : 'disabled'}>สร้างเฉลยและสรุปผลจากรายงาน</button>
+        <button class="btn btn-secondary" id="generate-historical-bundle" ${historicalBundleReady ? '' : 'disabled'}>สร้างย้อนหลังครบชุดจากเอกสารและรายงานผล</button>
+      </div><div class="small muted" style="margin:8px 0 14px">รายละเอียดการเตรียมไฟล์ ชื่อไฟล์ และการใช้ภาพ Ab screen อยู่ในเมนูคู่มือการใช้งาน</div>` : ''}
+      ${generatedFormStatus}
       ${(docs || []).length ? `<div class="table-wrap"><table><thead><tr><th>ประเภท</th><th>ชื่อ</th><th>ผู้ที่เปิดดูได้</th><th>วันที่อัปโหลด</th><th>จัดการ</th></tr></thead><tbody>
         ${(docs || []).map((d) => {
           const canEditDocument = canManage() || d.uploaded_by === state.user.id;
@@ -1129,7 +1196,8 @@
     const name = (id) => directory.find((person) => person.id === id)?.full_name || id;
     const canChange = canManage() && (!isHistoricalRound(round) || !resultCount.count);
     return `<div class="card">
-      <div class="card-header"><div><h2>ผู้รับผิดชอบ</h2><div class="small muted">ผู้ปฏิบัติจริง 2 คนต้องเป็นเจ้าหน้าที่ ผู้ทบทวนต้องมีบทบาทผู้ทบทวน และแพทย์ไม่ต้องมีบทบาทเจ้าหน้าที่</div></div>${canChange ? `<button class="btn btn-primary" id="manage-assignments">กำหนดผู้รับผิดชอบ</button>` : ''}</div>
+      <div class="card-header"><div><h2>ผู้รับผิดชอบ</h2><div class="small muted">ผู้ปฏิบัติจริง 2 คนต้องมีบทบาทเจ้าหน้าที่ ผู้ทบทวนต้องมีบทบาทผู้ทบทวน ส่วนผู้จัดการคุณภาพต้องรับรองทุกรอบตามหน้าที่ แม้เป็นหนึ่งในผู้ปฏิบัติจริง</div></div>${canChange ? `<button class="btn btn-primary" id="manage-assignments">กำหนดผู้รับผิดชอบ</button>` : ''}</div>
+      <div class="notice info">บุคคลเดียวกันมีหลายบทบาทได้ แต่ต้องเลือก “ใช้งานในบทบาท” ให้ตรงกับงานที่กำลังทำ เช่น กรอกผลในบทบาทเจ้าหน้าที่ และรับรองในบทบาทผู้จัดการคุณภาพ ระบบจะแสดงบทบาทที่ใช้ลงนามในประวัติการอนุมัติ</div><div style="height:12px"></div>
       ${isHistoricalRound(round) && resultCount.count ? `<div class="notice warning">มีการกรอกผลย้อนหลังแล้ว ระบบจึงล็อกชื่อผู้ปฏิบัติจริงเพื่อไม่ให้หลักฐานเปลี่ยนบุคคล หากเลือกผิดให้แก้ก่อนกรอกผลย้อนหลัง</div><div style="height:12px"></div>` : ''}
       ${(assignments || []).length ? `<div class="table-wrap"><table><thead><tr><th>บทบาท</th><th>ชื่อ</th><th>ลำดับผู้ปฏิบัติ</th><th>วันที่มอบหมาย</th></tr></thead><tbody>
         ${(assignments || []).map((assignment) => `<tr><td>${esc(labelFrom(ASSIGNMENT_ROLE_LABELS, assignment.assignment_role))}</td><td>${esc(name(assignment.user_id))}</td><td>${assignment.practitioner_slot || '-'}</td><td>${fmtDate(assignment.assigned_at, true)}</td></tr>`).join('')}
@@ -1137,38 +1205,328 @@
     </div>`;
   }
 
-  function defaultResultPayload() {
+  function selectOptions(options, value) {
+    return options.map(([optionValue, label]) => `<option value="${esc(optionValue)}" ${String(value || '') === optionValue ? 'selected' : ''}>${esc(label)}</option>`).join('');
+  }
+
+  function generatedResultSchema(round = state.currentRound) {
+    const schema = round?.generated_result_form_schema;
+    return schema && typeof schema === 'object' && Array.isArray(schema.programs) ? schema : null;
+  }
+
+  function generatedOptionLabel(option) {
+    const label = String(option?.label || option?.value || '').trim();
+    const code = String(option?.code || '').trim();
+    return code && !label.includes(code) ? `${label} (${code})` : label;
+  }
+
+  function generatedFieldControl(field, value, attributes, disabled) {
+    const inputType = String(field?.input_type || 'text');
+    const required = field?.required ? 'required' : '';
+    const disabledAttr = disabled ? 'disabled' : '';
+    const placeholder = field?.placeholder ? `placeholder="${esc(field.placeholder)}"` : '';
+    const options = Array.isArray(field?.options) ? field.options : [];
+    if (inputType === 'select' || options.length) {
+      return `<select class="select" ${attributes} ${required} ${disabledAttr}><option value="">— เลือก —</option>${options.map((option) => {
+        const optionValue = String(option?.value ?? option?.code ?? option?.label ?? '');
+        return `<option value="${esc(optionValue)}" ${String(value || '') === optionValue ? 'selected' : ''}>${esc(generatedOptionLabel(option))}</option>`;
+      }).join('')}</select>`;
+    }
+    if (inputType === 'textarea') {
+      return `<textarea class="textarea" ${attributes} ${required} ${disabledAttr} ${placeholder}>${esc(value || '')}</textarea>`;
+    }
+    return `<input class="input" type="text" value="${esc(value || '')}" ${attributes} ${required} ${disabledAttr} ${placeholder}>`;
+  }
+
+  function providerGeneratedResultForm(payload, prefix, disabled) {
+    const schema = generatedResultSchema();
+    if (!schema) return '';
+    const p = payload && payload.schema === PROVIDER_GENERATED_SCHEMA ? payload : {};
+    const specimens = p.specimens || {};
+    const antigenTyping = p.antigen_typing || {};
+    const methodsByProgram = p.methods_by_program || {};
+    const instruction = String(state.currentRound?.generated_instruction_th || '').trim();
+    const programHtml = schema.programs.map((program) => {
+      const programKey = String(program.key || 'PROGRAM');
+      const specimenRows = Array.isArray(program.specimens) ? program.specimens : [];
+      const specimenFields = Array.isArray(program.specimen_fields) ? program.specimen_fields : [];
+      const methodFields = Array.isArray(program.method_fields) ? program.method_fields : [];
+      const table = specimenRows.length && specimenFields.length ? `<div class="table-wrap"><table class="compact-table cap-entry-table" style="min-width:${Math.max(720, 180 + specimenFields.length * 190)}px"><thead><tr><th>ตัวอย่าง</th>${specimenFields.map((field) => `<th>${esc(field.label || field.key)}</th>`).join('')}</tr></thead><tbody>${specimenRows.map((specimen) => {
+        const specimenId = String(specimen.id || specimen.label || '');
+        const values = specimens[specimenId] || {};
+        return `<tr><td><strong>${esc(specimen.label || specimenId)}</strong></td>${specimenFields.map((field) => {
+          const fieldKey = String(field.key || '');
+          const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimenId)}" data-provider-field="${esc(fieldKey)}"`;
+          return `<td>${generatedFieldControl(field, values[fieldKey], attrs, disabled)}</td>`;
+        }).join('')}</tr>`;
+      }).join('')}</tbody></table></div>` : '<div class="notice warning">แบบกรอกส่วนนี้ยังไม่มีรายการตัวอย่างหรือช่องกรอก กรุณาตรวจเอกสารต้นทางแล้วสร้างใหม่</div>';
+      const methods = methodFields.length ? `<details class="result-method-details"><summary>${esc(program.title || programKey)} — วิธีตรวจและรหัสที่ใช้</summary><div class="form-grid cols-3" style="margin-top:12px">${methodFields.map((field) => {
+        const fieldKey = String(field.key || '');
+        const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="method" data-provider-item="${esc(programKey)}" data-provider-field="${esc(fieldKey)}"`;
+        return `<div class="field"><label>${esc(field.label || fieldKey)}</label>${generatedFieldControl(field, methodsByProgram?.[programKey]?.[fieldKey], attrs, disabled)}</div>`;
+      }).join('')}</div></details>` : '';
+      return `<div class="subcard"><h3>${esc(program.title || programKey)}</h3>${program.description ? `<p class="small muted">${esc(program.description)}</p>` : ''}${table}${methods}</div>`;
+    }).join('');
+
+    const antigenHtml = (Array.isArray(schema.antigen_sections) ? schema.antigen_sections : []).map((section) => {
+      const specimenId = String(section.specimen_id || '');
+      const fields = Array.isArray(section.fields) ? section.fields : [];
+      const values = antigenTyping[specimenId] || {};
+      return `<div class="subcard"><h3>${esc(section.title || `การตรวจแอนติเจน — ${specimenId}`)}</h3><div class="form-grid cols-3">${fields.map((field) => {
+        const fieldKey = String(field.key || '');
+        const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="antigen" data-provider-item="${esc(specimenId)}" data-provider-field="${esc(fieldKey)}"`;
+        return `<div class="field"><label>${esc(field.label || fieldKey)}</label>${generatedFieldControl(field, values[fieldKey], attrs, disabled)}</div>`;
+      }).join('')}</div></div>`;
+    }).join('');
+
+    const generalFields = Array.isArray(schema.general_fields) && schema.general_fields.length
+      ? schema.general_fields
+      : [
+          { key: 'reagents', label: 'น้ำยา / เลขรุ่นผลิต', input_type: 'textarea' },
+          { key: 'instrument', label: 'เครื่องมือ', input_type: 'textarea' },
+          { key: 'overall_note', label: 'หมายเหตุรวม', input_type: 'textarea' }
+        ];
+    const generalHtml = `<div class="form-grid cols-2">${generalFields.map((field, index) => {
+      const fieldKey = String(field.key || '');
+      const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="general" data-provider-field="${esc(fieldKey)}"`;
+      const full = index === generalFields.length - 1 && generalFields.length % 2 === 1 ? ' style="grid-column:1/-1"' : '';
+      return `<div class="field"${full}><label>${esc(field.label || fieldKey)}</label>${generatedFieldControl(field, p[fieldKey], attrs, disabled)}</div>`;
+    }).join('')}</div>`;
+
+    return `<div class="result-grid provider-generated-result-form">
+      <div class="notice info"><strong>${esc(schema.title || 'แบบกรอกที่สร้างจากเอกสารผู้ให้บริการ')}</strong><br><span class="small">สร้างจากเอกสารต้นฉบับและคู่มือของรอบนี้ ผู้จัดการคุณภาพต้องตรวจทานก่อนใช้งาน</span>${instruction ? `<details style="margin-top:8px"><summary>ดูคำแนะนำภาษาไทย</summary><div class="small" style="white-space:pre-wrap;margin-top:8px">${esc(instruction)}</div></details>` : ''}</div>
+      ${programHtml}${antigenHtml}${generalHtml}
+    </div>`;
+  }
+
+  function collectProviderGeneratedPayload(form, prefix) {
+    const schema = generatedResultSchema();
+    const payload = {
+      schema: PROVIDER_GENERATED_SCHEMA,
+      form_schema_version: String(schema?.schema_version || '1'),
+      specimens: {},
+      antigen_typing: {},
+      methods_by_program: {},
+      reagents: '',
+      instrument: '',
+      overall_note: ''
+    };
+    form.querySelectorAll('[data-provider-field]').forEach((field) => {
+      if (field.dataset.providerPrefix !== prefix) return;
+      const group = field.dataset.providerGroup;
+      const item = field.dataset.providerItem || '';
+      const key = field.dataset.providerField || '';
+      const value = String(field.value || '').trim();
+      if (group === 'specimen') {
+        payload.specimens[item] ||= {};
+        payload.specimens[item][key] = value;
+        payload.specimens[item].notes ||= '';
+      } else if (group === 'antigen') {
+        payload.antigen_typing[item] ||= {};
+        payload.antigen_typing[item][key] = value;
+        payload.antigen_typing[item].notes ||= '';
+      } else if (group === 'method') {
+        payload.methods_by_program[item] ||= {};
+        payload.methods_by_program[item][key] = value;
+      } else if (group === 'general') {
+        payload[key] = value;
+      }
+    });
+    return payload;
+  }
+
+  function defaultCapSpecimenPayload() {
     return {
-      specimens: Object.fromEntries(RESULT_SPECIMENS.map((s) => [s, { abo: '', rh: '', screen: '', antibody: '', crossmatch: '', strength: '', notes: '' }])),
+      abo: '', abo_subgroup: '', rh: '', screen: '', antibody: '', additional_antibodies: '',
+      crossmatch: '', crossmatch_type: '', strength: '', notes: ''
+    };
+  }
+
+  function defaultResultPayload(round = state.currentRound) {
+    if (generatedResultSchema(round)) {
+      return {
+        schema: PROVIDER_GENERATED_SCHEMA,
+        form_schema_version: String(generatedResultSchema(round)?.schema_version || '1'),
+        specimens: {},
+        antigen_typing: {},
+        methods_by_program: {},
+        reagents: '',
+        instrument: '',
+        overall_note: ''
+      };
+    }
+    if (isCapJJeRound(round)) {
+      return {
+        schema: CAP_J_JE_SCHEMA,
+        specimens: Object.fromEntries([...CAP_J_RESULT_SPECIMENS, ...CAP_JE_RESULT_SPECIMENS].map((s) => [s, defaultCapSpecimenPayload()])),
+        antigen_typing: {
+          'J-06R': { C: '', E: '', c: '', e: '', other_antigen: '', other_result: '', notes: '' },
+          'JE-07R': { C: '', E: '', c: '', e: '', other_antigen: '', other_result: '', notes: '' }
+        },
+        methods_by_program: {
+          J: { abo_manufacturer: '', abo_method: '', rh_manufacturer: '', rh_method: '', d_control_manufacturer: '', d_control_method: '', screen_cells: '', screen_manufacturer: '', screen_method: '', antibody_primary_manufacturer: '', antibody_primary_method: '', antibody_secondary_manufacturer: '', antibody_secondary_method: '', crossmatch_method: '', antigen_manufacturer: '' },
+          JE: { abo_manufacturer: '', abo_method: '', rh_manufacturer: '', rh_method: '', d_control_manufacturer: '', d_control_method: '', screen_cells: '', screen_manufacturer: '', screen_method: '', antibody_primary_manufacturer: '', antibody_primary_method: '', antibody_secondary_manufacturer: '', antibody_secondary_method: '', crossmatch_method: '', antigen_manufacturer: '' }
+        },
+        reagents: '', instrument: '', overall_note: ''
+      };
+    }
+    return {
+      specimens: Object.fromEntries(LEGACY_RESULT_SPECIMENS.map((s) => [s, { abo: '', rh: '', screen: '', antibody: '', crossmatch: '', strength: '', notes: '' }])),
       methods: { abo: '', rh: '', screen: '', antibody: '', crossmatch: '', antigen: '' },
       reagents: '', instrument: '', overall_note: ''
     };
   }
 
-  function resultForm(payload, prefix = 'result', disabled = false) {
-    const p = { ...defaultResultPayload(), ...(payload || {}) };
-    p.specimens = { ...defaultResultPayload().specimens, ...(payload?.specimens || {}) };
-    return `<div class="result-grid">
-      <div class="result-row"><strong>ตัวอย่าง</strong><span>ABO</span><span>Rh</span><span>คัดกรองแอนติบอดี</span><span>ระบุชนิดแอนติบอดี</span><span>ความเข้ากันได้ / ความแรงปฏิกิริยา</span></div>
-      ${RESULT_SPECIMENS.map((s) => { const x = p.specimens[s] || {}; return `<div class="result-row"><strong>${s}</strong>
-        <input class="input" name="${prefix}_${s}_abo" value="${esc(x.abo)}" ${disabled?'disabled':''} placeholder="A/B/O/AB">
-        <input class="input" name="${prefix}_${s}_rh" value="${esc(x.rh)}" ${disabled?'disabled':''} placeholder="บวก / ลบ">
-        <input class="input" name="${prefix}_${s}_screen" value="${esc(x.screen)}" ${disabled?'disabled':''} placeholder="พบ / ไม่พบ">
-        <input class="input" name="${prefix}_${s}_antibody" value="${esc(x.antibody)}" ${disabled?'disabled':''} placeholder="เช่น แอนติ-K">
-        <div class="form-grid"><input class="input" name="${prefix}_${s}_crossmatch" value="${esc(x.crossmatch)}" ${disabled?'disabled':''} placeholder="เข้ากันได้ / เข้ากันไม่ได้"><input class="input" name="${prefix}_${s}_strength" value="${esc(x.strength)}" ${disabled?'disabled':''} placeholder="0–4+"></div>
-      </div>`; }).join('')}
-      <div class="form-grid cols-3">
-        ${['abo','rh','screen','antibody','crossmatch','antigen'].map((m) => `<div class="field"><label>วิธีตรวจ: ${esc(METHOD_LABELS[m] || m)}</label><input class="input" name="${prefix}_method_${m}" value="${esc(p.methods?.[m] || '')}" ${disabled?'disabled':''}></div>`).join('')}
-      </div>
-      <div class="form-grid cols-2"><div class="field"><label>น้ำยา / เลขรุ่นผลิต</label><textarea class="textarea" name="${prefix}_reagents" ${disabled?'disabled':''}>${esc(p.reagents || '')}</textarea></div><div class="field"><label>เครื่องมือ</label><textarea class="textarea" name="${prefix}_instrument" ${disabled?'disabled':''}>${esc(p.instrument || '')}</textarea></div></div>
-      <div class="field"><label>หมายเหตุรวม</label><textarea class="textarea" name="${prefix}_overall_note" ${disabled?'disabled':''}>${esc(p.overall_note || '')}</textarea></div>
+  function capSpecimenRows(payload, prefix, specimens, disabled) {
+    return specimens.map((specimen) => {
+      const x = payload.specimens?.[specimen] || defaultCapSpecimenPayload();
+      return `<tr>
+        <td><strong>${esc(specimen)}</strong></td>
+        <td><select class="select" name="${prefix}_${specimen}_abo" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.abo, x.abo)}</select></td>
+        <td><select class="select" name="${prefix}_${specimen}_abo_subgroup" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.subgroup, x.abo_subgroup)}</select></td>
+        <td><select class="select" name="${prefix}_${specimen}_rh" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.rh, x.rh)}</select></td>
+        <td><select class="select" name="${prefix}_${specimen}_screen" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.screen, x.screen)}</select></td>
+        <td><input class="input" name="${prefix}_${specimen}_antibody" value="${esc(x.antibody || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น 184 ไม่พบ / 137 Anti-s"></td>
+        <td><input class="input" name="${prefix}_${specimen}_additional_antibodies" value="${esc(x.additional_antibodies || '')}" ${disabled ? 'disabled' : ''} placeholder="ถ้ามี"></td>
+        <td><select class="select" name="${prefix}_${specimen}_crossmatch" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.crossmatch, x.crossmatch)}</select></td>
+        <td><select class="select" name="${prefix}_${specimen}_crossmatch_type" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.crossmatchType, x.crossmatch_type)}</select></td>
+        <td><select class="select" name="${prefix}_${specimen}_strength" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.strength, x.strength)}</select></td>
+      </tr>`;
+    }).join('');
+  }
+
+  function capAntigenTable(payload, prefix, specimen, disabled) {
+    const x = payload.antigen_typing?.[specimen] || { C: '', E: '', c: '', e: '', other_antigen: '', other_result: '', notes: '' };
+    return `<div class="subcard">
+      <h3>การตรวจแอนติเจนเม็ดเลือดแดง — ${esc(specimen)}</h3>
+      <div class="table-wrap"><table class="compact-table" style="min-width:920px"><thead><tr><th>Anti-C</th><th>Anti-E</th><th>Anti-c</th><th>Anti-e</th><th>แอนติเจนอื่น/รหัส antisera</th><th>ผลแอนติเจนอื่น</th></tr></thead><tbody><tr>
+        ${['C','E','c','e'].map((field) => `<td><select class="select" name="${prefix}_antigen_${specimen}_${field}" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.antigen, x[field])}</select></td>`).join('')}
+        <td><input class="input" name="${prefix}_antigen_${specimen}_other_antigen" value="${esc(x.other_antigen || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Anti-K / CAP 124"></td>
+        <td><select class="select" name="${prefix}_antigen_${specimen}_other_result" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.antigen, x.other_result)}</select></td>
+      </tr></tbody></table></div>
     </div>`;
   }
 
-  function collectResultPayload(form, prefix = 'result') {
+  function capMethodFields(payload, prefix, programKey, title, disabled) {
+    const m = payload.methods_by_program?.[programKey] || {};
+    const fields = [
+      ['abo_manufacturer', 'ABO — Manufacturer code'], ['abo_method', 'ABO — Method code'],
+      ['rh_manufacturer', 'Rh Anti-D — Manufacturer code'], ['rh_method', 'Rh Anti-D — Method code'],
+      ['d_control_manufacturer', 'D control — Manufacturer code'], ['d_control_method', 'D control — Method code'],
+      ['screen_cells', 'Screening cell code/จำนวนเซลล์'], ['screen_manufacturer', 'Antibody screen — Manufacturer code'],
+      ['screen_method', 'Antibody screen — Method code'], ['antibody_primary_manufacturer', 'Antibody ID ชุดที่ 1 — Manufacturer'],
+      ['antibody_primary_method', 'Antibody ID ชุดที่ 1 — Method'], ['antibody_secondary_manufacturer', 'Antibody ID ชุดที่ 2 — Manufacturer'],
+      ['antibody_secondary_method', 'Antibody ID ชุดที่ 2 — Method'], ['crossmatch_method', 'Crossmatch — Method code'],
+      ['antigen_manufacturer', 'Antigen typing — Manufacturer code']
+    ];
+    return `<details class="result-method-details"><summary>${esc(title)} — วิธีตรวจและรหัสน้ำยา</summary><div class="form-grid cols-3" style="margin-top:12px">
+      ${fields.map(([key, label]) => `<div class="field"><label>${esc(label)}</label><input class="input" name="${prefix}_method_${programKey}_${key}" value="${esc(m[key] || '')}" ${disabled ? 'disabled' : ''}></div>`).join('')}
+    </div></details>`;
+  }
+
+  function capJJeResultForm(payload, prefix, disabled) {
+    const base = defaultResultPayload(state.currentRound);
+    const p = { ...base, ...(payload || {}), schema: CAP_J_JE_SCHEMA };
+    p.specimens = { ...base.specimens, ...(payload?.specimens || {}) };
+    p.antigen_typing = { ...base.antigen_typing, ...(payload?.antigen_typing || {}) };
+    p.methods_by_program = { ...base.methods_by_program, ...(payload?.methods_by_program || {}) };
+    return `<div class="result-grid cap-result-form">
+      <div class="notice info"><strong>แบบกรอกนี้อ้างอิงเอกสาร CAP J-A / JE-A 2026</strong><br><span class="small">J-A ใช้ J-01 ถึง J-05 และ donor J-06R ส่วน JE-A ใช้ JE-07R/JE-07S และ crossmatch กับ J-06R</span></div>
+      <div class="subcard"><h3>J-A 2026 — Comprehensive Transfusion Medicine</h3>
+        <div class="table-wrap"><table class="compact-table cap-entry-table" style="min-width:1800px"><thead><tr><th>ตัวอย่าง</th><th>ABO</th><th>ABO subgroup</th><th>Rh</th><th>Antibody screen</th><th>Primary antibody</th><th>Additional antibodies</th><th>Crossmatch กับ J-06R</th><th>ชนิด Crossmatch</th><th>ความแรง</th></tr></thead><tbody>${capSpecimenRows(p, prefix, CAP_J_RESULT_SPECIMENS, disabled)}</tbody></table></div>
+      </div>
+      ${capAntigenTable(p, prefix, 'J-06R', disabled)}
+      <div class="subcard"><h3>JE-A 2026 — Educational Challenge</h3>
+        <div class="table-wrap"><table class="compact-table cap-entry-table" style="min-width:1800px"><thead><tr><th>ตัวอย่าง</th><th>ABO</th><th>ABO subgroup</th><th>Rh</th><th>Antibody screen</th><th>Primary antibody</th><th>Additional antibodies</th><th>Crossmatch กับ J-06R</th><th>ชนิด Crossmatch</th><th>ความแรง</th></tr></thead><tbody>${capSpecimenRows(p, prefix, CAP_JE_RESULT_SPECIMENS, disabled)}</tbody></table></div>
+      </div>
+      ${capAntigenTable(p, prefix, 'JE-07R', disabled)}
+      ${capMethodFields(p, prefix, 'J', 'J-A', disabled)}
+      ${capMethodFields(p, prefix, 'JE', 'JE-A', disabled)}
+      <div class="form-grid cols-2"><div class="field"><label>น้ำยา / เลขรุ่นผลิต</label><textarea class="textarea" name="${prefix}_reagents" ${disabled ? 'disabled' : ''}>${esc(p.reagents || '')}</textarea></div><div class="field"><label>เครื่องมือ</label><textarea class="textarea" name="${prefix}_instrument" ${disabled ? 'disabled' : ''}>${esc(p.instrument || '')}</textarea></div></div>
+      <div class="field"><label>หมายเหตุรวม</label><textarea class="textarea" name="${prefix}_overall_note" ${disabled ? 'disabled' : ''}>${esc(p.overall_note || '')}</textarea></div>
+    </div>`;
+  }
+
+  function genericResultForm(payload, prefix, disabled) {
+    const base = defaultResultPayload(null);
+    const p = { ...base, ...(payload || {}) };
+    p.specimens = { ...base.specimens, ...(payload?.specimens || {}) };
+    const specimens = resultSpecimensForRound(null, p);
+    return `<div class="result-grid">
+      <div class="result-row"><strong>ตัวอย่าง</strong><span>ABO</span><span>Rh</span><span>คัดกรองแอนติบอดี</span><span>ระบุชนิดแอนติบอดี</span><span>ความเข้ากันได้ / ความแรงปฏิกิริยา</span></div>
+      ${specimens.map((s) => { const x = p.specimens[s] || {}; return `<div class="result-row"><strong>${esc(s)}</strong>
+        <input class="input" name="${prefix}_${s}_abo" value="${esc(x.abo)}" ${disabled ? 'disabled' : ''} placeholder="A/B/O/AB">
+        <input class="input" name="${prefix}_${s}_rh" value="${esc(x.rh)}" ${disabled ? 'disabled' : ''} placeholder="บวก / ลบ">
+        <input class="input" name="${prefix}_${s}_screen" value="${esc(x.screen)}" ${disabled ? 'disabled' : ''} placeholder="พบ / ไม่พบ">
+        <input class="input" name="${prefix}_${s}_antibody" value="${esc(x.antibody)}" ${disabled ? 'disabled' : ''} placeholder="เช่น Anti-K">
+        <div class="form-grid"><input class="input" name="${prefix}_${s}_crossmatch" value="${esc(x.crossmatch)}" ${disabled ? 'disabled' : ''} placeholder="เข้ากันได้ / เข้ากันไม่ได้"><input class="input" name="${prefix}_${s}_strength" value="${esc(x.strength)}" ${disabled ? 'disabled' : ''} placeholder="0–4+"></div>
+      </div>`; }).join('')}
+      <div class="form-grid cols-3">
+        ${['abo','rh','screen','antibody','crossmatch','antigen'].map((m) => `<div class="field"><label>วิธีตรวจ: ${esc(METHOD_LABELS[m] || m)}</label><input class="input" name="${prefix}_method_${m}" value="${esc(p.methods?.[m] || '')}" ${disabled ? 'disabled' : ''}></div>`).join('')}
+      </div>
+      <div class="form-grid cols-2"><div class="field"><label>น้ำยา / เลขรุ่นผลิต</label><textarea class="textarea" name="${prefix}_reagents" ${disabled ? 'disabled' : ''}>${esc(p.reagents || '')}</textarea></div><div class="field"><label>เครื่องมือ</label><textarea class="textarea" name="${prefix}_instrument" ${disabled ? 'disabled' : ''}>${esc(p.instrument || '')}</textarea></div></div>
+      <div class="field"><label>หมายเหตุรวม</label><textarea class="textarea" name="${prefix}_overall_note" ${disabled ? 'disabled' : ''}>${esc(p.overall_note || '')}</textarea></div>
+    </div>`;
+  }
+
+  function resultForm(payload, prefix = 'result', disabled = false) {
+    if (payload?.schema === PROVIDER_GENERATED_SCHEMA || (generatedResultSchema(state.currentRound) && !payload?.schema)) return providerGeneratedResultForm(payload, prefix, disabled);
+    if (isCapJJeRound(state.currentRound) || payload?.schema === CAP_J_JE_SCHEMA) return capJJeResultForm(payload, prefix, disabled);
+    return genericResultForm(payload, prefix, disabled);
+  }
+
+  function collectCapResultPayload(form, prefix) {
     const fd = new FormData(form);
     const specimens = {};
-    RESULT_SPECIMENS.forEach((s) => {
+    [...CAP_J_RESULT_SPECIMENS, ...CAP_JE_RESULT_SPECIMENS].forEach((s) => {
+      specimens[s] = {
+        abo: String(fd.get(`${prefix}_${s}_abo`) || '').trim(),
+        abo_subgroup: String(fd.get(`${prefix}_${s}_abo_subgroup`) || '').trim(),
+        rh: String(fd.get(`${prefix}_${s}_rh`) || '').trim(),
+        screen: String(fd.get(`${prefix}_${s}_screen`) || '').trim(),
+        antibody: String(fd.get(`${prefix}_${s}_antibody`) || '').trim(),
+        additional_antibodies: String(fd.get(`${prefix}_${s}_additional_antibodies`) || '').trim(),
+        crossmatch: String(fd.get(`${prefix}_${s}_crossmatch`) || '').trim(),
+        crossmatch_type: String(fd.get(`${prefix}_${s}_crossmatch_type`) || '').trim(),
+        strength: String(fd.get(`${prefix}_${s}_strength`) || '').trim(),
+        notes: ''
+      };
+    });
+    const antigen_typing = {};
+    ['J-06R','JE-07R'].forEach((specimen) => {
+      antigen_typing[specimen] = {
+        C: String(fd.get(`${prefix}_antigen_${specimen}_C`) || '').trim(),
+        E: String(fd.get(`${prefix}_antigen_${specimen}_E`) || '').trim(),
+        c: String(fd.get(`${prefix}_antigen_${specimen}_c`) || '').trim(),
+        e: String(fd.get(`${prefix}_antigen_${specimen}_e`) || '').trim(),
+        other_antigen: String(fd.get(`${prefix}_antigen_${specimen}_other_antigen`) || '').trim(),
+        other_result: String(fd.get(`${prefix}_antigen_${specimen}_other_result`) || '').trim(),
+        notes: ''
+      };
+    });
+    const methodKeys = ['abo_manufacturer','abo_method','rh_manufacturer','rh_method','d_control_manufacturer','d_control_method','screen_cells','screen_manufacturer','screen_method','antibody_primary_manufacturer','antibody_primary_method','antibody_secondary_manufacturer','antibody_secondary_method','crossmatch_method','antigen_manufacturer'];
+    const methods_by_program = {};
+    ['J','JE'].forEach((programKey) => {
+      methods_by_program[programKey] = Object.fromEntries(methodKeys.map((key) => [key, String(fd.get(`${prefix}_method_${programKey}_${key}`) || '').trim()]));
+    });
+    return {
+      schema: CAP_J_JE_SCHEMA,
+      specimens,
+      antigen_typing,
+      methods_by_program,
+      reagents: String(fd.get(`${prefix}_reagents`) || '').trim(),
+      instrument: String(fd.get(`${prefix}_instrument`) || '').trim(),
+      overall_note: String(fd.get(`${prefix}_overall_note`) || '').trim()
+    };
+  }
+
+  function collectResultPayload(form, prefix = 'result') {
+    if (form.querySelector('[data-provider-field]')) return collectProviderGeneratedPayload(form, prefix);
+    if (isCapJJeRound(state.currentRound)) return collectCapResultPayload(form, prefix);
+    const fd = new FormData(form);
+    const specimens = {};
+    const names = resultSpecimensForRound(state.currentRound, state.currentRound?.result_payload);
+    names.forEach((s) => {
       specimens[s] = {
         abo: String(fd.get(`${prefix}_${s}_abo`) || '').trim(),
         rh: String(fd.get(`${prefix}_${s}_rh`) || '').trim(),
@@ -1276,11 +1634,11 @@
     if (error) throw error;
     const own = (rows || []).find((r) => r.user_id === state.user.id);
     const practitioner = await isPractitioner(round.id);
-    const canEditOwn = practitioner && (!own || ['draft','returned'].includes(own.status));
+    const canEditOwn = practitioner && hasRole('staff') && (!own || ['draft','returned'].includes(own.status));
     return `<div class="grid ${canReview() ? 'cols-2' : ''}">
       <div class="card"><div class="card-header"><div><h2>ผลที่ฉันบันทึก</h2><div class="small muted">ระบบเก็บประวัติฉบับเดิมทุกครั้งที่แก้ไข</div></div>${own ? `<span class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, own.status))} · ฉบับที่ ${own.version}</span>` : ''}</div>
         ${practitioner ? `<form id="individual-result-form">${resultForm(own?.result_payload, 'individual', !canEditOwn)}</form>
-          ${canEditOwn ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-individual">บันทึกร่าง</button><button class="btn btn-primary" id="submit-individual">ยืนยันและส่งผล</button></div>` : `<div class="notice">ผลถูกส่งแล้วและล็อกการแก้ไข หากต้องแก้ระบบจะส่งกลับทั้งชุดผ่านขั้นผู้ทบทวนหรือผู้จัดการคุณภาพ</div>`}` : `<div class="notice">หน้านี้ใช้สำหรับผู้ปฏิบัติจริงที่ได้รับมอบหมายเท่านั้น</div>`}
+          ${canEditOwn ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-individual">บันทึกร่าง</button><button class="btn btn-primary" id="submit-individual">ยืนยันและส่งผล</button></div>` : practitioner && !hasRole('staff') && (!own || ['draft','returned'].includes(own.status)) ? `<div class="notice warning">คุณได้รับมอบหมายเป็นผู้ปฏิบัติจริง กรุณาเปลี่ยน “ใช้งานในบทบาท” เป็นเจ้าหน้าที่ก่อนบันทึกหรือส่งผล</div>` : `<div class="notice">ผลถูกส่งแล้วและล็อกการแก้ไข หากต้องแก้ระบบจะส่งกลับทั้งชุดผ่านขั้นผู้ทบทวนหรือผู้จัดการคุณภาพ</div>`}` : `<div class="notice">หน้านี้ใช้สำหรับผู้ปฏิบัติจริงที่ได้รับมอบหมายเท่านั้น</div>`}
       </div>
       ${canReview() ? `<div class="card"><h2>ผลของผู้ปฏิบัติทั้งหมด</h2>${(rows || []).length ? (rows || []).map((r) => `<div style="padding:12px 0;border-bottom:1px solid var(--line)"><strong>${esc(r.ec_profiles?.full_name || r.user_id)}</strong><span style="float:right" class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, r.status))} · ฉบับที่ ${r.version}</span><br><span class="small muted">ส่ง ${fmtDate(r.submitted_at, true)}</span><div style="margin-top:8px"><button class="btn btn-outline btn-sm" data-view-individual="${r.id}">ดูผล</button></div></div>`).join('') : empty('ยังไม่มีผู้ปฏิบัติส่งผล')}</div>` : ''}
     </div>`;
@@ -1293,18 +1651,55 @@
 
   function resultSummary(payload, specimen) {
     const x = payload?.specimens?.[specimen] || {};
-    return [
-      `ABO: ${x.abo || '-'}`, `Rh: ${x.rh || '-'}`, `คัดกรอง: ${x.screen || '-'}`,
-      `แอนติบอดี: ${x.antibody || '-'}`, `ความเข้ากันได้: ${x.crossmatch || '-'}`, `ความแรง: ${x.strength || '-'}`
-    ].join('<br>');
+    if (payload?.schema === PROVIDER_GENERATED_SCHEMA && generatedResultSchema()) {
+      const fieldDefinitions = generatedResultSchema().programs
+        .filter((program) => (program.specimens || []).some((item) => String(item.id || item.label || '') === String(specimen)))
+        .flatMap((program) => program.specimen_fields || []);
+      const rows = fieldDefinitions.map((field) => {
+        const raw = x[field.key] || '';
+        const option = (field.options || []).find((item) => String(item.value ?? item.code ?? item.label ?? '') === String(raw));
+        const shown = option ? generatedOptionLabel(option) : raw;
+        return `${esc(field.label || field.key)}: ${esc(shown || '-')}`;
+      });
+      return rows.length ? rows.join('<br>') : '-';
+    }
+    const rows = [
+      `ABO: ${x.abo || '-'}`,
+      ...(payload?.schema === CAP_J_JE_SCHEMA ? [`ABO subgroup: ${x.abo_subgroup || '-'}`] : []),
+      `Rh: ${x.rh || '-'}`,
+      `คัดกรอง: ${x.screen || '-'}`,
+      `แอนติบอดีหลัก: ${x.antibody || '-'}`,
+      ...(payload?.schema === CAP_J_JE_SCHEMA ? [`แอนติบอดีเพิ่มเติม: ${x.additional_antibodies || '-'}`] : []),
+      `Crossmatch: ${x.crossmatch || '-'}`,
+      ...(payload?.schema === CAP_J_JE_SCHEMA ? [`ชนิด Crossmatch: ${x.crossmatch_type || '-'}`] : []),
+      `ความแรง: ${x.strength || '-'}`
+    ];
+    return rows.join('<br>');
+  }
+
+  function antigenSummary(payload, specimen) {
+    const x = payload?.antigen_typing?.[specimen] || {};
+    return [`C: ${x.C || '-'}`, `E: ${x.E || '-'}`, `c: ${x.c || '-'}`, `e: ${x.e || '-'}`, `อื่น: ${x.other_antigen || '-'} = ${x.other_result || '-'}`].join('<br>');
   }
 
   function resultComparison(rows, consensus) {
     if (!rows || rows.length < 2) return '';
     const [first, second] = rows;
-    return `<div class="table-wrap"><table style="min-width:850px"><thead><tr><th>ตัวอย่าง</th><th>${esc(first.ec_profiles?.full_name || 'ผู้ปฏิบัติคนที่ 1')}</th><th>${esc(second.ec_profiles?.full_name || 'ผู้ปฏิบัติคนที่ 2')}</th><th>สรุปผลห้องปฏิบัติการ</th></tr></thead><tbody>
-      ${RESULT_SPECIMENS.map((specimen) => `<tr><td><strong>${esc(specimen)}</strong></td><td>${resultSummary(first.result_payload, specimen)}</td><td>${resultSummary(second.result_payload, specimen)}</td><td>${resultSummary(consensus?.result_payload, specimen)}</td></tr>`).join('')}
+    const payloadForShape = first.result_payload || second.result_payload || consensus?.result_payload;
+    const specimens = resultSpecimensForRound(state.currentRound, payloadForShape);
+    const mainTable = `<div class="table-wrap"><table style="min-width:1000px"><thead><tr><th>ตัวอย่าง</th><th>${esc(first.ec_profiles?.full_name || 'ผู้ปฏิบัติคนที่ 1')}</th><th>${esc(second.ec_profiles?.full_name || 'ผู้ปฏิบัติคนที่ 2')}</th><th>สรุปผลห้องปฏิบัติการ</th></tr></thead><tbody>
+      ${specimens.map((specimen) => `<tr><td><strong>${esc(specimen)}</strong></td><td>${resultSummary(first.result_payload, specimen)}</td><td>${resultSummary(second.result_payload, specimen)}</td><td>${resultSummary(consensus?.result_payload, specimen)}</td></tr>`).join('')}
     </tbody></table></div>`;
+    let antigenSpecimens = [];
+    if (payloadForShape?.schema === CAP_J_JE_SCHEMA) antigenSpecimens = ['J-06R','JE-07R'];
+    if (payloadForShape?.schema === PROVIDER_GENERATED_SCHEMA && generatedResultSchema()) {
+      antigenSpecimens = (generatedResultSchema().antigen_sections || []).map((section) => String(section.specimen_id || '')).filter(Boolean);
+    }
+    if (!antigenSpecimens.length) return mainTable;
+    const antigenTable = `<div style="height:14px"></div><div class="table-wrap"><table style="min-width:900px"><thead><tr><th>Antigen typing</th><th>${esc(first.ec_profiles?.full_name || 'ผู้ปฏิบัติคนที่ 1')}</th><th>${esc(second.ec_profiles?.full_name || 'ผู้ปฏิบัติคนที่ 2')}</th><th>สรุปผลห้องปฏิบัติการ</th></tr></thead><tbody>
+      ${antigenSpecimens.map((specimen) => `<tr><td><strong>${esc(specimen)}</strong></td><td>${antigenSummary(first.result_payload, specimen)}</td><td>${antigenSummary(second.result_payload, specimen)}</td><td>${antigenSummary(consensus?.result_payload, specimen)}</td></tr>`).join('')}
+    </tbody></table></div>`;
+    return mainTable + antigenTable;
   }
 
   function autoLabSummaryPanel(consensus) {
@@ -1382,7 +1777,7 @@
     return `<div class="grid cols-2">
       <div class="card"><h2>ลำดับการตรวจข้อมูลย้อนหลัง</h2><div class="timeline">${stages.map(([stage,label]) => {
         const found = (approvals || []).filter((item) => item.stage === stage);
-        return `<div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><strong>${esc(label)}</strong><br>${found.length ? found.map((item) => `${esc(name(item.approver_id))} — ${esc(labelFrom(DECISION_LABELS, item.decision))} (${fmtDate(item.signed_at, true)})${item.note ? `<br><span class="small muted">${esc(item.note)}</span>` : ''}`).join('<br>') : '<span class="muted">ยังไม่มีการรับรอง</span>'}</div></div>`;
+        return `<div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><strong>${esc(label)}</strong><br>${found.length ? found.map((item) => `${esc(approvalSignerText(name(item.approver_id), item))} — ${esc(labelFrom(DECISION_LABELS, item.decision))} (${fmtDate(item.signed_at, true)})${item.note ? `<br><span class="small muted">${esc(item.note)}</span>` : ''}`).join('<br>') : '<span class="muted">ยังไม่มีการรับรอง</span>'}</div></div>`;
       }).join('')}</div></div>
       <div class="card"><h2>ดำเนินการตามลำดับ</h2>
         <div class="notice">สถานะปัจจุบัน: <strong>${esc(labelFrom(HISTORICAL_REVIEW_LABELS, round.historical_review_status))}</strong></div>
@@ -1443,7 +1838,7 @@
       <div class="card"><h2>ลำดับการตรวจ รับรอง และรับทราบ</h2>
         <div class="timeline">${stages.map((stage) => {
           const found = (approvals || []).filter((a) => a.stage === stage);
-          return `<div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><strong>${esc(labelFrom(APPROVAL_STAGE_LABELS, stage))}</strong><br>${found.length ? found.map((a) => `${esc(a.ec_profiles?.full_name || '')} — ${esc(labelFrom(DECISION_LABELS, a.decision))} (${fmtDate(a.signed_at,true)})${a.note ? `<br><span class="small muted">${esc(a.note)}</span>` : ''}`).join('<br>') : '<span class="muted">ยังไม่มีการดำเนินการ</span>'}</div></div>`;
+          return `<div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><strong>${esc(labelFrom(APPROVAL_STAGE_LABELS, stage))}</strong><br>${found.length ? found.map((a) => `${esc(approvalSignerText(a.ec_profiles?.full_name || '', a))} — ${esc(labelFrom(DECISION_LABELS, a.decision))} (${fmtDate(a.signed_at,true)})${a.note ? `<br><span class="small muted">${esc(a.note)}</span>` : ''}`).join('<br>') : '<span class="muted">ยังไม่มีการดำเนินการ</span>'}</div></div>`;
         }).join('')}</div>
       </div>
       <div class="card"><h2>ดำเนินการตามลำดับ</h2>
@@ -1555,12 +1950,11 @@
         <div class="card-header"><div><h2>ข้อสอบ</h2></div></div>
         ${aiNotice}
         ${canManage() ? `<div class="table-actions" style="margin-bottom:14px;flex-wrap:wrap">
-          <button class="btn btn-primary" id="ai-generate-questions" ${sourceDocs.length ? '' : 'disabled'}>สร้างข้อสอบจากไฟล์</button>
-          <button class="btn btn-success" id="ai-generate-answers" ${officialDocs.length && (questions || []).length ? '' : 'disabled'}>สร้างเฉลยจากรายงาน</button>
+          <button class="btn btn-primary" id="go-document-ai-tools">สร้างจากเอกสาร</button>
           <button class="btn btn-outline" id="publish-all-questions" ${(questions || []).length ? '' : 'disabled'}>เผยแพร่ทั้งหมด</button>
           <button class="btn btn-outline" id="add-question">＋ เพิ่มเอง</button>
         </div>` : ''}
-        ${latestRun ? `<div class="small muted" style="margin-bottom:10px">การสร้างล่าสุด: ${latestRun.generation_type === 'questions' ? 'ข้อสอบ' : 'เฉลยและสรุป'} · ${latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' ? 'ไม่สำเร็จ' : 'กำลังประมวลผล'} · ${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}</div>` : ''}
+        ${latestRun ? `<div class="small muted" style="margin-bottom:10px">การสร้างล่าสุด: ${latestRun.generation_type === 'form_instructions' ? 'แบบกรอกและคำแนะนำ' : latestRun.generation_type === 'questions' ? 'ข้อสอบ' : 'เฉลยและสรุป'} · ${latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' ? 'ไม่สำเร็จ' : 'กำลังประมวลผล'} · ${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}</div>` : ''}
         ${(questions || []).length ? questions.map((q) => {
           const key = keyMap.get(q.id);
           const hasKey = Boolean(key?.correct_choice_ids?.length || key?.answer_key_json?.text);
@@ -1674,6 +2068,83 @@
 
   function bindDocuments(round) {
     document.getElementById('go-auto-competency')?.addEventListener('click', () => navigate(`round/${round.id}/competency`));
+
+    const invokeDocumentAI = async (body) => {
+      const { data, error } = await state.supabase.functions.invoke('generate-competency', { body });
+      if (error) {
+        let detail = error.message || 'เรียกบริการ AI ไม่สำเร็จ';
+        try {
+          const payload = error.context && typeof error.context.json === 'function' ? await error.context.json() : null;
+          if (payload?.error) detail = payload.error;
+        } catch (_) { /* use original message */ }
+        throw new Error(detail);
+      }
+      if (data?.error) throw new Error(data.error);
+      return data;
+    };
+
+    const openBundleModal = (mode) => {
+      const isHistoricalBundle = mode === 'historical';
+      const title = mode === 'documents'
+        ? 'สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร'
+        : mode === 'answers'
+          ? 'สร้างเฉลยและสรุปผลจากรายงาน'
+          : 'สร้างย้อนหลังครบชุดจากเอกสารและรายงานผล';
+      const countField = mode === 'answers' ? '' : `<div class="field"><label>จำนวนข้อโดยประมาณ</label><input class="input" type="number" name="question_count" min="3" max="25" value="12" required></div>`;
+      const replaceField = mode === 'answers' ? '' : `<label><input type="checkbox" name="replace_drafts" checked> แทนที่เฉพาะข้อสอบฉบับร่างที่ AI เคยสร้างไว้</label>`;
+      showModal(title, `<form id="document-ai-bundle-form" class="form-grid">
+        ${countField}
+        ${replaceField}
+        ${isHistoricalBundle ? '<div class="notice info">เมื่อน้องส่งคำตอบ ระบบจะแสดงเฉลยและคำอธิบายทันทีสำหรับรอบย้อนหลังนี้</div>' : ''}
+        <label><input type="checkbox" name="confirm_privacy" required> ยืนยันว่าไฟล์ไม่มีชื่อผู้ป่วย HN หรือข้อมูลส่วนบุคคลที่ไม่ควรส่งไปประมวลผล</label>
+        <div class="small muted">ระบบใช้ประเภทเอกสารเป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่ รายละเอียดอยู่ในคู่มือการใช้งาน</div>
+      </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="confirm-document-ai-bundle">เริ่มสร้าง</button>`, true);
+
+      document.getElementById('confirm-document-ai-bundle')?.addEventListener('click', async () => {
+        const form = document.getElementById('document-ai-bundle-form');
+        if (!form?.reportValidity()) return;
+        const fd = new FormData(form);
+        const questionCount = Number(fd.get('question_count') || 12);
+        const replaceDrafts = fd.get('replace_drafts') === 'on';
+        closeModal();
+        try {
+          setBusy(true);
+          if (mode === 'documents' || mode === 'historical') {
+            toast('กำลังสร้างแบบกรอก คำแนะนำ และข้อสอบ กรุณาอย่ากดซ้ำ', 'info', 6000);
+            await invokeDocumentAI({ action: 'generate_form_instructions', round_id: round.id });
+            const questionResult = await invokeDocumentAI({
+              action: 'generate_questions',
+              round_id: round.id,
+              question_count: questionCount,
+              replace_ai_drafts: replaceDrafts
+            });
+            if (mode === 'documents') {
+              toast(`สร้างแบบกรอก คำแนะนำ และข้อสอบฉบับร่าง ${questionResult.generated_count || 0} ข้อแล้ว`, 'success', 7000);
+              navigate(`round/${round.id}/competency`);
+              return;
+            }
+          }
+
+          const answerResult = await invokeDocumentAI({
+            action: 'generate_answers',
+            round_id: round.id,
+            release_answers_after_submit: isHistoricalBundle
+          });
+          toast(isHistoricalBundle
+            ? `สร้างย้อนหลังครบชุดแล้ว พร้อมเฉลย ${answerResult.generated_count || 0} ข้อ และตั้งให้แสดงเฉลยหลังส่งคำตอบ`
+            : `สร้างเฉลย ${answerResult.generated_count || 0} ข้อและสรุปผลแล้ว`, 'success', 7500);
+          navigate(`round/${round.id}/competency`);
+        } catch (generationError) {
+          toast(friendlyError(generationError), 'danger', 8000);
+        } finally {
+          setBusy(false);
+        }
+      });
+    };
+
+    document.getElementById('generate-document-bundle')?.addEventListener('click', () => openBundleModal('documents'));
+    document.getElementById('generate-answer-bundle')?.addEventListener('click', () => openBundleModal('answers'));
+    document.getElementById('generate-historical-bundle')?.addEventListener('click', () => openBundleModal('historical'));
     const acceptedTypes = new Set(['application/pdf','image/jpeg','image/png','image/webp']);
     const validateFile = (file) => {
       if (!(file instanceof File) || !file.size) return null;
@@ -1706,33 +2177,12 @@
           return toast(friendlyError(ins.error), 'danger');
         }
         closeModal();
-        if (category === 'official_result' && canManage() && confirm('อัปโหลดรายงานผลอย่างเป็นทางการแล้ว ต้องการให้ระบบสร้างเฉลยและสรุปจากไฟล์นี้ตอนนี้เลยหรือไม่')) {
-          try {
-            setBusy(true);
-            const { data, error } = await state.supabase.functions.invoke('generate-competency', { body: { action: 'generate_answers', round_id: round.id } });
-            if (error) {
-              let detail = error.message || 'สร้างเฉลยไม่สำเร็จ';
-              try {
-                const payload = error.context && typeof error.context.json === 'function' ? await error.context.json() : null;
-                if (payload?.error) detail = payload.error;
-              } catch (_) { /* use original message */ }
-              throw new Error(detail);
-            }
-            if (data?.error) throw new Error(data.error);
-            toast(`อัปโหลดแล้ว และสร้างเฉลย ${data?.generated_count || 0} ข้อพร้อมสรุปเรียบร้อย กรุณาตรวจทานก่อนเปิดเผย`, 'success');
-            navigate(`round/${round.id}/competency`);
-          } catch (generationError) {
-            toast(`อัปโหลดไฟล์สำเร็จ แต่ยังสร้างเฉลยไม่ได้: ${friendlyError(generationError)}`, 'warning');
-            route();
-          } finally {
-            setBusy(false);
-          }
-          return;
-        }
-        const nextHint = ['source_document','instruction','raw_result_image'].includes(category)
-          ? ' อัปโหลดไฟล์ต้นทางแล้ว เมื่อครบให้กด “สร้าง Competency จากไฟล์”'
+        const nextHint = ['source_document','instruction'].includes(category)
+          ? ' อัปโหลดเอกสารต้นทางแล้ว เมื่อไฟล์ครบให้กด “สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร”'
+          : category === 'raw_result_image'
+            ? ' อัปโหลดภาพผลทดสอบดิบแล้ว ระบบจะใช้สร้าง Competency สำหรับเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง'
           : category === 'official_result'
-            ? ' อัปโหลดรายงานผลแล้ว ไปหัวข้อ 10 เพื่อสร้างเฉลยและสรุปอัตโนมัติ'
+            ? ' อัปโหลดรายงานผลแล้ว เลือกสร้างเฉลยและสรุปผล หรือสร้างย้อนหลังครบชุดได้'
             : '';
         toast(`อัปโหลดเรียบร้อย${nextHint}`, 'success'); route();
       });
@@ -1815,7 +2265,7 @@
       const reviewers = directory.filter((p) => personHasRole(p, 'reviewer'));
       const physicians = directory.filter((p) => personHasRole(p, 'physician'));
       showModal('กำหนดผู้รับผิดชอบ', `<form id="assignment-form" class="form-grid cols-2">
-        <div class="notice" style="grid-column:1/-1">ลำดับการทำงาน: ผู้ปฏิบัติ 2 คนส่งผล → ระบบสร้างสรุปอัตโนมัติ → ผู้ทบทวนตรวจ/ส่ง → ผู้จัดการคุณภาพรับรอง → แพทย์รับทราบ</div>
+        <div class="notice" style="grid-column:1/-1"><strong>ลำดับการทำงาน:</strong> ผู้ปฏิบัติ 2 คนส่งผล → ระบบสร้างสรุปอัตโนมัติ → ผู้ทบทวนตรวจ/ส่ง → ผู้จัดการคุณภาพรับรอง → แพทย์รับทราบ<br><span class="small">ผู้จัดการคุณภาพสามารถเป็นหนึ่งในผู้ปฏิบัติจริงได้ แต่ต้องสลับบทบาทให้ตรงกับการกระทำแต่ละขั้น ระบบจะบันทึกบทบาทที่ใช้ลงนามแยกกัน ผู้ทบทวนยังต้องเป็นคนละคนกับผู้ปฏิบัติทั้งสองคน</span></div>
         <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 1</label><select class="select" name="p1" required>${options(practitioners, find('practitioner',1))}</select></div>
         <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 2</label><select class="select" name="p2" required>${options(practitioners, find('practitioner',2))}</select></div>
         <div class="field"><label>ผู้ทบทวนผล</label><select class="select" name="reviewer" required>${options(reviewers, find('reviewer'))}</select><div class="help">ต้องเป็นคนละคนกับผู้ปฏิบัติทั้งสองคน</div></div>
@@ -2047,6 +2497,7 @@
       });
     };
 
+    document.getElementById('go-document-ai-tools')?.addEventListener('click', () => navigate(`round/${round.id}/documents`));
     document.getElementById('add-question')?.addEventListener('click', () => openQuestion());
     document.querySelectorAll('[data-edit-question]').forEach((button) => button.addEventListener('click', async () => {
       const { data, error } = await state.supabase.from('ec_questions').select('*').eq('id', button.dataset.editQuestion).single();
@@ -2260,6 +2711,11 @@
     const imageMap = await loadSignedImageMap((questions || []).map((question) => question.image_document_id));
     const answerMap = new Map((answers || []).map((answer) => [answer.question_id, answer]));
     const editable = ['not_started','in_progress'].includes(assignment.status) && !deadlinePassed && !notOpened;
+    let releasedReview = null;
+    if (!editable && assignment.ec_eqa_rounds?.answer_released_at) {
+      const { data: reviewData, error: reviewError } = await state.supabase.rpc('ec_get_my_competency_review', { p_assignment_id: id });
+      if (!reviewError) releasedReview = reviewData;
+    }
     const questionHtml = (questions || []).map((question) => {
       const answerPayload = answerMap.get(question.id)?.answer_payload || {};
       const questionChoices = (choices || []).filter((choice) => choice.question_id === question.id);
@@ -2272,7 +2728,9 @@
       }
       return `<div class="card"><span class="badge">${esc(question.section || '')}</span>${question.is_critical?'<span class="badge danger">ข้อสำคัญ</span>':''}<h3>${question.question_order}. ${esc(question.prompt)}</h3>${image ? `<div style="margin:14px 0;text-align:center"><img src="${esc(image.url)}" alt="${esc(image.title || 'รูปประกอบคำถาม')}" style="max-width:100%;max-height:620px;border:1px solid var(--line);border-radius:12px;object-fit:contain"></div>` : ''}${input}</div>`;
     }).join('');
-    const content = `<section class="page"><div class="page-header"><div><h1>แบบทดสอบ</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div><form id="quiz-form" class="grid">${questionHtml || empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form>${editable && questions?.length ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>` : ''}</section>`;
+    const reviewQuestions = Array.isArray(releasedReview?.questions) ? releasedReview.questions : [];
+    const releasedReviewHtml = releasedReview ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>เฉลยหลังส่งคำตอบ</h2><div class="small muted">แสดงเฉพาะหลังส่งคำตอบแล้ว</div></div><span class="badge info">คะแนน ${releasedReview.score ?? '-'}%</span></div>${releasedReview.official_summary ? `<div class="notice info">${esc(releasedReview.official_summary)}</div><div style="height:12px"></div>` : ''}${reviewQuestions.map((item) => `<div class="answer-review-row ${item.is_correct === true ? 'correct' : item.is_correct === false ? 'incorrect' : ''}"><div><strong>${item.question_order}. ${esc(item.prompt || '')}</strong></div><div class="grid cols-2" style="margin-top:8px"><div><span class="small muted">คำตอบของคุณ</span><div>${esc(item.user_answer || '-')}</div></div><div><span class="small muted">เฉลย</span><div>${esc(item.correct_answer || '-')}</div></div></div>${item.explanation ? `<div class="small" style="margin-top:8px"><strong>คำอธิบาย:</strong> ${esc(item.explanation)}</div>` : ''}</div>`).join('')}</div>` : '';
+    const content = `<section class="page"><div class="page-header"><div><h1>แบบทดสอบ</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div><form id="quiz-form" class="grid">${questionHtml || empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form>${editable && questions?.length ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>` : ''}${releasedReviewHtml}</section>`;
     appEl.innerHTML = shell(content, 'แบบทดสอบ');
     bindShell();
     document.getElementById('back-my').onclick = () => navigate('my-competency');
@@ -2303,7 +2761,9 @@
           await save();
           const { error: submitError } = await state.supabase.rpc('ec_submit_competency', { p_assignment_id: id });
           if (submitError) throw submitError;
-          toast('ส่งคำตอบแล้ว', 'success'); navigate('my-competency');
+          toast('ส่งคำตอบแล้ว', 'success');
+          if (assignment.ec_eqa_rounds?.answer_released_at) route();
+          else navigate('my-competency');
         } catch (submitError) { toast(friendlyError(submitError), 'danger'); }
       };
     }
@@ -2567,10 +3027,10 @@
       <div class="guide-list">
         <details open><summary>เริ่มต้นใช้งานและเลือกบทบาท</summary><div class="guide-body"><p>เลือกบทบาทจากกล่องด้านล่างของแถบเมนู ระบบจะแสดงปุ่มตามบทบาทที่เลือก โดยไม่เปลี่ยนสิทธิ์จริงของบัญชี</p><p>หากมีหลายบทบาท ให้เลือกบทบาทให้ตรงกับงานที่กำลังทำ เช่น เจ้าหน้าที่ ผู้ทบทวน ผู้จัดการคุณภาพ แพทย์ หรือผู้ดูแลระบบ</p></div></details>
         <details><summary>ลำดับงานของรอบ EQA</summary><div class="guide-body"><ol><li>บันทึกข้อมูลการรับรอบและกำหนดผู้รับผิดชอบ</li><li>ผู้ปฏิบัติจริงบันทึกผลรายบุคคล</li><li>ระบบเทียบผลและสร้างสรุปผลห้องปฏิบัติการ</li><li>ผู้ทบทวนตรวจและส่งให้ผู้จัดการคุณภาพ</li><li>ผู้จัดการคุณภาพรับรอง และแพทย์รับทราบ</li></ol></div></details>
-        <details><summary>เอกสารและภาพ</summary><div class="guide-body"><p>ไฟล์เก็บในพื้นที่ส่วนตัวของระบบ ไม่ได้เก็บใน GitHub</p><p>ไฟล์ที่ใช้สร้างข้อสอบ ได้แก่ ภาพผลทดสอบดิบ คู่มือหรือคำแนะนำ และเอกสารต้นฉบับจากผู้ให้บริการ</p><p>รายงานผลประเมินอย่างเป็นทางการใช้สร้างเฉลยและสรุปผลภายหลัง</p></div></details>
+        <details><summary>เอกสารและภาพ</summary><div class="guide-body"><p>ไฟล์เก็บในพื้นที่ส่วนตัวของระบบ ไม่ได้เก็บใน GitHub ระบบใช้ “ประเภทเอกสาร” เป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่</p><p><strong>เอกสารต้นฉบับจากผู้ให้บริการ</strong> ใช้สร้างรายการตัวอย่าง ช่องกรอก และโครงสร้างแบบฟอร์ม</p><p><strong>คู่มือหรือคำแนะนำ</strong> ใช้แปลวิธีปฏิบัติ ข้อควรระวัง ดึงรหัสพร้อมชื่อจาก Master List และสร้างข้อสอบจากโจทย์แบบแห้งหรือ Educational challenge ที่พบ คู่มือไม่ถือเป็นเฉลยทางการ</p><p><strong>ภาพผลทดสอบดิบ</strong> ใช้สร้าง Competency สำหรับเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง ภาพ Ab screen สามารถรวม RT และ IAT ไว้ในรูปเดียว ระบบจะถามผลรวมเป็น Positive หรือ Negative โดยไม่แยก phase</p><p><strong>รายงานผลประเมินอย่างเป็นทางการ</strong> ใช้สร้างเฉลย คำอธิบาย สรุปผล และหัวข้อทบทวน</p><p><strong>ชื่อไฟล์แนะนำ</strong></p><ul><li>ฟอร์มเปล่า: <code>CAP-JA-2026_ResultForm_J.pdf</code></li><li>คู่มือ: <code>CAP-JA-2026_KitInstruction.pdf</code></li><li>Ab screen รวม RT/IAT: <code>CAP-JA-2026_J-01_AbScreen_RawResult.png</code></li><li>Panel: <code>CAP-JA-2026_J-03_AbID_PanelAntigram_Lot12345.pdf</code></li><li>รายงานผล: <code>CAP-JA-2026_OfficialResult.pdf</code></li></ul><p>สำหรับ CAP ถ้าฟอร์มระบุช่องและคู่มือระบุเลข code กับชื่อ ระบบจะรวมเป็นตัวเลือกแบบ “ชื่อ (CAP code)” เช่น “Unexpected antibody detected (CAP 111)”</p></div></details>
         <details><summary>ผลรายบุคคลและสรุปผลห้องปฏิบัติการ</summary><div class="guide-body"><p>ผู้ปฏิบัติแต่ละคนบันทึกผลของตนเองแยกกัน เมื่อส่งครบ ระบบจะเติมค่าที่ตรงกันในสรุปผลห้องให้อัตโนมัติ</p><p>ค่าที่ไม่ตรงกันจะถูกทำเครื่องหมายให้ผู้ทบทวนตรวจและเลือกผลที่ถูกต้องก่อนส่งให้ผู้จัดการคุณภาพ</p></div></details>
-        <details><summary>การตรวจ รับรอง และรับทราบ</summary><div class="guide-body"><p>ผู้ทบทวนตรวจผลห้องและหลักฐาน จากนั้นส่งให้ผู้จัดการคุณภาพรับรอง เมื่อรับรองแล้วแพทย์จึงกดรับทราบได้</p><p>การส่งกลับต้องระบุเหตุผล เพื่อให้ผู้เกี่ยวข้องแก้ไขเฉพาะจุด</p></div></details>
-        <details><summary>การสร้าง Competency จากไฟล์</summary><div class="guide-body"><p>ระบบสร้างข้อสอบเป็นฉบับร่างจากเอกสารต้นทาง ผู้จัดการคุณภาพต้องตรวจคำถาม ตัวเลือก รูปประกอบ และคะแนนก่อนเผยแพร่</p><p>เมื่ออัปโหลดรายงานผลอย่างเป็นทางการแล้ว สามารถสร้างเฉลยและสรุปผลได้</p><p>รอบย้อนหลังต้องกำหนดวันเปิดและวันปิด Competency ก่อนสร้างรายการประเมิน</p></div></details>
+        <details><summary>การตรวจ รับรอง และรับทราบ</summary><div class="guide-body"><p>ผู้ทบทวนตรวจผลห้องและหลักฐาน จากนั้นส่งให้ผู้จัดการคุณภาพรับรอง เมื่อรับรองแล้วแพทย์จึงกดรับทราบได้</p><p>ผู้จัดการคุณภาพต้องรับรองทุกรอบ แม้เป็นหนึ่งในผู้ปฏิบัติจริง โดยต้องสลับ “ใช้งานในบทบาท” ให้ตรงกับขั้นตอน เช่น กรอกผลในบทบาทเจ้าหน้าที่ และรับรองในบทบาทผู้จัดการคุณภาพ</p><p>ประวัติการอนุมัติจะแสดงชื่อพร้อมบทบาทที่ใช้ลงนามในแต่ละครั้ง ส่วนผู้ทบทวนยังต้องเป็นคนละคนกับผู้ปฏิบัติจริงทั้งสองคน</p><p>การส่งกลับต้องระบุเหตุผล เพื่อให้ผู้เกี่ยวข้องแก้ไขเฉพาะจุด</p></div></details>
+        <details><summary>การสร้างจากเอกสารและรายงานผล</summary><div class="guide-body"><p><strong>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</strong> ใช้กับรอบใหม่ ระบบอ่านฟอร์มเปล่า คู่มือ และภาพผลดิบ แล้วสร้างฉบับร่างให้ QM ตรวจ</p><p><strong>สร้างเฉลยและสรุปผลจากรายงาน</strong> ใช้เมื่อรายงานผลอย่างเป็นทางการมาถึงภายหลัง</p><p><strong>สร้างย้อนหลังครบชุดจากเอกสารและรายงานผล</strong> ใช้กับรอบที่ได้รับผลแล้ว ระบบสร้างครบทั้งแบบกรอก คำแนะนำ ข้อสอบ เฉลย และสรุป พร้อมตั้งให้เจ้าหน้าที่เห็นเฉลยทันทีหลังส่งคำตอบ</p><p>ข้อสอบทุกข้อยังเป็นฉบับร่างจนกว่า QM จะตรวจและกดเผยแพร่ รอบย้อนหลังต้องกำหนดวันเปิดและวันปิด Competency ก่อนสร้างรายการประเมิน</p></div></details>
         <details><summary>การยืนยันตัวตนสองขั้นตอน</summary><div class="guide-body"><p>ผู้ใช้งานทุกคนเปิดใช้งานได้จากเมนู ตั้งค่าของฉัน โดยสแกน QR Code ด้วยแอปยืนยันตัวตน แล้วกรอกรหัส 6 หลักเพื่อยืนยัน</p><p>ควรเก็บบัญชีและโทรศัพท์ที่ใช้สร้างรหัสไว้กับเจ้าของบัญชีเท่านั้น</p></div></details>
         <details><summary>การลบข้อมูล</summary><div class="guide-body"><p>ปุ่มลบที่ระบุว่าเป็นการลบถาวรจะลบข้อมูลจริงและกู้คืนไม่ได้ ควรตรวจชื่อรอบ เอกสาร หรือคำถามก่อนยืนยันทุกครั้ง</p></div></details>
       </div>

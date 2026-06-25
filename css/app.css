@@ -482,3 +482,83 @@ tr:last-child td { border-bottom: 0; }
 }
 .guide-body p { margin: 8px 0; }
 .guide-body ol { margin: 8px 0 0 22px; padding: 0; }
+
+/* v2.1.3 — CAP J/JE result-entry template */
+.cap-result-form .subcard {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  background: #fff;
+}
+.cap-result-form .subcard h3 {
+  margin: 0 0 12px;
+}
+.cap-entry-table th,
+.cap-entry-table td,
+.compact-table th,
+.compact-table td {
+  vertical-align: top;
+  padding: 8px;
+}
+.cap-entry-table .input,
+.cap-entry-table .select,
+.compact-table .input,
+.compact-table .select {
+  min-width: 150px;
+}
+.result-method-details {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fff;
+  padding: 12px 14px;
+}
+.result-method-details summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+@media (max-width: 720px) {
+  .cap-result-form .subcard { padding: 10px; }
+  .cap-entry-table th,
+  .cap-entry-table td,
+  .compact-table th,
+  .compact-table td { padding: 6px; }
+}
+
+/* v2.1.5: compact AI actions and answer review */
+.ai-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 4px 0 10px;
+}
+
+.ai-action-grid .btn {
+  min-height: 48px;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.answer-review-row {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.answer-review-row:last-child {
+  border-bottom: 0;
+}
+
+.answer-review-row.correct {
+  border-left: 4px solid #2f9e6f;
+  padding-left: 12px;
+}
+
+.answer-review-row.incorrect {
+  border-left: 4px solid #d9534f;
+  padding-left: 12px;
+}
+
+@media (max-width: 900px) {
+  .ai-action-grid {
+    grid-template-columns: 1fr;
+  }
+}
