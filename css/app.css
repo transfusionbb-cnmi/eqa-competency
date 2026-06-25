@@ -1047,3 +1047,64 @@ tr:last-child td { border-bottom: 0; }
   .quiz-antibody-search-row .btn { width: 100%; }
   .cap-official-section-head { align-items: flex-start; flex-direction: column; }
 }
+
+/* v2.3.0 — multi-image Ab ID workup and split answer/summary jobs */
+.question-image-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.question-image-gallery:not(.is-abid) .question-gallery-item,
+.question-image-gallery .question-gallery-panel {
+  grid-column: 1 / -1;
+}
+.question-gallery-item {
+  margin: 0;
+  padding: 8px;
+  border: 1px solid #dce8ef;
+  border-radius: 14px;
+  background: #f8fbfd;
+  text-align: center;
+  min-width: 0;
+}
+.question-gallery-item img {
+  display: block;
+  width: 100%;
+  max-height: 720px;
+  margin: 0 auto;
+  object-fit: contain;
+  border-radius: 9px;
+  background: #fff;
+}
+.question-gallery-item figcaption {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.question-image-gallery.is-abid .question-gallery-result {
+  padding: 5px;
+}
+.question-image-gallery.is-abid .question-gallery-panel img {
+  max-height: none;
+}
+.question-catalog-note .input {
+  flex: 1 1 100%;
+  min-width: 220px;
+}
+@media (max-width: 720px) {
+  .question-image-gallery { grid-template-columns: 1fr; margin-inline: -4px; }
+  .question-image-gallery .question-gallery-item { grid-column: 1; }
+}
+.question-gallery-pdf {
+  display: block;
+  width: 100%;
+  min-height: 680px;
+  border: 0;
+  border-radius: 9px;
+  background: #fff;
+}
+@media (max-width: 720px) {
+  .question-gallery-pdf { min-height: 520px; }
+}
