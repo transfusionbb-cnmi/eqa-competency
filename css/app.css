@@ -999,3 +999,51 @@ tr:last-child td { border-bottom: 0; }
   .quiz-submit-bar .btn { width: 100%; }
   .official-overall-result { width: 100%; }
 }
+
+/* v2.2.9 — interpretation-first quiz and CAP-style summaries */
+.competency-admin-layout { display: grid; gap: 18px; }
+.competency-question-manager { width: 100%; }
+.admin-question-list { display: grid; gap: 16px; }
+.admin-question-image { margin: 14px 0; padding: 12px; border: 1px solid #dce8ef; border-radius: 16px; background: #f8fbfd; text-align: center; }
+.admin-question-image img { display: block; width: auto; max-width: 100%; max-height: 680px; margin: 0 auto; object-fit: contain; border-radius: 10px; }
+.admin-question-image figcaption { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.question-catalog-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; padding: 12px 14px; border: 1px solid #cfe4f2; border-radius: 13px; background: #eef8ff; }
+.question-catalog-note span { color: var(--muted); font-size: 12px; }
+.cap-antibody-autocomplete { background-image: linear-gradient(45deg, transparent 50%, #6c8799 50%), linear-gradient(135deg, #6c8799 50%, transparent 50%); background-position: calc(100% - 17px) 50%, calc(100% - 12px) 50%; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; padding-right: 34px; }
+.quiz-antibody-picker { margin-top: 13px; padding: 14px; border: 1px solid #dce8ef; border-radius: 15px; background: #fbfdff; }
+.quiz-antibody-search-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; }
+.quiz-antibody-selected { display: flex; flex-wrap: wrap; gap: 8px; min-height: 42px; align-items: center; margin-top: 12px; }
+.antibody-chip { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; padding: 8px 10px; border: 1px solid #9fcdeb; border-radius: 999px; background: #eaf6fe; color: #244f6c; font-weight: 800; }
+.antibody-chip span { overflow-wrap: anywhere; }
+.antibody-chip button { border: 0; background: transparent; color: #8f2f3d; cursor: pointer; font-size: 18px; line-height: 1; padding: 0 2px; }
+.official-analysis-details { border: 1px solid #dce7ef; border-radius: 16px; background: #fbfdff; overflow: hidden; }
+.official-analysis-details > summary { cursor: pointer; padding: 15px 17px; font-weight: 900; }
+.official-analysis-details .official-summary-grid { padding: 0 16px 16px; }
+.cap-official-form { display: grid; gap: 18px; }
+.cap-official-section { border: 1px solid #cfdce5; border-radius: 16px; overflow: hidden; background: #fff; }
+.cap-official-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: #f3f7fa; border-bottom: 1px solid #dbe5eb; }
+.cap-official-section-head h3 { margin: 2px 0 0; }
+.cap-official-matrix { min-width: 1280px; width: 100%; border-collapse: collapse; }
+.cap-official-detail-table { min-width: 1050px; width: 100%; border-collapse: collapse; }
+.cap-official-matrix th, .cap-official-matrix td,
+.cap-official-detail-table th, .cap-official-detail-table td { border: 1px solid #cfd8de; padding: 9px 10px; vertical-align: top; }
+.cap-official-matrix thead th, .cap-official-detail-table thead th { background: #e7ebee; color: #2d4657; text-align: center; font-size: 12px; }
+.cap-official-matrix tbody td:first-child, .cap-official-detail-table tbody td:first-child { text-align: center; width: 52px; }
+.cap-official-matrix tbody td:nth-child(2), .cap-official-detail-table tbody td:nth-child(2) { background: #fbfcfd; }
+.official-matrix-assessment { min-width: 92px; text-align: center; }
+.official-check { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; font-weight: 900; }
+.official-check.success { color: #17663b; background: #e5f6ec; }
+.official-check.danger { color: #a12639; background: #fde8ec; }
+.official-check.info { color: #245d83; background: #e7f3fb; }
+.official-check.warning { color: #7d5a0a; background: #fff3d7; }
+.official-check-label { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+.official-mark-cell { text-align: center; font-size: 20px; font-weight: 900; color: #17663b; }
+.official-mark-cell.fail { color: #a12639; }
+.empty-cell { color: var(--muted); text-align: center; }
+
+@media (max-width: 720px) {
+  .admin-question-image { padding: 7px; margin-inline: -5px; }
+  .quiz-antibody-search-row { grid-template-columns: 1fr; }
+  .quiz-antibody-search-row .btn { width: 100%; }
+  .cap-official-section-head { align-items: flex-start; flex-direction: column; }
+}

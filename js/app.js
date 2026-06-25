@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.2.8
+/* CNMI EQA and Competency Management System v2.2.9
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -223,6 +223,19 @@
   const CAP_J_JE_SCHEMA = 'cap-j-je-a-2026-v1';
   const PROVIDER_GENERATED_SCHEMA = 'provider-generated-v1';
 
+  const CAP_ANTIBODY_OPTIONS = [
+    ['184', 'Antibody identification not indicated (no antibody detected)'],
+    ['200', 'Unable to complete testing / would refer for testing'],
+    ['112', 'Anti-D'], ['113', 'Anti-C'], ['114', 'Anti-c'], ['115', 'Anti-E'], ['116', 'Anti-e'],
+    ['124', 'Anti-K'], ['125', 'Anti-k'], ['126', 'Anti-Fya'], ['127', 'Anti-Fyb'],
+    ['128', 'Anti-Jka'], ['129', 'Anti-Jkb'], ['131', 'Anti-Lea'], ['132', 'Anti-Leb'],
+    ['133', 'Anti-P1'], ['134', 'Anti-M'], ['135', 'Anti-N'], ['136', 'Anti-S'], ['137', 'Anti-s'],
+    ['147', 'Antibody to other (nonlisted) high incidence antigen'],
+    ['148', 'Antibody to other (nonlisted) low incidence antigen'],
+    ['149', 'Warm autoantibody, specificity unknown'],
+    ['010', 'Other — specify on result form']
+  ];
+
   const CAP_RESULT_OPTIONS = {
     abo: [
       ['', '— เลือกผล —'], ['A', 'A (CAP 188)'], ['B', 'B (CAP 191)'], ['AB', 'AB (CAP 192)'], ['O', 'O (CAP 195)'],
@@ -285,6 +298,67 @@
       .replace(/\s+/g, ' ')
       .replace(/^[-–—:,.\s]+|[-–—:,.\s]+$/g, '')
       .trim();
+  }
+
+  function capAntibodyLabel(option) {
+    return `${option[0]} │ ${option[1]}`;
+  }
+
+  function capAntibodyDatalist(id = 'cap-antibody-master-list') {
+    return `<datalist id="${esc(id)}">${CAP_ANTIBODY_OPTIONS.map((option) => `<option value="${esc(capAntibodyLabel(option))}"></option>`).join('')}</datalist>`;
+  }
+
+  function capAntibodyAutocomplete(name, value, disabled = false, placeholder = 'พิมพ์ชื่อ เช่น Anti-K แล้วเลือก 124 │ Anti-K') {
+    return `<input class="input cap-antibody-autocomplete" type="search" list="cap-antibody-master-list" name="${esc(name)}" value="${esc(value || '')}" ${disabled ? 'disabled' : ''} placeholder="${esc(placeholder)}" autocomplete="off">`;
+  }
+
+  function isAntibodyIdentificationQuestion(question) {
+    const text = `${question?.section || ''} ${question?.prompt || ''}`.toLowerCase();
+    return text.includes('antibody identification') || text.includes('ระบุชนิดแอนติบอดี') || /\bab\s*id\b/i.test(text);
+  }
+
+  function resolveCapAntibodyEntry(value) {
+    const typed = String(value || '').trim();
+    if (!typed) return '';
+    const options = CAP_ANTIBODY_OPTIONS.map((option) => ({ code: option[0], name: option[1], label: capAntibodyLabel(option) }));
+    const exact = options.find((option) => option.label === typed || option.code === typed || option.name === typed);
+    if (exact) return exact.label;
+    const codeMatch = typed.match(/(?:^|[^0-9])(\d{3})(?:[^0-9]|$)/);
+    if (codeMatch) {
+      const byCode = options.find((option) => option.code === codeMatch[1]);
+      if (byCode) return byCode.label;
+    }
+    const caseSensitive = options.filter((option) => option.label.includes(typed) || option.name.includes(typed));
+    if (caseSensitive.length === 1) return caseSensitive[0].label;
+    const normalized = typed.toLowerCase();
+    const insensitive = options.filter((option) => option.label.toLowerCase() === normalized || option.name.toLowerCase() === normalized);
+    return insensitive.length === 1 ? insensitive[0].label : '';
+  }
+
+  function antibodySelectionsFromText(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return [];
+    const whole = resolveCapAntibodyEntry(raw);
+    if (whole) return [whole];
+    const delimiter = raw.includes(';') || /\s+และ\s+/.test(raw) ? /\s*(?:;|\s+และ\s+)\s*/ : /\s*,\s*/;
+    const tokens = raw.split(delimiter).map((item) => item.trim()).filter(Boolean);
+    const resolved = tokens.map((token) => resolveCapAntibodyEntry(token) || token);
+    return [...new Set(resolved)];
+  }
+
+  function quizAntibodyPicker(question, currentValue, editable) {
+    const pickerId = `antibody-picker-${question.id}`;
+    const selections = antibodySelectionsFromText(currentValue);
+    return `<div class="quiz-antibody-picker" data-antibody-picker="${esc(pickerId)}">
+      <div class="quiz-antibody-search-row">
+        <input class="input" type="search" list="${esc(pickerId)}-list" data-antibody-search placeholder="พิมพ์ Anti-K แล้วเลือก 124 │ Anti-K" ${editable ? '' : 'disabled'} autocomplete="off">
+        ${editable ? '<button type="button" class="btn btn-outline" data-add-antibody>เพิ่ม</button>' : ''}
+      </div>
+      ${capAntibodyDatalist(`${pickerId}-list`)}
+      <div class="quiz-antibody-selected" data-antibody-selected>${selections.map((label) => `<span class="antibody-chip" data-antibody-value="${esc(label)}"><span>${esc(label)}</span>${editable ? '<button type="button" data-remove-antibody aria-label="ลบ">×</button>' : ''}</span>`).join('') || '<span class="small muted" data-antibody-empty>ยังไม่ได้เลือก antibody</span>'}</div>
+      <input type="hidden" name="q_${question.id}" value="${esc(selections.join('; '))}">
+      <div class="help">เลือกได้มากกว่า 1 รายการ เช่น Anti-E และ Anti-K</div>
+    </div>`;
   }
 
   function friendlyError(error) {
@@ -1573,8 +1647,8 @@
           <div class="form-question-heading"><span>Antibody Screening และ Identification</span><small>ถ้าไม่พบแอนติบอดี ให้เว้นช่องชนิดแอนติบอดี</small></div>
           <div class="form-grid cols-3">
             <div class="field"><label>Unexpected Antibody Detection</label><select class="select" name="${prefix}_${specimen}_screen" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.screen, x.screen)}</select></div>
-            <div class="field"><label>Primary antibody</label><input class="input" name="${prefix}_${specimen}_antibody" value="${esc(x.antibody || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น Anti-E (CAP 115) หรือ CAP 184"></div>
-            <div class="field"><label>Additional antibodies</label><input class="input" name="${prefix}_${specimen}_additional_antibodies" value="${esc(x.additional_antibodies || '')}" ${disabled ? 'disabled' : ''} placeholder="เว้นว่างถ้าไม่มี"></div>
+            <div class="field"><label>Primary antibody</label>${capAntibodyAutocomplete(`${prefix}_${specimen}_antibody`, x.antibody, disabled)}</div>
+            <div class="field"><label>Additional antibodies</label>${capAntibodyAutocomplete(`${prefix}_${specimen}_additional_antibodies`, x.additional_antibodies, disabled, 'ถ้ามี ให้พิมพ์ชื่อแล้วเลือกจาก CAP Master List')}</div>
           </div>
           ${capAntibodyWorkup(payload, prefix, specimen, disabled)}
         </div>
@@ -1591,6 +1665,18 @@
   }
 
   function bindCapWorkupControls(root = document) {
+    root.querySelectorAll('.cap-antibody-autocomplete').forEach((input) => {
+      if (input.dataset.capAntibodyBound === '1') return;
+      input.dataset.capAntibodyBound = '1';
+      const normalize = () => {
+        const typed = String(input.value || '').trim();
+        if (!typed) return;
+        const resolved = resolveCapAntibodyEntry(typed);
+        if (resolved) input.value = resolved;
+      };
+      input.addEventListener('change', normalize);
+      input.addEventListener('blur', normalize);
+    });
     root.querySelectorAll('[data-add-workup-panel]').forEach((button) => {
       button.onclick = () => {
         const list = root.querySelector(`[data-panel-list][data-prefix="${CSS.escape(button.dataset.prefix)}"][data-specimen="${CSS.escape(button.dataset.specimen)}"]`);
@@ -1715,6 +1801,8 @@
       </section>
 
       <div id="result-antigen-je07">${capAntigenTable(p, prefix, 'JE-07R', disabled)}</div>
+
+      ${capAntibodyDatalist()}
 
       <details class="result-method-details">
         <summary>รหัสวิธีตรวจ น้ำยา และเครื่องมือ</summary>
@@ -2174,6 +2262,104 @@
     </div>`;
   }
 
+  function officialAssessmentInfo(value) {
+    return {
+      pass: ['ผ่าน', 'success', '✓'],
+      fail: ['ไม่ผ่าน', 'danger', '✕'],
+      educational: ['Educational', 'info', '–'],
+      not_graded: ['ไม่ให้คะแนน', 'warning', '–'],
+      pending: ['รอตรวจ', 'warning', '…']
+    }[String(value || 'pending')] || ['รอตรวจ', 'warning', '…'];
+  }
+
+  function canonicalOfficialSpecimen(value, testName = '') {
+    const raw = String(value || '').toUpperCase().replace(/[–—]/g, '-').replace(/\s+/g, '');
+    const jat = raw.match(/JAT-?0?([1-5])/);
+    if (jat) return `J-0${jat[1]}`;
+    const j = raw.match(/^J-?0?([1-5])(?:R|S)?$/);
+    if (j) return `J-0${j[1]}`;
+    if (/J-?0?6/.test(raw)) return 'J-06R';
+    if (/JE-?0?7R/.test(raw)) return 'JE-07R';
+    if (/JE-?0?7/.test(raw)) {
+      const antigenOnly = /^(?:ANTI-)?(?:C|E|K|D|FYA|FYB|JKA|JKB)\s*(?:TYPE|ANTIGEN)?$/i.test(String(testName || '').trim())
+        || /^ANTIGEN\s+(?:C|E|K|D|FYA|FYB|JKA|JKB)$/i.test(String(testName || '').trim());
+      return antigenOnly ? 'JE-07R' : 'JE-07';
+    }
+    return String(value || '-').trim() || '-';
+  }
+
+  function officialTestRank(name) {
+    const text = String(name || '').toLowerCase();
+    if (text.includes('abo')) return 10;
+    if (text.includes('rh')) return 20;
+    if (text.includes('screen') || text.includes('detection')) return 30;
+    if (text.includes('identification')) return 40;
+    if (text.includes('crossmatch') || text.includes('compatibility')) return 50;
+    return 100;
+  }
+
+  function officialPrimaryResult(row) {
+    return String(row?.official_grade || row?.intended_response || row?.lab_result || '-').trim() || '-';
+  }
+
+  function officialSecondaryResult(row) {
+    const primary = officialPrimaryResult(row);
+    const intended = String(row?.intended_response || '').trim();
+    const lab = String(row?.lab_result || '').trim();
+    if (intended && intended !== primary) return intended;
+    if (lab && lab !== primary) return `ห้องส่ง: ${lab}`;
+    return '';
+  }
+
+  function officialAssessmentCell(row) {
+    if (!row) return '<span class="muted">—</span>';
+    const [label, cls, symbol] = officialAssessmentInfo(row.assessment);
+    return `<span class="official-check ${esc(cls)}" title="${esc(label)}">${esc(symbol)}</span><span class="official-check-label">${esc(label)}</span>`;
+  }
+
+  function officialDetailTable(title, subtitle, rows) {
+    if (!rows.length) return '';
+    const sorted = rows.slice().sort((a, b) => officialTestRank(a.test_name) - officialTestRank(b.test_name) || String(a.test_name || '').localeCompare(String(b.test_name || '')));
+    return `<section class="cap-official-section">
+      <div class="cap-official-section-head"><div><span class="section-kicker">${esc(subtitle)}</span><h3>${esc(title)}</h3></div><span class="badge info">${rows.length} รายการ</span></div>
+      <div class="official-table-wrap"><table class="cap-official-detail-table">
+        <thead><tr><th>ลำดับ</th><th>รายการทดสอบ</th><th>ผลประเมิน / Intended Response</th><th>% กลุ่มสมาชิกส่วนมาก</th><th>ผ่าน</th><th>ไม่ผ่าน</th><th>หมายเหตุ</th></tr></thead>
+        <tbody>${sorted.map((row, index) => {
+          const [label] = officialAssessmentInfo(row.assessment);
+          const peer = String(row.majority_percent || row.peer_result || '').trim() || '-';
+          return `<tr><td>${index + 1}</td><td><strong>${esc(row.test_name || '-')}</strong></td><td><strong>${esc(officialPrimaryResult(row))}</strong>${officialSecondaryResult(row) ? `<div class="small muted">${esc(officialSecondaryResult(row))}</div>` : ''}</td><td>${esc(peer)}</td><td class="official-mark-cell">${row.assessment === 'pass' ? '✓' : ''}</td><td class="official-mark-cell fail">${row.assessment === 'fail' ? '✓' : ''}</td><td>${esc(row.note || (['educational','not_graded'].includes(row.assessment) ? label : ''))}</td></tr>`;
+        }).join('')}</tbody>
+      </table></div>
+    </section>`;
+  }
+
+  function capOfficialSummaryTables(specimenRows) {
+    const normalized = (specimenRows || []).map((row) => ({ ...row, _specimen: canonicalOfficialSpecimen(row.specimen, row.test_name) }));
+    const mainSpecimens = ['J-01','J-02','J-03','J-04','J-05'];
+    const mainRows = normalized.filter((row) => mainSpecimens.includes(row._specimen));
+    const testNames = [...new Set(mainRows.map((row) => String(row.test_name || '').trim()).filter(Boolean))]
+      .sort((a, b) => officialTestRank(a) - officialTestRank(b) || a.localeCompare(b));
+    const matrix = testNames.length ? `<section class="cap-official-section">
+      <div class="cap-official-section-head"><div><span class="section-kicker">Program J</span><h3>สรุปผล J-01 ถึง J-05</h3></div><span class="badge info">รูปแบบ FM-CNCPL-048</span></div>
+      <div class="official-table-wrap"><table class="cap-official-matrix">
+        <thead><tr><th rowspan="2">ลำดับ</th><th rowspan="2">รายการทดสอบ</th>${mainSpecimens.map((specimen) => `<th colspan="2">Specimen ID ${esc(specimen)}</th>`).join('')}</tr>
+        <tr>${mainSpecimens.map(() => '<th>ผลประเมิน</th><th>การแปลผล</th>').join('')}</tr></thead>
+        <tbody>${testNames.map((testName, index) => `<tr><td>${index + 1}</td><td><strong>${esc(testName)}</strong></td>${mainSpecimens.map((specimen) => {
+          const row = mainRows.find((item) => item._specimen === specimen && String(item.test_name || '').trim() === testName);
+          if (!row) return '<td class="empty-cell">—</td><td class="official-mark-cell">—</td>';
+          return `<td><strong>${esc(officialPrimaryResult(row))}</strong>${officialSecondaryResult(row) ? `<div class="small muted">${esc(officialSecondaryResult(row))}</div>` : ''}</td><td class="official-matrix-assessment">${officialAssessmentCell(row)}</td>`;
+        }).join('')}</tr>`).join('')}</tbody>
+      </table></div>
+    </section>` : '<div class="notice warning">ยังไม่มีข้อมูล J-01 ถึง J-05 ในตารางสรุป กรุณากดสร้างเฉลยและสรุปผลใหม่</div>';
+
+    const j06 = normalized.filter((row) => row._specimen === 'J-06R');
+    const je07 = normalized.filter((row) => row._specimen === 'JE-07');
+    const je07r = normalized.filter((row) => row._specimen === 'JE-07R');
+    const known = new Set([...mainRows, ...j06, ...je07, ...je07r]);
+    const others = normalized.filter((row) => !known.has(row));
+    return `<div class="cap-official-form">${matrix}${officialDetailTable('ผล Antigen typing — J-06R', 'Program J', j06)}${officialDetailTable('สรุปผลตัวอย่าง JE-07', 'Program JE', je07)}${officialDetailTable('ผล Antigen typing — JE-07R', 'Program JE', je07r)}${others.length ? officialDetailTable('รายการอื่นจาก Official Evaluation', 'Other', others) : ''}</div>`;
+  }
+
   async function roundOfficial(round) {
     const { data: official } = await state.supabase.from('ec_official_results').select('*').eq('round_id', round.id).maybeSingle();
     const ai = official?.official_payload && typeof official.official_payload === 'object' ? official.official_payload : {};
@@ -2198,7 +2384,7 @@
       if (!groupedRows.has(key)) groupedRows.set(key, []);
       groupedRows.get(key).push(row);
     });
-    const specimenTable = specimenRows.length ? [...groupedRows.entries()].map(([program, rows]) => `
+    const genericSpecimenTable = specimenRows.length ? [...groupedRows.entries()].map(([program, rows]) => `
       <section class="official-program-block">
         <div class="official-program-title"><div><span class="section-kicker">${esc(program)}</span><h3>สรุปผลแยกตามตัวอย่างและรายการทดสอบ</h3></div><span class="badge info">${rows.length} รายการ</span></div>
         <div class="official-table-wrap"><table class="official-result-table">
@@ -2210,12 +2396,15 @@
               <td>${esc(row.test_name || '-')}</td>
               <td>${esc(row.lab_result || '-')}</td>
               <td>${esc(row.intended_response || '-')}</td>
-              <td>${esc(row.peer_result || '-')}</td>
+              <td>${esc(row.majority_percent || row.peer_result || '-')}</td>
               <td><span class="badge ${cls}">${esc(label)}</span>${row.note ? `<div class="small muted" style="margin-top:5px">${esc(row.note)}</div>` : ''}</td>
             </tr>`;
           }).join('')}</tbody>
         </table></div>
-      </section>`).join('') : `<div class="notice warning">ยังไม่มีตารางสรุปแบบแยกรายการ กด “สร้างเฉลยและสรุปผล” ใหม่หลังอัปเดตระบบ เพื่อให้ AI จัดผลเป็นตารางตามตัวอย่าง</div>`;
+      </section>`).join('') : '';
+    const specimenTable = specimenRows.length
+      ? (isCapJJeRound(round) ? capOfficialSummaryTables(specimenRows) : genericSpecimenTable)
+      : `<div class="notice warning">ยังไม่มีตารางสรุปแบบแยกรายการ กด “สร้างเฉลยและสรุปผล” ใหม่หลังอัปเดตระบบ เพื่อให้ AI จัดผลเป็นตารางตามตัวอย่าง</div>`;
 
     const structuredView = official ? `<div class="official-report-preview">
       <div class="official-report-head">
@@ -2227,13 +2416,16 @@
         </div>
       </div>
       ${specimenTable}
-      <div class="official-summary-grid">
-        <section class="official-summary-card"><span class="summary-index">1</span><div><h3>ผลของห้องปฏิบัติการ</h3><p>${esc(ai.lab_result_summary || 'ยังไม่มีสรุป')}</p></div></section>
-        <section class="official-summary-card"><span class="summary-index">2</span><div><h3>ผลที่ควรเป็น / Intended Response</h3><p>${esc(ai.intended_response_summary || 'ยังไม่มีสรุป')}</p></div></section>
-        <section class="official-summary-card"><span class="summary-index">3</span><div><h3>คะแนนและ Grade</h3><p>${esc(ai.grade_summary || 'ยังไม่มีสรุป')}</p></div></section>
-        <section class="official-summary-card"><span class="summary-index">4</span><div><h3>เปรียบเทียบกับผู้เข้าร่วม</h3><p>${esc(ai.peer_comparison_summary || 'ยังไม่มี Participant Summary หรือยังไม่ได้สรุป')}</p></div></section>
-        <section class="official-summary-card review"><span class="summary-index">5</span><div><h3>หัวข้อที่ต้องทบทวน</h3>${reviewTopics ? `<ul>${reviewTopics.split('\n').filter(Boolean).map((topic) => `<li>${esc(topic)}</li>`).join('')}</ul>` : '<p>ไม่พบหัวข้อที่ต้องทบทวน</p>'}</div></section>
-      </div>
+      <details class="official-analysis-details">
+        <summary>ดูคำอธิบายและหัวข้อทบทวนเพิ่มเติม</summary>
+        <div class="official-summary-grid">
+          <section class="official-summary-card"><span class="summary-index">1</span><div><h3>ผลของห้องปฏิบัติการ</h3><p>${esc(ai.lab_result_summary || 'ยังไม่มีสรุป')}</p></div></section>
+          <section class="official-summary-card"><span class="summary-index">2</span><div><h3>ผลที่ควรเป็น / Intended Response</h3><p>${esc(ai.intended_response_summary || 'ยังไม่มีสรุป')}</p></div></section>
+          <section class="official-summary-card"><span class="summary-index">3</span><div><h3>คะแนนและ Grade</h3><p>${esc(ai.grade_summary || 'ยังไม่มีสรุป')}</p></div></section>
+          <section class="official-summary-card"><span class="summary-index">4</span><div><h3>เปรียบเทียบกับผู้เข้าร่วม</h3><p>${esc(ai.peer_comparison_summary || 'ยังไม่มี Participant Summary หรือยังไม่ได้สรุป')}</p></div></section>
+          <section class="official-summary-card review"><span class="summary-index">5</span><div><h3>หัวข้อที่ต้องทบทวน</h3>${reviewTopics ? `<ul>${reviewTopics.split('\n').filter(Boolean).map((topic) => `<li>${esc(topic)}</li>`).join('')}</ul>` : '<p>ไม่พบหัวข้อที่ต้องทบทวน</p>'}</div></section>
+        </div>
+      </details>
     </div>` : '';
 
     return `<div class="card official-page-card">
@@ -2286,6 +2478,7 @@
     ]);
     if (questionError || assignmentError || documentError || keyError || runError) throw (questionError || assignmentError || documentError || keyError || runError);
 
+    const adminImageMap = await loadSignedImageMap((questions || []).map((question) => question.image_document_id));
     const name = (id) => directory.find((p) => p.id === id)?.full_name || id;
     const imageName = (id) => (documents || []).find((doc) => doc.id === id)?.title || '';
     const keyMap = new Map((keys || []).map((key) => [key.question_id, key]));
@@ -2326,8 +2519,8 @@
       <button class="text-link" type="button" data-nav="help">ดูคู่มือ</button>
     </div>` : '';
 
-    return `<div class="grid cols-2">
-      <div class="card">
+    return `<div class="competency-admin-layout">
+      <div class="card competency-question-manager">
         <div class="card-header"><div><h2>ข้อสอบ</h2></div></div>
         ${aiNotice}
         ${canManage() ? `<div class="table-actions" style="margin-bottom:14px;flex-wrap:wrap">
@@ -2346,6 +2539,7 @@
             insufficient: 'หลักฐานไม่พอ'
           }[key?.answer_key_json?.answer_basis] || '';
           const sortedChoices = (q.ec_question_choices || []).slice().sort((a, b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
+          const previewImage = adminImageMap.get(q.image_document_id);
           return `<article class="admin-question-card">
             <div class="admin-question-top">
               <div class="question-order-badge">${q.question_order}</div>
@@ -2355,8 +2549,11 @@
                 <span class="badge ${hasKey?'success':'warning'}">${hasKey?'มีเฉลย':'รอเฉลย'}</span>
               </div>
             </div>
+            ${previewImage ? `<figure class="admin-question-image"><img src="${esc(previewImage.url)}" alt="${esc(previewImage.title || 'รูปประกอบคำถาม')}"><figcaption>${esc(previewImage.title || imageName(q.image_document_id) || 'รูปประกอบคำถาม')}</figcaption></figure>` : q.image_document_id ? `<div class="notice warning small">ผูกรูปแล้ว แต่ยังเปิดภาพตัวอย่างไม่ได้ กรุณาตรวจชนิดไฟล์และสิทธิ์ Storage</div>` : `<div class="notice warning small">คำถามนี้ยังไม่ได้ผูกกับภาพผลดิบ</div>`}
             ${q.image_document_id ? `<div class="question-source-chip">รูปประกอบ: ${esc(imageName(q.image_document_id) || 'ไฟล์รูป')}</div>` : ''}
-            ${sortedChoices.length ? `<div class="question-choice-preview">${sortedChoices.map((choice) => `<div><span class="choice-dot"></span>${esc(choice.choice_text)}</div>`).join('')}</div>` : ''}
+            ${isAntibodyIdentificationQuestion(q) && q.question_type !== 'single_choice'
+              ? `<div class="question-catalog-note"><strong>คำตอบแบบค้นหา CAP Master List</strong><span>พิมพ์ชื่อ antibody และเลือกได้มากกว่า 1 รายการ</span></div>`
+              : sortedChoices.length ? `<div class="question-choice-preview">${sortedChoices.map((choice) => `<div><span class="choice-dot"></span>${esc(choice.choice_text)}</div>`).join('')}</div>` : ''}
             <div class="admin-question-footer">
               <div class="question-meta">
                 <span>${esc(labelFrom(QUESTION_TYPE_LABELS, q.question_type))}</span>
@@ -3480,7 +3677,9 @@
         : '';
       previousSection = section;
       let input = '';
-      if (question.question_type === 'single_choice') {
+      if (isAntibodyIdentificationQuestion(question) && question.question_type !== 'single_choice') {
+        input = quizAntibodyPicker(question, answerPayload.text || '', editable);
+      } else if (question.question_type === 'single_choice') {
         input = `<div class="quiz-choice-list">${questionChoices.map((choice) => `<label class="quiz-choice">
           <input type="radio" name="q_${question.id}" value="${choice.id}" ${answerPayload.choice_id===choice.id?'checked':''} ${editable?'':'disabled'}>
           <span class="quiz-radio-ui"></span><span>${esc(choice.choice_text)}</span>
@@ -3520,6 +3719,55 @@
       <form id="quiz-form" class="quiz-form-shell">${questionHtml || empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form>${editable && questions?.length ? `<div class="quiz-submit-bar"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>` : ''}${releasedReviewHtml}${reflectionHtml}</section>`;
     appEl.innerHTML = shell(content, 'แบบทดสอบ');
     bindShell();
+
+    const updateQuizProgress = () => {
+      const count = (questions || []).filter((question) => {
+        if (question.question_type === 'single_choice') return Boolean(document.querySelector(`input[name="q_${question.id}"]:checked`));
+        return Boolean(String(document.querySelector(`[name="q_${question.id}"]`)?.value || '').trim());
+      }).length;
+      const progress = document.querySelector('.quiz-progress-box strong');
+      if (progress) progress.textContent = `${count}/${(questions || []).length}`;
+    };
+
+    document.querySelectorAll('[data-antibody-picker]').forEach((picker) => {
+      const search = picker.querySelector('[data-antibody-search]');
+      const selected = picker.querySelector('[data-antibody-selected]');
+      const hidden = picker.querySelector('input[type="hidden"]');
+      const sync = () => {
+        const values = [...selected.querySelectorAll('[data-antibody-value]')].map((chip) => chip.dataset.antibodyValue).filter(Boolean);
+        hidden.value = values.join('; ');
+        if (!values.length && !selected.querySelector('[data-antibody-empty]')) selected.innerHTML = '<span class="small muted" data-antibody-empty>ยังไม่ได้เลือก antibody</span>';
+        updateQuizProgress();
+      };
+      const addValue = () => {
+        const typed = String(search?.value || '').trim();
+        if (!typed) return;
+        const value = resolveCapAntibodyEntry(typed);
+        if (!value) return toast('กรุณาเลือกชื่อ antibody จาก CAP Master List', 'warning');
+        const duplicate = [...selected.querySelectorAll('[data-antibody-value]')].some((chip) => chip.dataset.antibodyValue === value);
+        if (duplicate) { search.value = ''; return; }
+        selected.querySelector('[data-antibody-empty]')?.remove();
+        selected.insertAdjacentHTML('beforeend', `<span class="antibody-chip" data-antibody-value="${esc(value)}"><span>${esc(value)}</span><button type="button" data-remove-antibody aria-label="ลบ">×</button></span>`);
+        search.value = '';
+        sync();
+      };
+      picker.querySelector('[data-add-antibody]')?.addEventListener('click', addValue);
+      search?.addEventListener('change', addValue);
+      search?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); addValue(); } });
+      selected.addEventListener('click', (event) => {
+        const remove = event.target.closest('[data-remove-antibody]');
+        if (!remove) return;
+        remove.closest('[data-antibody-value]')?.remove();
+        sync();
+      });
+      sync();
+    });
+    document.querySelectorAll('#quiz-form input, #quiz-form textarea, #quiz-form select').forEach((control) => {
+      control.addEventListener('change', updateQuizProgress);
+      control.addEventListener('input', updateQuizProgress);
+    });
+    updateQuizProgress();
+
     document.getElementById('back-my').onclick = () => navigate('my-competency');
     document.getElementById('archive-my-competency')?.addEventListener('click', async () => {
       await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: assignment.status });
