@@ -83,13 +83,28 @@
     instruction: 'คู่มือหรือคำแนะนำ',
     specimen_image: 'ภาพสิ่งส่งตรวจ',
     raw_result_image: 'ภาพผลทดสอบดิบ',
-    submission_form: 'แบบฟอร์มส่งผล',
+    submission_form: 'แบบฟอร์มผลที่ส่งผู้ให้บริการ',
     submission_evidence: 'หลักฐานการส่งผล',
-    official_result: 'รายงานผลประเมินอย่างเป็นทางการ',
+    official_result: 'รายงานผลประเมินอย่างเป็นทางการ (Official Evaluation)',
+    participant_summary: 'รายงานเปรียบเทียบผู้เข้าร่วม (Participant Summary)',
     corrective_action: 'หลักฐานการแก้ไขและป้องกัน',
     closure_report: 'รายงานสรุปปิดรอบ',
     other: 'เอกสารอื่น ๆ'
   };
+  const DOCUMENT_CATEGORY_HELP = {
+    source_document: 'ฟอร์มเปล่าหรือเอกสารต้นฉบับ ใช้สร้างช่องกรอกและโครงสร้างการทดสอบ',
+    instruction: 'คู่มือ วิธีปฏิบัติ ข้อควรระวัง และ Master List ใช้ประกอบการสร้างฟอร์ม แต่ไม่ใช้เป็นเฉลย',
+    specimen_image: 'ภาพสิ่งส่งตรวจหรือวัสดุทดสอบที่ต้องเก็บเป็นหลักฐาน',
+    raw_result_image: 'ภาพผลทดสอบดิบ ใช้สร้าง Competency สำหรับเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง',
+    submission_form: 'ผลที่ห้องปฏิบัติการกรอกและส่งผู้ให้บริการ ใช้ตรวจว่าห้องส่งอะไรเท่านั้น ห้ามใช้เป็นเฉลย',
+    submission_evidence: 'ภาพหน้าจอ ใบยืนยัน หรือหลักฐานวันเวลาที่ส่งผล',
+    official_result: 'Original Evaluation หรือรายงานที่มี Intended Response / Grade ใช้เป็นแหล่งหลักของเฉลยและคะแนน',
+    participant_summary: 'Participant Summary หรือ PSR ใช้เทียบสัดส่วนคำตอบของห้องอื่น และใช้ประเมิน Educational Challenge',
+    corrective_action: 'หลักฐานการแก้ไข ป้องกัน และติดตามประสิทธิผล',
+    closure_report: 'รายงานสรุปเมื่อปิดรอบ',
+    other: 'เอกสารประกอบอื่นที่ไม่เข้ากลุ่มข้างต้น',
+  };
+
   const VISIBILITY_LABELS = {
     restricted: 'เฉพาะผู้ทบทวน ผู้จัดการคุณภาพ และแพทย์',
     assigned: 'เฉพาะผู้ได้รับมอบหมาย',
@@ -1192,22 +1207,26 @@
     const sourceDocuments = (docs || []).filter((doc) => doc.category === 'source_document');
     const instructionDocuments = (docs || []).filter((doc) => doc.category === 'instruction');
     const rawResultDocuments = (docs || []).filter((doc) => doc.category === 'raw_result_image');
+    const submittedResultDocuments = (docs || []).filter((doc) => doc.category === 'submission_form');
     const officialDocuments = (docs || []).filter((doc) => doc.category === 'official_result');
+    const participantSummaryDocuments = (docs || []).filter((doc) => doc.category === 'participant_summary');
     const documentBundleReady = sourceDocuments.length > 0 && instructionDocuments.length > 0;
     const answerBundleReady = officialDocuments.length > 0;
     const historicalBundleReady = documentBundleReady && answerBundleReady;
     const generatedAt = round.generated_form_generated_at ? fmtDate(round.generated_form_generated_at, true) : '';
     const generatedFormStatus = round.generated_result_form_schema
       ? `<div class="notice success"><strong>มีแบบกรอกและคำแนะนำที่สร้างจากเอกสารแล้ว</strong><br><span class="small">สร้างเมื่อ ${esc(generatedAt || '-')} · ระบบใช้ “ประเภทเอกสาร” เป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่เท่านั้น</span>${round.generated_instruction_th ? `<details style="margin-top:8px"><summary>ดูคำแนะนำภาษาไทย</summary><div class="small" style="white-space:pre-wrap;margin-top:8px">${esc(round.generated_instruction_th)}</div></details>` : ''}</div><div style="height:12px"></div>`
-      : `<div class="compact-status"><span>ฟอร์มต้นฉบับ <strong>${sourceDocuments.length}</strong></span><span>คู่มือ/คำแนะนำ <strong>${instructionDocuments.length}</strong></span><span>ภาพผลดิบ <strong>${rawResultDocuments.length}</strong></span><span>รายงานผล <strong>${officialDocuments.length}</strong></span></div>`;
+      : `<div class="compact-status"><span>ฟอร์มต้นฉบับ <strong>${sourceDocuments.length}</strong></span><span>คู่มือ/คำแนะนำ <strong>${instructionDocuments.length}</strong></span><span>ภาพผลดิบ <strong>${rawResultDocuments.length}</strong></span><span>ผลที่ส่ง <strong>${submittedResultDocuments.length}</strong></span><span>Official Evaluation <strong>${officialDocuments.length}</strong></span><span>Participant Summary <strong>${participantSummaryDocuments.length}</strong></span></div>`;
     return `<div class="card">
       <div class="card-header"><div><h2>เอกสารและภาพ</h2></div>
       <div class="table-actions">${uploadAllowed ? `<button class="btn btn-primary" id="upload-doc-btn">＋ อัปโหลดไฟล์</button>` : ''}<button class="btn btn-outline" id="go-auto-competency">จัดการข้อสอบ</button></div></div>
       ${canManage() ? `<div class="ai-action-grid">
         <button class="btn btn-primary" id="generate-document-bundle" ${documentBundleReady ? '' : 'disabled'}>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</button>
-        <button class="btn btn-success" id="generate-answer-bundle" ${answerBundleReady ? '' : 'disabled'}>สร้างเฉลยและสรุปผลจากรายงาน</button>
+        <button class="btn btn-success" id="generate-answer-bundle" ${answerBundleReady ? '' : 'disabled'}>สร้างเฉลยและสรุปจาก Evaluation / Participant Summary</button>
         <button class="btn btn-secondary" id="generate-historical-bundle" ${historicalBundleReady ? '' : 'disabled'}>สร้างย้อนหลังครบชุดจากเอกสารและรายงานผล</button>
-      </div><div class="small muted" style="margin:8px 0 14px">รายละเอียดการเตรียมไฟล์ ชื่อไฟล์ และการใช้ภาพ Ab screen อยู่ในเมนูคู่มือการใช้งาน</div>` : ''}
+      </div><div class="small muted" style="margin:8px 0 14px">Official Evaluation ใช้เป็นแหล่งหลักของเฉลย/คะแนน ส่วน Participant Summary ใช้เทียบกับห้องอื่นและประเมิน Educational Challenge รายละเอียดชื่อไฟล์อยู่ในเมนูคู่มือการใช้งาน</div>` : ''}
+      ${participantSummaryDocuments.length && !officialDocuments.length ? `<div class="notice warning"><strong>มี Participant Summary แต่ยังไม่มี Official Evaluation</strong><br>ระบบยังไม่เปิดสร้างเฉลย เพื่อป้องกันการนำร้อยละของผู้เข้าร่วมมาใช้แทนผลของห้องปฏิบัติการ</div><div style="height:12px"></div>` : ''}
+      ${officialDocuments.length && !participantSummaryDocuments.length ? `<div class="notice info"><strong>สร้างผลแบบให้คะแนนได้แล้ว</strong><br>หากรอบนี้มี Educational Challenge ให้เพิ่ม Participant Summary เพื่อให้ระบบประเมินเทียบ consensus ของผู้เข้าร่วมได้ถูกต้อง</div><div style="height:12px"></div>` : ''}
       ${generatedFormStatus}
       ${(docs || []).length ? `<div class="table-wrap"><table><thead><tr><th>ประเภท</th><th>ชื่อ</th><th>ผู้ที่เปิดดูได้</th><th>วันที่อัปโหลด</th><th>จัดการ</th></tr></thead><tbody>
         ${(docs || []).map((d) => {
@@ -1919,13 +1938,33 @@
 
   async function roundOfficial(round) {
     const { data: official } = await state.supabase.from('ec_official_results').select('*').eq('round_id', round.id).maybeSingle();
-    return `<div class="card"><div class="card-header"><div><h2>ผลประเมินอย่างเป็นทางการ</h2><div class="small muted">กรอกหลังได้รับผลจาก CAP แล้วจึงเปิดเฉลยให้บุคลากร</div></div></div>
+    const ai = official?.official_payload && typeof official.official_payload === 'object' ? official.official_payload : {};
+    const reviewTopics = Array.isArray(ai.review_topics) ? ai.review_topics.join('\n') : String(ai.review_topics || '');
+    const evaluationModeLabels = {
+      graded: 'มีการให้คะแนน',
+      educational: 'Educational Challenge',
+      mixed: 'มีทั้ง Graded และ Educational',
+      insufficient: 'หลักฐานยังไม่พอ'
+    };
+    const structuredView = official ? `<div class="grid cols-2" style="margin-top:16px">
+      <div class="notice"><strong>1. ผลของห้องปฏิบัติการ</strong><div style="white-space:pre-wrap;margin-top:6px">${esc(ai.lab_result_summary || 'ยังไม่มีสรุปแยกส่วน')}</div></div>
+      <div class="notice"><strong>2. ผลที่ควรเป็น / Intended Response</strong><div style="white-space:pre-wrap;margin-top:6px">${esc(ai.intended_response_summary || 'ยังไม่มีสรุปแยกส่วน')}</div></div>
+      <div class="notice"><strong>3. คะแนนและ Grade</strong><div style="white-space:pre-wrap;margin-top:6px">${esc(ai.grade_summary || 'ยังไม่มีสรุปแยกส่วน')}</div></div>
+      <div class="notice"><strong>4. เปรียบเทียบกับผู้เข้าร่วม</strong><div style="white-space:pre-wrap;margin-top:6px">${esc(ai.peer_comparison_summary || 'ยังไม่มี Participant Summary หรือยังไม่ได้สร้างสรุปใหม่')}</div></div>
+      <div class="notice warning" style="grid-column:1/-1"><strong>5. หัวข้อที่ต้องทบทวน</strong><div style="white-space:pre-wrap;margin-top:6px">${esc(reviewTopics || 'ไม่พบหัวข้อที่ต้องทบทวน หรือยังไม่ได้สรุป')}</div></div>
+    </div>` : '';
+    return `<div class="card"><div class="card-header"><div><h2>ผลประเมินอย่างเป็นทางการ</h2><div class="small muted">Official Evaluation ใช้ตัดสิน Intended Response และ Grade ส่วน Participant Summary ใช้เปรียบเทียบกับห้องอื่นและประเมิน Educational Challenge</div></div>${ai.evaluation_mode ? `<span class="badge info">${esc(evaluationModeLabels[ai.evaluation_mode] || ai.evaluation_mode)}</span>` : ''}</div>
       ${canManage() ? `<form id="official-form" class="form-grid cols-2">
-        <div class="field"><label>คะแนน</label><input class="input" type="number" step="0.01" name="score" value="${esc(official?.score ?? '')}"></div>
-        <div class="field"><label>ผลสรุป</label><select class="select" name="outcome"><option value="pending">รอผล</option><option value="pass" ${official?.outcome==='pass'?'selected':''}>ผ่าน</option><option value="fail" ${official?.outcome==='fail'?'selected':''}>ไม่ผ่าน</option><option value="partial" ${official?.outcome==='partial'?'selected':''}>ผ่านบางส่วน</option></select></div>
-        <div class="field" style="grid-column:1/-1"><label>สรุปผล / รายการที่ผิด</label><textarea class="textarea" name="summary">${esc(official?.summary || '')}</textarea></div>
+        <div class="field"><label>คะแนนรวมของห้อง</label><input class="input" type="number" step="0.01" name="score" value="${esc(official?.score ?? '')}"><div class="help">กรอกเฉพาะเมื่อ Official Evaluation ระบุคะแนนรวมชัดเจน ห้ามใช้ร้อยละใน Participant Summary</div></div>
+        <div class="field"><label>ผลสรุปอย่างเป็นทางการ</label><select class="select" name="outcome"><option value="pending">รอผล / Educational</option><option value="pass" ${official?.outcome==='pass'?'selected':''}>ผ่าน</option><option value="fail" ${official?.outcome==='fail'?'selected':''}>ไม่ผ่าน</option><option value="partial" ${official?.outcome==='partial'?'selected':''}>ผ่านบางส่วน</option></select></div>
+        <div class="field"><label>1. ผลของห้องปฏิบัติการ</label><textarea class="textarea" name="lab_result_summary">${esc(ai.lab_result_summary || '')}</textarea></div>
+        <div class="field"><label>2. ผลที่ควรเป็น / Intended Response</label><textarea class="textarea" name="intended_response_summary">${esc(ai.intended_response_summary || '')}</textarea></div>
+        <div class="field"><label>3. คะแนนและ Grade</label><textarea class="textarea" name="grade_summary">${esc(ai.grade_summary || '')}</textarea></div>
+        <div class="field"><label>4. เปรียบเทียบกับผู้เข้าร่วม</label><textarea class="textarea" name="peer_comparison_summary">${esc(ai.peer_comparison_summary || '')}</textarea></div>
+        <div class="field" style="grid-column:1/-1"><label>5. หัวข้อที่ต้องทบทวน — 1 บรรทัดต่อ 1 หัวข้อ</label><textarea class="textarea" name="review_topics">${esc(reviewTopics)}</textarea></div>
+        <div class="field" style="grid-column:1/-1"><label>สรุปรวมสำหรับรายงาน</label><textarea class="textarea" name="summary">${esc(official?.summary || '')}</textarea></div>
         <label style="display:flex;gap:8px;align-items:center"><input type="checkbox" name="published" ${official?.published_to_staff?'checked':''}> เปิดผลและเฉลยให้บุคลากร</label>
-      </form><div class="modal-footer"><button class="btn btn-primary" id="save-official">บันทึกผลประเมิน</button></div>` : official ? `<div class="grid cols-3"><div><strong>คะแนน</strong><div class="stat-value">${official.score ?? '-'}</div></div><div><strong>ผล</strong><p>${esc(labelFrom(OFFICIAL_OUTCOME_LABELS, official.outcome))}</p></div><div><strong>เปิดให้บุคลากร</strong><p>${official.published_to_staff ? 'เปิดแล้ว' : 'ยังไม่เปิด'}</p></div></div><p>${esc(official.summary || '')}</p>` : empty('ยังไม่ได้รับผลประเมินอย่างเป็นทางการ')}
+      </form><div class="modal-footer"><button class="btn btn-primary" id="save-official">บันทึกผลประเมิน</button></div>${structuredView}` : official ? `<div class="grid cols-3"><div><strong>คะแนนรวม</strong><div class="stat-value">${official.score ?? '-'}</div></div><div><strong>ผล</strong><p>${esc(labelFrom(OFFICIAL_OUTCOME_LABELS, official.outcome))}</p></div><div><strong>เปิดให้บุคลากร</strong><p>${official.published_to_staff ? 'เปิดแล้ว' : 'ยังไม่เปิด'}</p></div></div><div class="notice info" style="margin-top:14px;white-space:pre-wrap">${esc(official.summary || 'ยังไม่มีสรุปรวม')}</div>${structuredView}` : empty('ยังไม่ได้รับผลประเมินอย่างเป็นทางการ')}
     </div>`;
   }
 
@@ -1961,6 +2000,7 @@
     const sourceCategories = new Set(['source_document','instruction','raw_result_image']);
     const sourceDocs = (documents || []).filter((doc) => sourceCategories.has(doc.category));
     const officialDocs = (documents || []).filter((doc) => doc.category === 'official_result');
+    const participantSummaryDocs = (documents || []).filter((doc) => doc.category === 'participant_summary');
     const latestRun = generationRuns?.[0] || null;
     const canCreateCompetency = canManage() && (!isHistoricalRound(round) || round.historical_review_status === 'qm_certified');
     const closePassed = round.competency_close_at && new Date(round.competency_close_at).getTime() < Date.now();
@@ -1988,7 +2028,8 @@
 
     const aiNotice = canManage() ? `<div class="compact-status">
       <span>ไฟล์ต้นทาง <strong>${sourceDocs.length}</strong></span>
-      <span>รายงานผล <strong>${officialDocs.length}</strong></span>
+      <span>Official Evaluation <strong>${officialDocs.length}</strong></span>
+      <span>Participant Summary <strong>${participantSummaryDocs.length}</strong></span>
       <span>ข้อสอบ <strong>${(questions || []).length}</strong></span>
       <button class="text-link" type="button" data-nav="help">ดูคู่มือ</button>
     </div>` : '';
@@ -2006,10 +2047,18 @@
         ${(questions || []).length ? questions.map((q) => {
           const key = keyMap.get(q.id);
           const hasKey = Boolean(key?.correct_choice_ids?.length || key?.answer_key_json?.text);
+          const needsManualReview = Boolean(key?.answer_key_json?.needs_manual_review);
+          const answerBasisLabel = {
+            official_intended_response: 'อิง Intended Response',
+            participant_consensus: 'อิง Participant consensus',
+            insufficient: 'หลักฐานไม่พอ'
+          }[key?.answer_key_json?.answer_basis] || '';
           return `<div style="padding:12px 0;border-bottom:1px solid var(--line)">
             <span class="badge ${q.published?'success':'warning'}">${q.published?'เผยแพร่':'ฉบับร่าง'}</span>
             ${q.generated_by_ai ? '<span class="badge info">สร้างจากไฟล์</span>' : ''}
             <span class="badge ${hasKey?'success':'warning'}">${hasKey?'มีเฉลย':'รอเฉลย'}</span>
+            ${needsManualReview ? '<span class="badge danger">ต้องตรวจเอง</span>' : ''}
+            ${answerBasisLabel ? `<span class="badge info">${esc(answerBasisLabel)}</span>` : ''}
             <strong>${q.question_order}. ${esc(q.prompt)}</strong><br>
             <span class="small muted">${esc(labelFrom(QUESTION_TYPE_LABELS, q.question_type))} · ${q.points} คะแนน ${q.is_critical?'· ข้อสำคัญ':''}${q.image_document_id ? ` · รูป: ${esc(imageName(q.image_document_id) || 'ไฟล์รูป')}` : ''}</span>
             ${canManage()?`<div class="table-actions" style="margin-top:7px"><button class="btn btn-outline btn-sm" data-edit-question="${q.id}">แก้ไข</button><button class="btn btn-danger btn-sm" data-delete-question="${q.id}" data-question-label="${esc(`${q.question_order}. ${q.prompt}`)}">ลบ</button></div>`:''}
@@ -2136,7 +2185,7 @@
       const title = mode === 'documents'
         ? 'สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร'
         : mode === 'answers'
-          ? 'สร้างเฉลยและสรุปผลจากรายงาน'
+          ? 'สร้างเฉลยและสรุปจาก Evaluation / Participant Summary'
           : 'สร้างย้อนหลังครบชุดจากเอกสารและรายงานผล';
       const countField = mode === 'answers' ? '' : `<div class="field"><label>จำนวนข้อโดยประมาณ</label><input class="input" type="number" name="question_count" min="3" max="25" value="12" required></div>`;
       const replaceField = mode === 'answers' ? '' : `<label><input type="checkbox" name="replace_drafts" checked> แทนที่เฉพาะข้อสอบฉบับร่างที่ AI เคยสร้างไว้</label>`;
@@ -2145,6 +2194,7 @@
         ${replaceField}
         ${isHistoricalBundle ? '<div class="notice info">เมื่อน้องส่งคำตอบ ระบบจะแสดงเฉลยและคำอธิบายทันทีสำหรับรอบย้อนหลังนี้</div>' : ''}
         <label><input type="checkbox" name="confirm_privacy" required> ยืนยันว่าไฟล์ไม่มีชื่อผู้ป่วย HN หรือข้อมูลส่วนบุคคลที่ไม่ควรส่งไปประมวลผล</label>
+        ${mode === 'answers' || isHistoricalBundle ? '<div class="notice info">ระบบใช้ Official Evaluation สำหรับ Intended Response/Grade และใช้ Participant Summary เฉพาะ peer comparison หรือ Educational Challenge ผลที่ห้องส่งจะไม่ถูกใช้เป็นเฉลย</div>' : ''}
         <div class="small muted">ระบบใช้ประเภทเอกสารเป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่ รายละเอียดอยู่ในคู่มือการใช้งาน</div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="confirm-document-ai-bundle">เริ่มสร้าง</button>`, true);
 
@@ -2178,9 +2228,12 @@
             round_id: round.id,
             release_answers_after_submit: isHistoricalBundle
           });
+          const manualReviewHint = Number(answerResult.manual_review_count || 0) > 0
+            ? ` · มี ${answerResult.manual_review_count} ข้อที่หลักฐานไม่พอและต้องตรวจเอง`
+            : '';
           toast(isHistoricalBundle
-            ? `สร้างย้อนหลังครบชุดแล้ว พร้อมเฉลย ${answerResult.generated_count || 0} ข้อ และตั้งให้แสดงเฉลยหลังส่งคำตอบ`
-            : `สร้างเฉลย ${answerResult.generated_count || 0} ข้อและสรุปผลแล้ว`, 'success', 7500);
+            ? `สร้างย้อนหลังครบชุดแล้ว พร้อมเฉลย ${answerResult.generated_count || 0} ข้อ และตั้งให้แสดงเฉลยหลังส่งคำตอบ${manualReviewHint}`
+            : `สร้างเฉลย ${answerResult.generated_count || 0} ข้อและสรุปผลแล้ว${manualReviewHint}`, Number(answerResult.manual_review_count || 0) > 0 ? 'warning' : 'success', 8500);
           navigate(`round/${round.id}/competency`);
         } catch (generationError) {
           toast(friendlyError(generationError), 'danger', 8000);
@@ -2207,11 +2260,18 @@
 
     document.getElementById('upload-doc-btn')?.addEventListener('click', () => {
       showModal('อัปโหลดเอกสาร/ภาพ', `<form id="doc-form" class="form-grid">
-        <div class="field"><label>ประเภท</label><select class="select" name="category">${Object.entries(DOCUMENT_CATEGORY_LABELS).map(([value,label])=>`<option value="${value}">${esc(label)}</option>`).join('')}</select></div>
-        <div class="field"><label>ชื่อเอกสาร</label><input class="input" name="title" required></div>
+        <div class="field"><label>ประเภท</label><select class="select" id="document-category-select" name="category">${Object.entries(DOCUMENT_CATEGORY_LABELS).map(([value,label])=>`<option value="${value}">${esc(label)}</option>`).join('')}</select><div class="help" id="document-category-help"></div></div>
+        <div class="field"><label>ชื่อเอกสาร</label><input class="input" name="title" required><div class="help">ตั้งชื่อให้อ่านรู้เรื่อง เช่น Original Evaluation, Participant Summary หรือผลที่ห้องส่งจริง</div></div>
         <div class="field"><label>ผู้ที่เปิดดูได้</label><select class="select" name="visibility"><option value="restricted">เฉพาะผู้ทบทวน ผู้จัดการคุณภาพ และแพทย์</option><option value="assigned">ผู้ได้รับมอบหมาย</option><option value="staff">บุคลากรทุกคน</option></select></div>
         <div class="field"><label>ไฟล์ PDF/JPG/PNG/WebP ไม่เกิน 20 MB</label><input class="input" type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp" required></div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="upload-doc-save">อัปโหลด</button>`);
+      const categorySelect = document.getElementById('document-category-select');
+      const updateCategoryHelp = () => {
+        const help = document.getElementById('document-category-help');
+        if (help) help.textContent = DOCUMENT_CATEGORY_HELP[categorySelect?.value] || '';
+      };
+      categorySelect?.addEventListener('change', updateCategoryHelp);
+      updateCategoryHelp();
       document.getElementById('upload-doc-save').addEventListener('click', async () => {
         const form = document.getElementById('doc-form'); if (!form.reportValidity()) return;
         const fd = new FormData(form); const file = fd.get('file');
@@ -2229,8 +2289,12 @@
           ? ' อัปโหลดเอกสารต้นทางแล้ว เมื่อไฟล์ครบให้กด “สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร”'
           : category === 'raw_result_image'
             ? ' อัปโหลดภาพผลทดสอบดิบแล้ว ระบบจะใช้สร้าง Competency สำหรับเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง'
+          : category === 'submission_form'
+            ? ' บันทึกผลที่ห้องส่งจริงแล้ว ระบบจะใช้เป็นหลักฐานประกอบเท่านั้นและจะไม่ใช้เป็นเฉลย'
           : category === 'official_result'
-            ? ' อัปโหลดรายงานผลแล้ว เลือกสร้างเฉลยและสรุปผล หรือสร้างย้อนหลังครบชุดได้'
+            ? ' อัปโหลด Official Evaluation แล้ว สามารถสร้างเฉลยและสรุปผลได้ หากมี Educational Challenge ให้เพิ่ม Participant Summary ด้วย'
+          : category === 'participant_summary'
+            ? ' อัปโหลด Participant Summary แล้ว ระบบจะใช้เปรียบเทียบกับผู้เข้าร่วมและประเมิน Educational Challenge โดยไม่ใช้ร้อยละเป็นคะแนนของห้อง'
             : '';
         toast(`อัปโหลดเรียบร้อย${nextHint}`, 'success'); route();
       });
@@ -2417,7 +2481,43 @@
   }
 
   function bindOfficial(round) {
-    document.getElementById('save-official')?.addEventListener('click',async()=>{const fd=new FormData(document.getElementById('official-form'));const payload={round_id:round.id,score:fd.get('score')?Number(fd.get('score')):null,outcome:String(fd.get('outcome')),summary:String(fd.get('summary')||'')||null,published_to_staff:fd.get('published')==='on',recorded_by:state.user.id,received_at:new Date().toISOString()};const {error}=await state.supabase.from('ec_official_results').upsert(payload,{onConflict:'round_id'});if(error)return toast(friendlyError(error), 'danger');await state.supabase.from('ec_eqa_rounds').update({status:'official_result_received',answer_released_at:payload.published_to_staff?new Date().toISOString():null,updated_by:state.user.id}).eq('id',round.id);toast('บันทึกผลอย่างเป็นทางการแล้ว','success');route();});
+    document.getElementById('save-official')?.addEventListener('click', async () => {
+      const form = document.getElementById('official-form');
+      if (!form) return;
+      const fd = new FormData(form);
+      const { data: existing, error: loadError } = await state.supabase.from('ec_official_results').select('official_payload,received_at').eq('round_id', round.id).maybeSingle();
+      if (loadError) return toast(friendlyError(loadError), 'danger');
+      const reviewTopics = String(fd.get('review_topics') || '').split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+      const officialPayload = {
+        ...(existing?.official_payload || {}),
+        lab_result_summary: String(fd.get('lab_result_summary') || '').trim(),
+        intended_response_summary: String(fd.get('intended_response_summary') || '').trim(),
+        grade_summary: String(fd.get('grade_summary') || '').trim(),
+        peer_comparison_summary: String(fd.get('peer_comparison_summary') || '').trim(),
+        review_topics: reviewTopics,
+        manually_reviewed_at: new Date().toISOString(),
+        manually_reviewed_by: state.user.id,
+      };
+      const payload = {
+        round_id: round.id,
+        score: fd.get('score') ? Number(fd.get('score')) : null,
+        outcome: String(fd.get('outcome')),
+        summary: String(fd.get('summary') || '') || null,
+        official_payload: officialPayload,
+        published_to_staff: fd.get('published') === 'on',
+        recorded_by: state.user.id,
+        received_at: existing?.received_at || new Date().toISOString(),
+      };
+      const { error } = await state.supabase.from('ec_official_results').upsert(payload, { onConflict: 'round_id' });
+      if (error) return toast(friendlyError(error), 'danger');
+      await state.supabase.from('ec_eqa_rounds').update({
+        status: 'official_result_received',
+        answer_released_at: payload.published_to_staff ? new Date().toISOString() : null,
+        updated_by: state.user.id
+      }).eq('id', round.id);
+      toast('บันทึกผลอย่างเป็นทางการแล้ว', 'success');
+      route();
+    });
   }
 
   function bindCapa(round) {
@@ -2567,7 +2667,7 @@
         <div class="field"><label>จำนวนข้อโดยประมาณ</label><input class="input" type="number" name="question_count" min="3" max="25" value="12" required></div>
         <label><input type="checkbox" name="replace_drafts" checked> แทนที่เฉพาะข้อสอบฉบับร่างที่ AI เคยสร้างไว้ (ไม่แตะข้อที่เพิ่มเองหรือเผยแพร่แล้ว)</label>
         <label><input type="checkbox" name="confirm_privacy" required> ยืนยันว่าไฟล์ไม่มีชื่อผู้ป่วย HN หรือข้อมูลส่วนบุคคลที่ไม่ควรส่งไปประมวลผล</label>
-        <label><input type="checkbox" name="generate_answers" ${isHistoricalRound(round) ? 'checked' : ''}> เมื่อสร้างข้อสอบเสร็จ ให้สร้างเฉลยและสรุปต่อทันที หากมีรายงานผลประเมินอย่างเป็นทางการ</label>
+        <label><input type="checkbox" name="generate_answers" ${isHistoricalRound(round) ? 'checked' : ''}> เมื่อสร้างข้อสอบเสร็จ ให้สร้างเฉลยและสรุปต่อทันที หากมี Official Evaluation (และ Participant Summary สำหรับ Educational Challenge)</label>
         <div class="small muted">ข้อสอบที่สร้างจะเป็น “ฉบับร่าง” และยังไม่เปิดให้น้องทำจนกว่าจะกดเผยแพร่</div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="confirm-ai-generate">เริ่มสร้าง</button>`, true);
       document.getElementById('confirm-ai-generate').addEventListener('click', async () => {
@@ -2585,7 +2685,7 @@
           if (fd.get('generate_answers') === 'on') {
             try {
               const answerResult = await invokeCompetencyAI({ action: 'generate_answers', round_id: round.id });
-              message += ` และสร้างเฉลย ${answerResult.generated_count || 0} ข้อพร้อมสรุปแล้ว`;
+              message += ` และสร้างเฉลย ${answerResult.generated_count || 0} ข้อพร้อมสรุปแล้ว${Number(answerResult.manual_review_count || 0) > 0 ? ` โดยมี ${answerResult.manual_review_count} ข้อที่ต้องตรวจเอง` : ''}`;
             } catch (answerError) {
               message += ' แต่ยังสร้างเฉลยไม่ได้ กรุณาตรวจว่ามีรายงานผลประเมินอย่างเป็นทางการแล้ว';
             }
@@ -2600,11 +2700,11 @@
     });
 
     document.getElementById('ai-generate-answers')?.addEventListener('click', async () => {
-      if (!confirm('ให้ระบบอ่านรายงานผลประเมินอย่างเป็นทางการ แล้วสร้างเฉลยและสรุปผลหรือไม่? ข้อมูลจะยังไม่เปิดให้น้องเห็นจนกว่าจะกดเปิดผลและเฉลย')) return;
+      if (!confirm('ให้ระบบอ่าน Official Evaluation และ Participant Summary แล้วสร้างเฉลยและสรุปผลหรือไม่? ข้อมูลจะยังไม่เปิดให้น้องเห็นจนกว่าจะกดเปิดผลและเฉลย')) return;
       try {
         setBusy(true);
         const result = await invokeCompetencyAI({ action: 'generate_answers', round_id: round.id });
-        toast(`สร้างเฉลย ${result.generated_count || 0} ข้อและสรุปผลแล้ว กรุณาตรวจทานก่อนเปิดเผย`, 'success');
+        toast(`สร้างเฉลย ${result.generated_count || 0} ข้อและสรุปผลแล้ว${Number(result.manual_review_count || 0) > 0 ? ` มี ${result.manual_review_count} ข้อที่หลักฐานไม่พอและต้องตรวจเอง` : ''} กรุณาตรวจทานก่อนเปิดเผย`, Number(result.manual_review_count || 0) > 0 ? 'warning' : 'success', 8500);
         route();
       } catch (error) {
         toast(friendlyError(error), 'danger');
@@ -3384,10 +3484,24 @@
       <div class="guide-list">
         <details open><summary>เริ่มต้นใช้งานและเลือกบทบาท</summary><div class="guide-body"><p>เลือกบทบาทจากกล่องด้านล่างของแถบเมนู ระบบจะแสดงปุ่มตามบทบาทที่เลือก โดยไม่เปลี่ยนสิทธิ์จริงของบัญชี</p><p>หากมีหลายบทบาท ให้เลือกบทบาทให้ตรงกับงานที่กำลังทำ เช่น เจ้าหน้าที่ ผู้ทบทวน ผู้จัดการคุณภาพ แพทย์ หรือผู้ดูแลระบบ</p></div></details>
         <details><summary>ลำดับงานของรอบ EQA</summary><div class="guide-body"><ol><li>บันทึกข้อมูลการรับรอบและกำหนดผู้รับผิดชอบ</li><li>ผู้ปฏิบัติจริงบันทึกผลรายบุคคล</li><li>ระบบเทียบผลและสร้างสรุปผลห้องปฏิบัติการ</li><li>ผู้ทบทวนตรวจและส่งให้ผู้จัดการคุณภาพ</li><li>ผู้จัดการคุณภาพรับรอง และแพทย์รับทราบ</li></ol></div></details>
-        <details><summary>เอกสารและภาพ</summary><div class="guide-body"><p>ไฟล์เก็บในพื้นที่ส่วนตัวของระบบ ไม่ได้เก็บใน GitHub ระบบใช้ <strong>ประเภทเอกสาร</strong> เป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่เท่านั้น</p><p><strong>เอกสารต้นฉบับจากผู้ให้บริการ</strong> เป็นแหล่งหลักสำหรับรายการตัวอย่าง รายการทดสอบ ช่องกรอก หน่วย จำนวนทศนิยม และโครงสร้างแบบฟอร์ม</p><p><strong>คู่มือหรือคำแนะนำ</strong> ใช้แปลวิธีปฏิบัติ ข้อควรระวัง ดึงรหัสพร้อมชื่อจาก Master List และสร้างข้อสอบจากโจทย์แบบแห้งหรือ Educational challenge ที่พบ คู่มือไม่ถือเป็นเฉลยทางการ</p><p><strong>ภาพผลทดสอบดิบ</strong> ใช้สร้าง Competency สำหรับเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง ภาพ Ab screen สามารถรวม RT และ IAT ไว้ในรูปเดียว ระบบจะถามผลรวมเป็น Positive หรือ Negative โดยไม่แยก phase</p><p><strong>รายงานผลประเมินอย่างเป็นทางการ</strong> ใช้สร้างเฉลย คำอธิบาย สรุปผล และหัวข้อทบทวน</p><p><strong>กรณีหนึ่งตัวอย่างมีหลายการทดสอบ</strong></p><ul><li>ระบบจะแยกแบบกรอกเป็นกลุ่มการทดสอบ เช่น ABO/Rh, Antibody screen, Antibody identification, Eluate identification, Crossmatch, DAT, CBC, WBC count, Titer และ Antigen typing</li><li>ตัวอย่างเดียวกันสามารถปรากฏในหลายกลุ่มการทดสอบได้ ไม่ถือว่าเป็นรายการซ้ำ</li><li>ระบบต้องยึดฟอร์มต้นฉบับว่าแต่ละหมายเลขตัวอย่างต้องทำอะไร ห้ามนำทุกการทดสอบไปใส่ให้ทุกตัวอย่าง</li><li>การตรวจเชิงตัวเลขต้องคงหน่วยและจำนวนทศนิยมตามฟอร์ม เช่น cell count, CBC, residual WBC และ titer</li><li>Antigen typing ถ้าฟอร์มให้เลือกชนิด antigen ระบบจะสร้างช่อง “ชื่อ antigen” คู่กับ “ผล” ตามจำนวนตำแหน่งที่ฟอร์มกำหนด หากฟอร์มระบุ antigen คงที่จึงแสดงชื่อเฉพาะ เช่น C, c, E, e, K หรือ S</li></ul><p><strong>หลักการตั้งชื่อไฟล์</strong> ใช้รูปแบบ <code>ผู้ให้บริการ-รอบ_ตัวอย่าง_ชนิดการทดสอบ_บทบาทเอกสาร</code> โดยแนะนำให้หนึ่งไฟล์เป็นหนึ่งตัวอย่างและหนึ่งกลุ่มการทดสอบ หากภาพเดียวมีหลายการทดสอบให้ใช้คำว่า <code>MultiTest</code> และระบุรายการต่อท้าย</p><ul><li>ฟอร์มเปล่า: <code>CAP-JA-2026_ResultForm_J-JE.pdf</code></li><li>คู่มือ: <code>CAP-JA-2026_KitInstruction.pdf</code></li><li>ABO: <code>CAP-JA-2026_J-01_ABO_RawResult.png</code></li><li>Ab screen รวม RT/IAT: <code>CAP-JA-2026_J-01_AbScreen_RawResult.png</code></li><li>Panel/Ab identification: <code>CAP-JA-2026_J-01_AbID_PanelA_Cell01-06_RawResult.jpg</code></li><li>Eluate identification: <code>CAP-ELU-A-2026_ELU-01_EluateAbID_RawResult.png</code></li><li>CBC: <code>CAP-TRC-A-2026_TRC-01_CBC_RawResult.png</code></li><li>WBC count: <code>CAP-TRC-A-2026_TRC-02_WBCCount_RawResult.png</code></li><li>Titer: <code>CAP-AABT-A-2026_AABT-01_AntibodyTiter_RawResult.png</code></li><li>Antigen คงที่: <code>CAP-JA-2026_JE-07_AgTyping_C-c-E-e-K_RawResult.png</code></li><li>Antigen ที่เลือกตามโจทย์: <code>CAP-RBCAT-A-2026_RBCAT-01_AgTyping_SelectedAntigen_RawResult.png</code></li><li>หลายการทดสอบในภาพเดียว: <code>CAP-JA-2026_J-01_MultiTest_ABO-Rh-AbScreen_RawResult.png</code></li><li>รายงานผล: <code>CAP-JA-2026_OfficialResult.pdf</code></li></ul><p>สำหรับ CAP ถ้าฟอร์มระบุช่องและคู่มือระบุเลข code กับชื่อ ระบบจะรวมเป็นตัวเลือกแบบ “ชื่อ (CAP code)” เช่น “Unexpected antibody detected (CAP 111)” โดยไม่สร้างรหัสขึ้นเอง</p></div></details>
+        <details><summary>เอกสารและภาพ</summary><div class="guide-body">
+          <p>ไฟล์เก็บในพื้นที่ส่วนตัวของระบบ ไม่ได้เก็บใน GitHub ระบบใช้ <strong>ประเภทเอกสาร</strong> เป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่เท่านั้น</p>
+          <p><strong>เอกสารต้นฉบับจากผู้ให้บริการ</strong> ใช้สร้างรายการตัวอย่าง รายการทดสอบ ช่องกรอก หน่วย จำนวนทศนิยม และโครงสร้างฟอร์ม</p>
+          <p><strong>คู่มือหรือคำแนะนำ</strong> ใช้แปลวิธีปฏิบัติ ข้อควรระวัง และ Master List คู่มือไม่ถือเป็นเฉลยทางการ</p>
+          <p><strong>ภาพผลทดสอบดิบ</strong> ใช้สร้าง Competency สำหรับเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง ภาพ Ab screen รวม RT/IAT ได้ โดยถามผลรวม Positive/Negative</p>
+          <p><strong>แบบฟอร์มผลที่ส่งผู้ให้บริการ</strong> ใช้ยืนยันว่าห้องปฏิบัติการส่งคำตอบอะไร แต่ระบบห้ามใช้เป็นเฉลย</p>
+          <p><strong>รายงานผลประเมินอย่างเป็นทางการ (Official Evaluation)</strong> ใช้ Intended Response, Grade และคะแนนเป็นแหล่งหลักของเฉลย</p>
+          <p><strong>รายงานเปรียบเทียบผู้เข้าร่วม (Participant Summary)</strong> ใช้ดูสัดส่วน/consensus ของห้องอื่น และใช้ประเมิน Educational Challenge หรือรายการ See Note [26] เท่านั้น ร้อยละในเอกสารนี้ไม่ใช่คะแนนของห้องเรา</p>
+          <p><strong>กรณีหนึ่งตัวอย่างมีหลายการทดสอบ</strong></p><ul><li>ระบบแยกเป็นกลุ่มการทดสอบ เช่น ABO/Rh, Antibody screen, Antibody identification, Eluate identification, Crossmatch, DAT, CBC, WBC count, Titer และ Antigen typing</li><li>ตัวอย่างเดียวกันปรากฏในหลายกลุ่มได้ ไม่ถือว่าซ้ำ</li><li>ต้องยึดฟอร์มต้นฉบับว่าแต่ละตัวอย่างทำอะไร ห้ามนำทุกการทดสอบไปใส่ทุกตัวอย่าง</li><li>ผลเชิงตัวเลขต้องคงหน่วยและจำนวนทศนิยมตามฟอร์ม</li><li>Antigen typing แบบเลือกชนิด antigen ต้องมีช่อง “ชื่อ antigen” คู่กับ “ผล” ตามจำนวนตำแหน่งจริง</li></ul>
+          <p><strong>ชื่อไฟล์สำหรับเอกสารทั้งฉบับ</strong> ใช้รูปแบบ <code>ผู้ให้บริการ-รอบ_โปรแกรม_บทบาทเอกสาร.pdf</code></p>
+          <ul><li>ฟอร์มเปล่า J: <code>CAP-JA-2026_J_BlankResultForm.pdf</code></li><li>ฟอร์มเปล่า JE1: <code>CAP-JA-2026_JE1_BlankResultForm.pdf</code></li><li>คู่มือ: <code>CAP-JA-2026_KitInstruction_J-JE1.pdf</code></li><li>ผลที่ห้องส่ง J: <code>CAP-JA-2026_J_SubmittedResultForm.pdf</code></li><li>ผลที่ห้องส่ง JE1: <code>CAP-JA-2026_JE1_SubmittedResultForm.pdf</code></li><li>Official Evaluation J: <code>CAP-JA-2026_J_OfficialEvaluation.pdf</code></li><li>Official Evaluation Educational: <code>CAP-JA-2026_JE1_OfficialEvaluation_EducationalChallenge.pdf</code></li><li>Participant Summary: <code>CAP-JA-2026_ParticipantSummary_PeerComparison.pdf</code></li></ul>
+          <p><strong>ชื่อไฟล์สำหรับภาพผลดิบ</strong> ใช้รูปแบบ <code>ผู้ให้บริการ-รอบ_ตัวอย่าง_ชนิดการทดสอบ_RawResult</code> หนึ่งการทดสอบหลายตัวอย่างใช้รหัสโจทย์หลักได้ ไม่ต้องใช้ MultiTest; ใช้ <code>MultiTest</code> เฉพาะภาพเดียวที่มีหลายชนิดการทดสอบ</p>
+          <ul><li>ABO: <code>CAP-JA-2026_J-01_ABO_RawResult.png</code></li><li>Ab screen รวม RT/IAT: <code>CAP-JA-2026_J-01_AbScreen_RawResult.png</code></li><li>Ab identification: <code>CAP-JA-2026_J-01_AbID_PanelA_Cell01-06_RawResult.jpg</code></li><li>Crossmatch หลายตัวอย่างในโจทย์ J-06: <code>CAP-JA-2026_J-06_X-Match_RawResult.png</code></li><li>หลายการทดสอบในภาพเดียว: <code>CAP-JA-2026_J-01_MultiTest_ABO-Rh-AbScreen_RawResult.png</code></li></ul>
+          <p>สำหรับ CAP หากฟอร์มระบุช่องและคู่มือระบุ code กับชื่อ ระบบจะรวมเป็นตัวเลือกแบบ “ชื่อ (CAP code)” โดยไม่สร้างรหัสขึ้นเอง</p>
+        </div></details>
         <details><summary>ผลรายบุคคลและสรุปผลห้องปฏิบัติการ</summary><div class="guide-body"><p>ผู้ปฏิบัติแต่ละคนบันทึกผลของตนเองแยกกัน เมื่อส่งครบ ระบบจะเติมค่าที่ตรงกันในสรุปผลห้องให้อัตโนมัติ</p><p>ค่าที่ไม่ตรงกันจะถูกทำเครื่องหมายให้ผู้ทบทวนตรวจและเลือกผลที่ถูกต้องก่อนส่งให้ผู้จัดการคุณภาพ</p></div></details>
         <details><summary>การตรวจ รับรอง และรับทราบ</summary><div class="guide-body"><p>ผู้ทบทวนตรวจผลห้องและหลักฐาน จากนั้นส่งให้ผู้จัดการคุณภาพรับรอง เมื่อรับรองแล้วแพทย์จึงกดรับทราบได้</p><p>ผู้จัดการคุณภาพต้องรับรองทุกรอบ แม้เป็นหนึ่งในผู้ปฏิบัติจริง โดยต้องสลับ “ใช้งานในบทบาท” ให้ตรงกับขั้นตอน เช่น กรอกผลในบทบาทเจ้าหน้าที่ และรับรองในบทบาทผู้จัดการคุณภาพ</p><p>ประวัติการอนุมัติจะแสดงชื่อพร้อมบทบาทที่ใช้ลงนามในแต่ละครั้ง ส่วนผู้ทบทวนยังต้องเป็นคนละคนกับผู้ปฏิบัติจริงทั้งสองคน</p><p>การส่งกลับต้องระบุเหตุผล เพื่อให้ผู้เกี่ยวข้องแก้ไขเฉพาะจุด</p></div></details>
-        <details><summary>การสร้างจากเอกสารและรายงานผล</summary><div class="guide-body"><p><strong>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</strong> ใช้กับรอบใหม่ ระบบอ่านฟอร์มเปล่า คู่มือ และภาพผลดิบ แล้วสร้างฉบับร่างให้ QM ตรวจ</p><p><strong>สร้างเฉลยและสรุปผลจากรายงาน</strong> ใช้เมื่อรายงานผลอย่างเป็นทางการมาถึงภายหลัง</p><p><strong>สร้างย้อนหลังครบชุดจากเอกสารและรายงานผล</strong> ใช้กับรอบที่ได้รับผลแล้ว ระบบสร้างครบทั้งแบบกรอก คำแนะนำ ข้อสอบ เฉลย และสรุป พร้อมตั้งให้เจ้าหน้าที่เห็นเฉลยทันทีหลังส่งคำตอบ</p><p>ข้อสอบทุกข้อยังเป็นฉบับร่างจนกว่า QM จะตรวจและกดเผยแพร่ รอบย้อนหลังต้องกำหนดวันเปิดและวันปิด Competency ก่อนสร้างรายการประเมิน</p></div></details>
+        <details><summary>การสร้างจากเอกสารและรายงานผล</summary><div class="guide-body"><p><strong>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</strong> อ่านฟอร์มเปล่า คู่มือ และภาพผลดิบ แล้วสร้างฉบับร่างให้ QM ตรวจ</p><p><strong>สร้างเฉลยและสรุปจาก Evaluation / Participant Summary</strong> ต้องมี Official Evaluation ก่อน ระบบใช้ Intended Response เป็นเฉลยของรายการ graded และใช้ Participant Summary เฉพาะ Educational Challenge</p><p>ระบบแยกสรุปเป็น 5 ส่วน: ผลของห้อง, ผลที่ควรเป็น, คะแนน/Grade, เปรียบเทียบผู้เข้าร่วม และหัวข้อทบทวน</p><p>หาก Educational Challenge ไม่มี Participant Summary หรือ consensus ไม่ชัด ระบบจะไม่เดาเฉลยและทำเครื่องหมายให้ QM ตรวจเอง</p><p><strong>สร้างย้อนหลังครบชุด</strong> ใช้กับรอบที่ได้รับผลแล้ว ระบบสร้างแบบกรอก คำแนะนำ ข้อสอบ เฉลย และสรุป พร้อมตั้งให้เห็นเฉลยหลังส่งคำตอบ</p><p>ข้อสอบทุกข้อยังเป็นฉบับร่างจนกว่า QM จะตรวจและกดเผยแพร่</p></div></details>
         <details><summary>การแจ้งเตือน EQA และ Competency</summary><div class="guide-body"><p>ผู้ดูแลระบบหรือผู้จัดการคุณภาพตั้งค่าได้ที่เมนู <strong>แจ้งเตือน / Google Drive</strong> ระบบตรวจรายการ EQA ใกล้ครบกำหนด แบบทดสอบที่ยังไม่ส่ง แบบทบทวน ผู้ทบทวนที่ยังไม่ตรวจ และรายการรอผู้จัดการคุณภาพ</p><p>Email ส่งถึงผู้เกี่ยวข้องตามหน้าที่ ส่วน Google Chat ใช้แจ้งภาพรวมของหน่วยงาน โดยค่าเริ่มต้นไม่แสดงชื่อผู้รับการประเมินรายบุคคล</p><p>ปุ่ม <strong>ตรวจและส่งตอนนี้</strong> ใช้ทดสอบหรือตรวจรายการทันที ส่วน Trigger ใน Google Apps Script จะเรียกตรวจอัตโนมัติทุกวัน</p></div></details>
         <details><summary>แบบทบทวนหลังผลประเมินไม่ผ่าน</summary><div class="guide-body"><p>เมื่อผู้จัดการคุณภาพรับรองแล้วพบข้อที่ตอบไม่ถูกหรือหัวข้อการปฏิบัติที่ต้องปรับปรุง ระบบจะเปลี่ยนสถานะเป็น <strong>ต้องทบทวน</strong></p><p>เจ้าหน้าที่บันทึกสาเหตุ ความเข้าใจหรือวิธีที่ถูกต้อง และแผนการนำไปใช้กับงาน จากนั้นส่งให้ผู้ทบทวนตรวจ ผู้ทบทวนสามารถรับรองหรือส่งกลับแก้ไขได้</p></div></details>
         <details><summary>การเก็บ PDF ใน Google Drive</summary><div class="guide-body"><p>รายงานทะเบียน รอบ EQA และ Competency สามารถกดเก็บใน Google Drive ได้จากหน้า รายงาน / ทะเบียน หรือหน้าการประเมิน ระบบจะสร้างไฟล์ฉบับใหม่พร้อมเลขเวอร์ชัน และเก็บลิงก์ไว้ในระบบ</p><p>เมื่อเปิดการเก็บอัตโนมัติ ระบบจะสำรองไฟล์ในจุดสำคัญ เช่น ส่งคำตอบ ผู้ทบทวนตรวจ ผู้จัดการคุณภาพรับรอง ส่ง Reflection และปิดรอบ โดยไม่เขียนทับไฟล์เดิม</p></div></details>

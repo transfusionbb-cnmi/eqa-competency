@@ -9,6 +9,5 @@ window.CNMI_CONFIG = {
   ORGANIZATION_NAME: 'หน่วยเวชศาสตร์บริการโลหิต',
   MAHIDOL_EMAIL_DOMAIN: 'mahidol.ac.th',
   PRIVATE_BUCKET: 'eqa-competency-private',
-  DEFAULT_DOMAIN: 'https://eqa-competency.cnmiblood.com',
-  VERSION: '2.2.1'
+  DEFAULT_DOMAIN: 'https://eqa-competency.cnmiblood.com'
 };
