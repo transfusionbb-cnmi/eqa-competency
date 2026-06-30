@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.4.0
+/* CNMI EQA and Competency Management System v2.4.1
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {

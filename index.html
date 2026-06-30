@@ -7,6 +7,9 @@
   <meta name="description" content="ระบบจัดการการประเมินคุณภาพภายนอกและความสามารถบุคลากร CNMI" />
   <meta name="application-name" content="CNMI EQA & Competency" />
   <meta name="apple-mobile-web-app-title" content="CNMI EQA" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <link rel="icon" href="./favicon.ico" sizes="any" />
   <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/favicon-32x32.png" />
   <link rel="icon" type="image/png" sizes="16x16" href="./assets/icons/favicon-16x16.png" />
@@ -16,7 +19,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./css/app.css?rev=20260625p" />
+  <link rel="stylesheet" href="./css/app.css?rev=20260630a" />
 </head>
 <body>
   <div id="app">
@@ -29,8 +32,28 @@
     </div>
   </div>
 
+  <button class="pwa-install-button" id="pwa-install-button" type="button" hidden aria-label="ติดตั้ง CNMI EQA เป็นแอป">
+    <span class="pwa-install-icon" aria-hidden="true">↓</span>
+    <span>ติดตั้งแอป</span>
+  </button>
+
+  <div class="pwa-guide-backdrop" id="pwa-guide-backdrop" hidden>
+    <section class="pwa-guide" role="dialog" aria-modal="true" aria-labelledby="pwa-guide-title">
+      <div class="pwa-guide-header">
+        <div>
+          <div class="pwa-guide-kicker">CNMI EQA</div>
+          <h2 id="pwa-guide-title">ติดตั้งแอป</h2>
+        </div>
+        <button class="pwa-guide-close" id="pwa-guide-close" type="button" aria-label="ปิด">×</button>
+      </div>
+      <div id="pwa-guide-content"></div>
+      <button class="btn btn-primary btn-block" id="pwa-guide-done" type="button">เข้าใจแล้ว</button>
+    </section>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./js/config.js?rev=20260625n"></script>
-  <script src="./js/app.js?rev=20260625q"></script>
+  <script src="./js/app.js?rev=20260630a"></script>
+  <script src="./js/pwa-install.js?rev=20260630a"></script>
 </body>
 </html>

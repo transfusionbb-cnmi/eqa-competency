@@ -1,4 +1,5 @@
 {
+  "id": "./",
   "name": "CNMI EQA & Competency",
   "short_name": "CNMI EQA",
   "description": "ระบบจัดการการประเมินคุณภาพภายนอกและความสามารถบุคลากร CNMI",
@@ -6,6 +7,7 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#f5fbff",
   "theme_color": "#7fc8f8",
   "icons": [
