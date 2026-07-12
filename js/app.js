@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.5.1
+/* CNMI EQA and Competency Management System v2.5.2
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -2134,6 +2134,21 @@
     return label.replace(/\s+/g, ' ').trim();
   }
 
+  function providerIsWorksheetReactionField(program, field) {
+    const scope = providerProgramScope(program);
+    if (!['J', 'JXM'].includes(scope)) return false;
+
+    const programFields = Array.isArray(program?.specimen_fields) ? program.specimen_fields : [];
+    const hasOfficialFinalResult = programFields.some((candidate) => {
+      const text = providerFieldText(candidate, { program }).toUpperCase();
+      return /\bABO\s+GROUP\b/.test(text) || /\bRH(?:\(D\))?\s+TYPE\b/.test(text);
+    });
+    if (!hasOfficialFinalResult) return false;
+
+    const label = providerCapFieldLabel(field).toUpperCase().replace(/\s+/g, ' ').trim();
+    return /^(?:ANTI-A|ANTI-B|ANTI-A1|ANTI-A,B|A1 CELLS?|B CELLS?|ANTI-D|D CONTROL)$/.test(label);
+  }
+
   function providerCapSpecimenLabel(value) {
     const raw = String(value || '').trim().replace(/^Specimen\s+/i, '');
     const explicitPair = raw.match(/^(J-\d{2})R\s*[\/–-]\s*(J-\d{2})S$/i);
@@ -2478,6 +2493,11 @@
         if (!hasSpecimen) return;
         const values = (state.currentResultPayload?.specimens || {})[specimen.id] || {};
         (program.specimen_fields || []).forEach((field) => {
+          // The CAP Kit Instruction worksheet contains 1=NT, 2=POS, 3=NEG reaction rows.
+          // Those rows are for the laboratory worksheet only and are not CAP Result Form
+          // submission fields. When final ABO Group/Rh Type reporting fields exist, omit
+          // these worksheet-only reactions from the official result-entry form.
+          if (providerIsWorksheetReactionField(program, field)) return;
           const fieldKey = String(field?.key || '');
           const category = providerFieldCategory(program, field);
           const context = { program, category };
