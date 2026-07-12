@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.4.7
+/* CNMI EQA and Competency Management System v2.4.8
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -72,6 +72,7 @@
     viewer: 'อ่านรายงานและประวัติการใช้งานโดยไม่แก้ไขข้อมูล'
   };
   const ROLE_PRIORITY = ['admin', 'qm', 'reviewer', 'physician', 'viewer', 'staff'];
+  const ADMIN_PREVIEW_ROLES = ['admin', 'staff', 'reviewer', 'qm', 'physician', 'viewer'];
   const SIGNING_ROLE_LABELS = {
     staff: 'นักเทคนิคการแพทย์ / เจ้าหน้าที่ผู้ปฏิบัติ',
     reviewer: 'ผู้ทบทวนผล',
@@ -595,14 +596,20 @@
     return `cnmi_eqa_active_role_${state.user?.id || 'anonymous'}`;
   }
 
+  function isSystemAdmin() { return state.roles.includes('admin'); }
+  function availableViewRoles() { return isSystemAdmin() ? ADMIN_PREVIEW_ROLES : state.roles; }
+  function isAdminPreview() { return isSystemAdmin() && state.activeRole !== 'admin'; }
+
   function syncActiveRole() {
     const saved = localStorage.getItem(roleStorageKey());
-    const fallback = ROLE_PRIORITY.find((role) => state.roles.includes(role)) || state.roles[0] || 'staff';
-    state.activeRole = saved && state.roles.includes(saved) ? saved : fallback;
+    const available = availableViewRoles();
+    const fallback = isSystemAdmin() ? 'admin' : (ROLE_PRIORITY.find((role) => state.roles.includes(role)) || state.roles[0] || 'staff');
+    state.activeRole = saved && available.includes(saved) ? saved : fallback;
     localStorage.setItem(roleStorageKey(), state.activeRole);
   }
 
   function hasAssignedRole(...roles) { return roles.some((r) => state.roles.includes(r)); }
+  // hasRole ใช้สำหรับ “มุมมองที่กำลังจำลอง” เท่านั้น ผู้ดูแลระบบยังคงสิทธิ์จริงระดับ admin ผ่าน isSystemAdmin()
   function hasRole(...roles) { return roles.includes(state.activeRole); }
   function canManage() { return hasRole('admin', 'qm'); }
   function canDeleteRound() { return hasRole('admin'); }
@@ -611,7 +618,7 @@
   function canReceiveEqa() { return hasRole('staff', 'qm', 'admin'); }
   function canImportHistoricalEqa() { return hasRole('admin', 'qm'); }
   function isHistoricalRound(round) { return round?.round_mode === 'historical_import'; }
-  function isCompetencyParticipant() { return hasAssignedRole('staff') && !hasAssignedRole('physician'); }
+  function isCompetencyParticipant() { return hasRole('staff') && !hasRole('physician'); }
   function personHasRole(person, role) { return Array.isArray(person?.roles) && person.roles.includes(role); }
   function normalizedRoles(roles) {
     const result = [...new Set((roles || []).filter(Boolean))];
@@ -620,7 +627,7 @@
   }
 
   function roleOptions(selected = state.activeRole) {
-    return state.roles.map((role) => `<option value="${esc(role)}" ${role === selected ? 'selected' : ''}>${esc(ROLE_LABELS[role] || 'บทบาทอื่น')}</option>`).join('');
+    return availableViewRoles().map((role) => `<option value="${esc(role)}" ${role === selected ? 'selected' : ''}>${esc(ROLE_LABELS[role] || 'บทบาทอื่น')}</option>`).join('');
   }
 
   function signingRoleText(role) {
@@ -873,7 +880,7 @@
           <div class="nav-section">การจัดการ</div>
           ${navItem('users', '♙', 'ผู้ใช้งานและสิทธิ์', route)}
           ${navItem('audit', '◷', 'ประวัติการใช้งาน', route)}
-          ${canManage() ? navItem('automation', '◉', 'แจ้งเตือน / Google Drive', route) : ''}
+          ${(isSystemAdmin() || canManage()) ? navItem('automation', '◉', 'แจ้งเตือน / Google Drive', route) : ''}
           ${navItem('settings', '⚙', 'ตั้งค่าของฉัน', route)}
           <div class="nav-section">ช่วยเหลือ</div>
           ${navItem('help', '?', 'คู่มือการใช้งาน', route)}
@@ -884,10 +891,11 @@
                 <span class="badge info">ออนไลน์</span>
               </div>
               <div class="role-switcher">
-                <label for="active-role-select">ใช้งานในบทบาท</label>
-                <select class="role-select" id="active-role-select" data-role-switch ${state.roles.length <= 1 ? 'disabled' : ''}>
+                <label for="active-role-select">${isSystemAdmin() ? 'มุมมองจำลอง' : 'ใช้งานในบทบาท'}</label>
+                <select class="role-select" id="active-role-select" data-role-switch ${availableViewRoles().length <= 1 ? 'disabled' : ''}>
                   ${roleOptions()}
                 </select>
+                ${isSystemAdmin() ? '<div class="role-hint">สิทธิ์จริงยังเป็นผู้ดูแลระบบ การเลือกนี้เปลี่ยนเฉพาะหน้าตาที่ต้องการตรวจดู</div>' : ''}
               </div>
               <div class="small muted">สิทธิ์ที่ได้รับทั้งหมด</div>
               <div class="user-role-list">${assignedRoleBadges || '<span class="badge">ยังไม่ได้รับบทบาท</span>'}</div>
@@ -903,10 +911,12 @@
               <div style="min-width:0"><strong>${esc(title || 'ระบบ EQA และประเมินความสามารถ')}</strong><div class="small muted">${esc(cfg.ORGANIZATION_NAME || '')}</div></div>
             </div>
             <div class="topbar-user">
-              <span class="active-role-badge">โหมด: ${esc(ROLE_LABELS[state.activeRole] || 'ไม่ระบุบทบาท')}</span>
+              ${isSystemAdmin() ? '<span class="actual-role-badge">สิทธิ์จริง: ผู้ดูแลระบบ</span>' : ''}
+              <span class="active-role-badge">${isSystemAdmin() ? 'มุมมอง' : 'โหมด'}: ${esc(ROLE_LABELS[state.activeRole] || 'ไม่ระบุบทบาท')}</span>
               <span class="small topbar-username">${esc(state.profile?.username || '')}</span>
             </div>
           </header>
+          ${isAdminPreview() ? `<div class="admin-preview-banner"><div><strong>กำลังดูในมุมมอง ${esc(ROLE_LABELS[state.activeRole] || '')}</strong><span>สิทธิ์จริงของบัญชียังเป็นผู้ดูแลระบบ เมนูทั้งหมดจึงยังเปิดให้เข้าถึงได้</span></div><button class="btn btn-outline btn-sm" id="reset-admin-preview">กลับสู่มุมมองผู้ดูแลระบบ</button></div>` : ''}
           ${content}
         </main>
       </div>`;
@@ -938,13 +948,19 @@
     backdrop?.addEventListener('click', closeSidebar);
     document.querySelectorAll('[data-role-switch]').forEach((select) => select.addEventListener('change', async (event) => {
       const nextRole = String(event.currentTarget.value || '');
-      if (!state.roles.includes(nextRole)) return;
+      if (!availableViewRoles().includes(nextRole)) return;
       state.activeRole = nextRole;
       localStorage.setItem(roleStorageKey(), nextRole);
       closeSidebar();
-      toast(`เปลี่ยนโหมดเป็น ${ROLE_LABELS[nextRole] || 'บทบาทที่เลือก'} แล้ว`, 'success');
+      toast(`${isSystemAdmin() ? 'เปลี่ยนมุมมองจำลองเป็น' : 'เปลี่ยนโหมดเป็น'} ${ROLE_LABELS[nextRole] || 'บทบาทที่เลือก'} แล้ว`, 'success');
       await route();
     }));
+    document.getElementById('reset-admin-preview')?.addEventListener('click', async () => {
+      state.activeRole = 'admin';
+      localStorage.setItem(roleStorageKey(), 'admin');
+      toast('กลับสู่มุมมองผู้ดูแลระบบแล้ว', 'success');
+      await route();
+    });
   }
 
   function navigate(route) {
@@ -1715,94 +1731,334 @@
     return `<input class="input" type="text" value="${esc(value || '')}" ${attributes} ${required} ${disabledAttr} ${placeholder}>`;
   }
 
+  const PROVIDER_FIELD_GROUPS = Object.freeze([
+    ['abo_rh', 'หมู่เลือด ABO และ Rh'],
+    ['screening', 'Antibody Screening'],
+    ['antibody_id', 'Antibody Identification'],
+    ['crossmatch', 'Crossmatch'],
+    ['antigen', 'Antigen Typing'],
+    ['other', 'ข้อมูลการทดสอบเพิ่มเติม']
+  ]);
+
+  function providerProgramScope(program) {
+    const challengeMode = String(program?.challenge_mode || '').toLowerCase();
+    const specimenText = (Array.isArray(program?.specimens) ? program.specimens : [])
+      .map((item) => `${item?.id || ''} ${item?.label || ''}`)
+      .join(' ');
+    const text = `${program?.key || ''} ${program?.title || ''} ${program?.description || ''} ${specimenText}`.toUpperCase();
+    if (challengeMode === 'dry' || /DRY\s*CHALLENGE|EDUCATIONAL\s*CHALLENGE|\bJE1\b|JE-\d+/.test(text) && /DRY|CASE/.test(text)) return 'JE1';
+    if (/\bJXM\b|ELECTRONIC\s*CROSSMATCH/.test(text)) return 'JXM';
+    if (/\bJE\b|\bJE1\b|JE-\d+/.test(text)) return 'JE';
+    if (/\bJ\b|J-\d+/.test(text)) return 'J';
+    return String(program?.key || 'OTHER').toUpperCase();
+  }
+
+  function providerScopeLabel(scope, programs = []) {
+    const dry = programs.some((program) => String(program?.challenge_mode || '').toLowerCase() === 'dry');
+    if (scope === 'J') return 'Part J';
+    if (scope === 'JE1') return dry ? 'JE1 Dry Challenge' : 'Part JE1';
+    if (scope === 'JE') return dry ? 'JE Dry Challenge' : 'Part JE';
+    if (scope === 'JXM') return 'Part JXM';
+    return programs[0]?.title || scope;
+  }
+
+  function providerDomToken(value) {
+    return String(value || 'item').replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '') || 'item';
+  }
+
+  function providerSpecimenOrder(value) {
+    const text = String(value || '').toUpperCase();
+    const match = text.match(/(?:JE|J|EXM|ELU|TRC|AABT)[-_ ]?(\d+)/);
+    const number = match ? Number(match[1]) : 9999;
+    const suffix = /DONOR/.test(text) ? 9 : /R\b/.test(text) ? 2 : /S\b/.test(text) ? 1 : 0;
+    return number * 10 + suffix;
+  }
+
+  function providerFieldCategory(program, field) {
+    const text = `${program?.key || ''} ${program?.title || ''} ${program?.description || ''} ${field?.key || ''} ${field?.label || ''}`.toLowerCase();
+    if (/antigen\s*typing|red\s*cell\s*antigen|antisera|anti[-_ ]?[ceks]|\bphenotype\b|ag[_ -]?typing/.test(text)) return 'antigen';
+    if (/crossmatch|compatib|strength\s*of\s*reaction|serologic\s*result/.test(text)) return 'crossmatch';
+    if (/antibody\s*ident|\babid\b|primary\s*antibody|additional\s*antibod|panel|selected\s*cell|extra\s*cell|rule\s*of\s*3/.test(text)) return 'antibody_id';
+    if (/screen|unexpected\s*antibody\s*detection|screening\s*cell/.test(text)) return 'screening';
+    if (/\babo\b|\brh\b|anti[-_ ]?a\b|anti[-_ ]?b\b|anti[-_ ]?d\b|a1\s*cells?|b\s*cells?|d\s*control|subgroup/.test(text)) return 'abo_rh';
+    return 'other';
+  }
+
+  function providerInstructionBuckets(instruction) {
+    const text = String(instruction || '').trim();
+    if (!text) return [];
+    const blocks = text
+      .replace(/\r/g, '')
+      .split(/\n(?=\s*\d+\)\s)|\n{2,}/)
+      .map((block) => block.trim())
+      .filter(Boolean);
+    const buckets = { shared: [], J: [], JXM: [], JE1: [] };
+    blocks.forEach((block) => {
+      const upper = block.toUpperCase();
+      if (/JE-\d+|\bJE1\b|DRY\s*CHALLENGE|CASE\s*STUDY|ELUATE|ANTI-A1|PASSENGER\s*LYMPHOCYTE|\bDAT\b/.test(upper)) buckets.JE1.push(block);
+      else if (/\bJXM\b|ELECTRONIC\s*CROSSMATCH|SIMULATED\s*DONOR|ISBT|\bLIS\b/.test(upper)) buckets.JXM.push(block);
+      else if (/\bABO\b|\bRH\b|ANTIBODY|CROSSMATCH|ANTIGEN|TESTING\s*INSTRUCTION/.test(upper)) buckets.J.push(block);
+      else buckets.shared.push(block);
+    });
+    const labels = { shared: 'ข้อมูลร่วมของรอบ', J: 'Part J', JXM: 'Part JXM', JE1: 'Part JE1 / Dry Challenge' };
+    return Object.entries(buckets)
+      .filter(([, rows]) => rows.length)
+      .map(([key, rows]) => ({ key, label: labels[key], text: rows.join('\n\n') }));
+  }
+
+  function providerInstructionDetails(instruction) {
+    const buckets = providerInstructionBuckets(instruction);
+    if (!buckets.length) return '';
+    return `<details class="provider-instruction-compact">
+      <summary><span>คำแนะนำก่อนกรอกผล</span><span class="provider-instruction-open-label">เปิดอ่านรายละเอียด</span></summary>
+      <div class="provider-instruction-sections">
+        ${buckets.map((section) => `<details><summary>${esc(section.label)}</summary><div class="provider-instruction-copy">${esc(section.text)}</div></details>`).join('')}
+      </div>
+    </details>`;
+  }
+
+  function providerExtractReaction(text, labelPattern) {
+    const match = String(text || '').match(new RegExp(`${labelPattern}[^\\n\\r]{0,55}?(4\\+|3\\+|2\\+|1\\+|0|NEG(?:ATIVE)?|POS(?:ITIVE)?|NT)`, 'i'));
+    return match ? match[1].toUpperCase() : '';
+  }
+
+  function providerLabTable(title, headers, rows) {
+    const usable = rows.filter((row) => row.slice(1).some(Boolean));
+    if (!usable.length) return '';
+    return `<div class="provider-case-table-card"><h4>${esc(title)}</h4><div class="provider-case-table-wrap"><table><thead><tr>${headers.map((header) => `<th>${esc(header)}</th>`).join('')}</tr></thead><tbody>${usable.map((row) => `<tr>${row.map((cell, index) => `<${index === 0 ? 'th' : 'td'}>${esc(cell || '-')}</${index === 0 ? 'th' : 'td'}>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+  }
+
+  function providerDryCaseDetails(instruction, programs = []) {
+    const text = String(instruction || '').trim();
+    if (!text) return '';
+    const relevantBlocks = providerInstructionBuckets(text)
+      .filter((section) => section.key === 'JE1')
+      .map((section) => section.text);
+    const caseText = relevantBlocks.join('\n\n') || text;
+    const aboRows = [[
+      'ผล',
+      providerExtractReaction(caseText, 'Anti[- ]?A(?!1)'),
+      providerExtractReaction(caseText, 'Anti[- ]?B'),
+      providerExtractReaction(caseText, 'Anti[- ]?D'),
+      providerExtractReaction(caseText, 'A1\\s*cells?'),
+      providerExtractReaction(caseText, 'B\\s*cells?')
+    ]];
+    const screenRows = ['SC1', 'SC2', 'SC3'].map((cell) => [cell, providerExtractReaction(caseText, cell)]);
+    const datRows = [[
+      'ผล',
+      providerExtractReaction(caseText, 'Polyspecific'),
+      providerExtractReaction(caseText, 'Anti[- ]?IgG'),
+      providerExtractReaction(caseText, 'Anti[- ]?C3d')
+    ]];
+    const eluateNames = ['SC1', 'SC2', 'SC3', 'A1 cells #1', 'A1 cells #2', 'A1 cells #3', 'B cells #1', 'B cells #2', 'B cells #3'];
+    const eluateRows = eluateNames.map((name) => {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\ /g, '\\s*');
+      const rowMatch = caseText.match(new RegExp(`${escaped}[^\\n\\r]{0,90}?(4\\+|3\\+|2\\+|1\\+|0|NT)[^\\n\\r]{0,40}?(4\\+|3\\+|2\\+|1\\+|0|NT)[^\\n\\r]{0,40}?(4\\+|3\\+|2\\+|1\\+|0|NT)`, 'i'));
+      return [name, rowMatch?.[1] || '', rowMatch?.[2] || '', rowMatch?.[3] || ''];
+    });
+    const additional = caseText.split(/\n/).filter((line) => /Anti-A1|pre-transfusion|lectin|additional stud/i.test(line)).join('\n');
+    const caseLabel = programs.flatMap((program) => program.specimens || []).map((item) => item.label || item.id).filter(Boolean)[0] || 'Case Study';
+    return `<details class="provider-dry-case-details">
+      <summary><span>Case Study — ${esc(caseLabel)}</span><span>เปิดอ่านข้อมูลประกอบโจทย์</span></summary>
+      <div class="provider-dry-case-body">
+        <div class="provider-case-narrative">${esc(caseText)}</div>
+        <div class="provider-case-table-grid">
+          ${providerLabTable('ABO/Rh', ['', 'Anti-A', 'Anti-B', 'Anti-D', 'A1 cells', 'B cells'], aboRows)}
+          ${providerLabTable('Antibody screen', ['', 'Result'], screenRows)}
+          ${providerLabTable('DAT', ['', 'Polyspecific', 'Anti-IgG', 'Anti-C3d'], datRows)}
+          ${providerLabTable('Eluate panel', ['', 'AHG', 'CC', 'LW'], eluateRows)}
+        </div>
+        ${additional ? `<div class="notice info"><strong>Additional studies</strong><div class="provider-additional-copy">${esc(additional)}</div></div>` : ''}
+      </div>
+    </details>`;
+  }
+
+  function providerGroupPrograms(schema) {
+    const groups = new Map();
+    (schema?.programs || []).forEach((program, index) => {
+      const scope = providerProgramScope(program);
+      if (!groups.has(scope)) groups.set(scope, { scope, programs: [], order: index });
+      groups.get(scope).programs.push(program);
+    });
+    return [...groups.values()].sort((a, b) => {
+      const order = { J: 1, JXM: 2, JE: 3, JE1: 4 };
+      return (order[a.scope] || 20 + a.order) - (order[b.scope] || 20 + b.order);
+    });
+  }
+
+  function providerGroupSpecimens(group, schema) {
+    const map = new Map();
+    group.programs.forEach((program) => {
+      (program.specimens || []).forEach((item) => {
+        const id = String(item?.id || item?.label || '').trim();
+        if (id && !map.has(id)) map.set(id, String(item?.label || id));
+      });
+      (program.relationships || []).forEach((relationship) => {
+        [relationship?.from_specimen, relationship?.to_specimen].forEach((raw) => {
+          const id = String(raw || '').trim();
+          if (id && !map.has(id)) map.set(id, id);
+        });
+      });
+    });
+    (schema?.antigen_sections || []).forEach((section) => {
+      const id = String(section?.specimen_id || '').trim();
+      if (!id) return;
+      const inferred = providerProgramScope({ key: id, specimens: [{ id }] });
+      if (inferred === group.scope && !map.has(id)) map.set(id, id);
+    });
+    return [...map.entries()]
+      .map(([id, label]) => ({ id, label }))
+      .sort((a, b) => providerSpecimenOrder(a.id) - providerSpecimenOrder(b.id) || a.id.localeCompare(b.id, 'en'));
+  }
+
+  function providerRelationshipHtml(programs, specimenId) {
+    const lines = programs.flatMap((program) => (program.relationships || []).filter((relationship) => {
+      const from = String(relationship?.from_specimen || '').trim();
+      const to = String(relationship?.to_specimen || '').trim();
+      return from === specimenId || to === specimenId;
+    }).map((relationship) => {
+      const from = String(relationship?.from_specimen || '').trim();
+      const to = String(relationship?.to_specimen || '').trim();
+      const type = String(relationship?.type || '').trim();
+      const note = String(relationship?.note || '').trim();
+      return [from && `จาก ${from}`, to && `กับ ${to}`, type, note].filter(Boolean).join(' · ');
+    }));
+    const unique = [...new Set(lines.filter(Boolean))];
+    return unique.length ? `<div class="notice info small provider-specimen-relationships"><strong>ความสัมพันธ์ของตัวอย่าง</strong><br>${unique.map(esc).join('<br>')}</div>` : '';
+  }
+
+  function providerSpecimenCards(group, schema, specimens, antigenTyping, methodsByProgram, prefix, disabled) {
+    return specimens.map((specimen, specimenIndex) => {
+      const categorized = new Map(PROVIDER_FIELD_GROUPS.map(([key]) => [key, []]));
+      const relevantPrograms = [];
+      group.programs.forEach((program) => {
+        const hasSpecimen = (program.specimens || []).some((item) => String(item?.id || item?.label || '') === specimen.id);
+        const hasRelationship = (program.relationships || []).some((relationship) => [relationship?.from_specimen, relationship?.to_specimen].map(String).includes(specimen.id));
+        if (hasSpecimen || hasRelationship) relevantPrograms.push(program);
+        if (!hasSpecimen) return;
+        const values = (state.currentResultPayload?.specimens || {})[specimen.id] || {};
+        (program.specimen_fields || []).forEach((field) => {
+          const fieldKey = String(field?.key || '');
+          const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimen.id)}" data-provider-field="${esc(fieldKey)}"`;
+          categorized.get(providerFieldCategory(program, field)).push({ program, field, html: generatedFieldControl(field, values[fieldKey], attrs, disabled) });
+        });
+      });
+      (schema?.antigen_sections || []).filter((section) => String(section?.specimen_id || '') === specimen.id).forEach((section) => {
+        const values = antigenTyping[specimen.id] || {};
+        (section.fields || []).forEach((field) => {
+          const fieldKey = String(field?.key || '');
+          const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="antigen" data-provider-item="${esc(specimen.id)}" data-provider-field="${esc(fieldKey)}"`;
+          categorized.get('antigen').push({ program: section, field, html: generatedFieldControl(field, values[fieldKey], attrs, disabled) });
+        });
+      });
+      const categoryCards = PROVIDER_FIELD_GROUPS.map(([categoryKey, categoryLabel]) => {
+        const rows = categorized.get(categoryKey) || [];
+        if (!rows.length) return '';
+        return `<section class="provider-test-card provider-test-${esc(categoryKey)}"><h4>${esc(categoryLabel)}</h4><div class="provider-field-grid">${rows.map((row) => `<div class="field"><label>${esc(row.field.label || row.field.key)}</label>${row.html}${row.program?.title ? `<span class="provider-field-source">${esc(row.program.title)}</span>` : ''}</div>`).join('')}</div></section>`;
+      }).join('');
+      const methodRows = relevantPrograms.flatMap((program) => (program.method_fields || []).map((field) => ({ program, field })));
+      const methods = methodRows.length ? `<details class="provider-method-card"><summary>วิธีตรวจ / น้ำยา / เครื่องมือ</summary><div class="provider-field-grid">${methodRows.map(({ program, field }) => {
+        const fieldKey = String(field?.key || '');
+        const programKey = String(program?.key || 'PROGRAM');
+        const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="method" data-provider-item="${esc(programKey)}" data-provider-field="${esc(fieldKey)}"`;
+        return `<div class="field"><label>${esc(field.label || fieldKey)}</label>${generatedFieldControl(field, methodsByProgram?.[programKey]?.[fieldKey], attrs, disabled)}<span class="provider-field-source">${esc(program.title || programKey)}</span></div>`;
+      }).join('')}</div></details>` : '';
+      return `<section class="provider-specimen-panel" data-provider-specimen-panel="${esc(specimen.id)}" ${specimenIndex ? 'hidden' : ''}>
+        <div class="provider-specimen-heading"><div><span class="eyebrow">ตัวอย่างที่กำลังกรอก</span><h3>${esc(specimen.label)}</h3></div><span class="badge info">ทีละตัวอย่าง</span></div>
+        ${providerRelationshipHtml(group.programs, specimen.id)}
+        <div class="provider-test-card-grid">${categoryCards || '<div class="notice warning">ยังไม่มีช่องกรอกสำหรับตัวอย่างนี้ กรุณาตรวจโครงสร้างแบบฟอร์มต้นทาง</div>'}</div>
+        ${methods}
+      </section>`;
+    }).join('');
+  }
+
+  function providerDryProgramPanel(group, instruction, specimensPayload, prefix, disabled) {
+    const questionCards = group.programs.flatMap((program) => (program.specimens || []).flatMap((specimen) => {
+      const specimenId = String(specimen?.id || specimen?.label || 'CASE');
+      const values = specimensPayload[specimenId] || {};
+      return (program.specimen_fields || []).map((field, index) => {
+        const fieldKey = String(field?.key || '');
+        const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimenId)}" data-provider-field="${esc(fieldKey)}"`;
+        return `<div class="provider-case-question"><div class="provider-case-question-head"><span class="question-number">${index + 1}</span><label>${esc(field.label || fieldKey)}</label></div>${generatedFieldControl(field, values[fieldKey], attrs, disabled)}</div>`;
+      });
+    }));
+    return `<div class="provider-dry-page">
+      ${providerDryCaseDetails(instruction, group.programs)}
+      <section class="provider-dry-question-section"><div class="provider-specimen-heading"><div><span class="eyebrow">JE1 — Dry Challenge</span><h3>คำถามจากแบบฟอร์มผู้ให้บริการ</h3></div><span class="badge info">${questionCards.length} ข้อ</span></div><div class="provider-case-question-list">${questionCards.join('') || '<div class="notice warning">ยังไม่พบคำถามจาก Blank Result Form</div>'}</div></section>
+    </div>`;
+  }
+
   function providerGeneratedResultForm(payload, prefix, disabled) {
     const schema = generatedResultSchema();
     if (!schema) return '';
     const p = payload && payload.schema === PROVIDER_GENERATED_SCHEMA ? payload : {};
-    const specimens = p.specimens || {};
+    const specimensPayload = p.specimens || {};
     const antigenTyping = p.antigen_typing || {};
     const methodsByProgram = p.methods_by_program || {};
     const instruction = String(state.currentRound?.generated_instruction_th || '').trim();
-    const hasEducationalProgram = (schema.programs || []).some((program) => String(program?.challenge_mode || '').toLowerCase() === 'dry'
-      || /(?:JE1|educational|dry\s*challenge)/i.test(`${program?.key || ''} ${program?.title || ''} ${program?.description || ''}`));
-    const programHtml = schema.programs.map((program) => {
-      const programKey = String(program.key || 'PROGRAM');
-      const specimenRows = Array.isArray(program.specimens) ? program.specimens : [];
-      const specimenFields = Array.isArray(program.specimen_fields) ? program.specimen_fields : [];
-      const methodFields = Array.isArray(program.method_fields) ? program.method_fields : [];
-      const challengeMode = String(program.challenge_mode || '').toLowerCase();
-      const relationships = Array.isArray(program.relationships) ? program.relationships : [];
-      const isProviderCase = (challengeMode === 'dry' || /(?:JE1|educational|dry\s*challenge)/i.test(`${programKey} ${program.title || ''} ${program.description || ''}`))
-        && specimenRows.length === 1
-        && specimenFields.length >= 2
-        && specimenFields.every((field) => Array.isArray(field.options) && field.options.length >= 2);
-      const table = specimenRows.length && specimenFields.length ? (isProviderCase ? (() => {
-        const specimen = specimenRows[0];
-        const specimenId = String(specimen.id || specimen.label || '');
-        const values = specimens[specimenId] || {};
-        return `<div class="provider-case-form"><div class="provider-case-id"><span class="badge info">${esc(specimen.label || specimenId)}</span><span>ตอบตามโจทย์และรหัสตัวเลือกของผู้ให้บริการ</span></div><div class="provider-case-question-list">${specimenFields.map((field, index) => {
-          const fieldKey = String(field.key || '');
-          const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimenId)}" data-provider-field="${esc(fieldKey)}"`;
-          return `<div class="provider-case-question"><div class="provider-case-question-head"><span class="question-number">${index + 1}</span><label>${esc(field.label || fieldKey)}</label></div>${generatedFieldControl(field, values[fieldKey], attrs, disabled)}</div>`;
-        }).join('')}</div></div>`;
-      })() : `<div class="table-wrap"><table class="compact-table cap-entry-table" style="min-width:${Math.max(720, 180 + specimenFields.length * 190)}px"><thead><tr><th>ตัวอย่าง</th>${specimenFields.map((field) => `<th>${esc(field.label || field.key)}</th>`).join('')}</tr></thead><tbody>${specimenRows.map((specimen) => {
-        const specimenId = String(specimen.id || specimen.label || '');
-        const values = specimens[specimenId] || {};
-        return `<tr><td><strong>${esc(specimen.label || specimenId)}</strong></td>${specimenFields.map((field) => {
-          const fieldKey = String(field.key || '');
-          const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimenId)}" data-provider-field="${esc(fieldKey)}"`;
-          return `<td>${generatedFieldControl(field, values[fieldKey], attrs, disabled)}</td>`;
-        }).join('')}</tr>`;
-      }).join('')}</tbody></table></div>`) : '<div class="notice warning">แบบกรอกส่วนนี้ยังไม่มีรายการตัวอย่างหรือช่องกรอก กรุณาตรวจเอกสารต้นทางแล้วสร้างใหม่</div>';
-      const methods = methodFields.length ? `<details class="result-method-details"><summary>${esc(program.title || programKey)} — วิธีตรวจและรหัสที่ใช้</summary><div class="form-grid cols-3" style="margin-top:12px">${methodFields.map((field) => {
-        const fieldKey = String(field.key || '');
-        const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="method" data-provider-item="${esc(programKey)}" data-provider-field="${esc(fieldKey)}"`;
-        return `<div class="field"><label>${esc(field.label || fieldKey)}</label>${generatedFieldControl(field, methodsByProgram?.[programKey]?.[fieldKey], attrs, disabled)}</div>`;
-      }).join('')}</div></details>` : '';
-      const modeLabel = challengeMode === 'dry' ? 'Dry challenge'
-        : challengeMode === 'wet' ? 'ตัวอย่างจริง / Wet challenge'
-          : challengeMode === 'mixed' ? 'Mixed challenge'
-            : '';
-      const relationshipHtml = relationships.length ? `<div class="notice info small" style="margin:8px 0 12px"><strong>ความสัมพันธ์ของตัวอย่าง</strong><br>${relationships.map((relationship) => {
-        const from = String(relationship?.from_specimen || '').trim();
-        const to = String(relationship?.to_specimen || '').trim();
-        const type = String(relationship?.type || '').trim();
-        const note = String(relationship?.note || '').trim();
-        return esc([from && `จาก ${from}`, to && `กับ ${to}`, type, note].filter(Boolean).join(' · '));
-      }).join('<br>')}</div>` : '';
-      return `<div class="subcard"><div class="provider-program-heading"><h3>${esc(program.title || programKey)}</h3>${modeLabel ? `<span class="badge info">${esc(modeLabel)}</span>` : ''}</div>${program.description ? `<p class="small muted">${esc(program.description)}</p>` : ''}${relationshipHtml}${table}${methods}</div>`;
+    // ใช้เฉพาะระหว่างการประกอบ HTML เพื่อไม่ต้องส่ง payload ผ่านทุก helper และล้างทันทีหลังสร้าง
+    state.currentResultPayload = p;
+    const groups = providerGroupPrograms(schema);
+    const shellToken = `${providerDomToken(prefix)}-${providerDomToken(schema.schema_version || '1')}`;
+    const programPanels = groups.map((group, groupIndex) => {
+      const scopeLabel = providerScopeLabel(group.scope, group.programs);
+      const isDry = group.programs.some((program) => String(program?.challenge_mode || '').toLowerCase() === 'dry');
+      const groupToken = `${shellToken}-${providerDomToken(group.scope)}`;
+      if (isDry) {
+        return `<section class="provider-program-panel" data-provider-program-panel="${esc(group.scope)}" ${groupIndex ? 'hidden' : ''}>${providerDryProgramPanel(group, instruction, specimensPayload, prefix, disabled)}</section>`;
+      }
+      const groupSpecimens = providerGroupSpecimens(group, schema);
+      return `<section class="provider-program-panel" data-provider-program-panel="${esc(group.scope)}" ${groupIndex ? 'hidden' : ''}>
+        <div class="provider-specimen-tabs" role="tablist" aria-label="เลือกตัวอย่างใน ${esc(scopeLabel)}">${groupSpecimens.map((specimen, index) => `<button type="button" class="provider-specimen-tab ${index ? '' : 'active'}" data-provider-specimen-tab="${esc(specimen.id)}" aria-selected="${index ? 'false' : 'true'}">${esc(specimen.label)}</button>`).join('')}</div>
+        ${providerSpecimenCards(group, schema, groupSpecimens, antigenTyping, methodsByProgram, prefix, disabled)}
+      </section>`;
     }).join('');
-
-    const antigenHtml = (Array.isArray(schema.antigen_sections) ? schema.antigen_sections : []).map((section) => {
-      const specimenId = String(section.specimen_id || '');
-      const fields = Array.isArray(section.fields) ? section.fields : [];
-      const values = antigenTyping[specimenId] || {};
-      return `<div class="subcard"><h3>${esc(section.title || `การตรวจแอนติเจน — ${specimenId}`)}</h3><div class="form-grid cols-3">${fields.map((field) => {
-        const fieldKey = String(field.key || '');
-        const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="antigen" data-provider-item="${esc(specimenId)}" data-provider-field="${esc(fieldKey)}"`;
-        return `<div class="field"><label>${esc(field.label || fieldKey)}</label>${generatedFieldControl(field, values[fieldKey], attrs, disabled)}</div>`;
-      }).join('')}</div></div>`;
-    }).join('');
-
-    const generalFields = Array.isArray(schema.general_fields)
-      ? schema.general_fields
-      : [
-          { key: 'reagents', label: 'น้ำยา / เลขรุ่นผลิต', input_type: 'textarea' },
-          { key: 'instrument', label: 'เครื่องมือ', input_type: 'textarea' },
-          { key: 'overall_note', label: 'หมายเหตุรวม', input_type: 'textarea' }
-        ];
-    const generalHtml = generalFields.length ? `<div class="form-grid cols-2">${generalFields.map((field, index) => {
-      const fieldKey = String(field.key || '');
+    const generalFields = Array.isArray(schema.general_fields) ? schema.general_fields : [];
+    const generalHtml = generalFields.length ? `<details class="provider-general-card"><summary>ข้อมูลรวมของรอบ / หมายเหตุ</summary><div class="provider-field-grid">${generalFields.map((field) => {
+      const fieldKey = String(field?.key || '');
       const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="general" data-provider-field="${esc(fieldKey)}"`;
-      const full = index === generalFields.length - 1 && generalFields.length % 2 === 1 ? ' style="grid-column:1/-1"' : '';
-      return `<div class="field"${full}><label>${esc(field.label || fieldKey)}</label>${generatedFieldControl(field, p[fieldKey], attrs, disabled)}</div>`;
-    }).join('')}</div>` : '';
-
-    return `<div class="result-grid provider-generated-result-form">
-      <div class="notice info"><strong>${esc(schema.title || 'แบบกรอกที่สร้างจากเอกสารผู้ให้บริการ')}</strong><br><span class="small">โครงสร้าง จำนวนช่อง หน่วย และตัวเลือกสร้างจากแบบฟอร์มเปล่าของผู้ให้บริการ ส่วนคู่มือใช้ประกอบคำอธิบาย ผู้จัดการคุณภาพต้องตรวจทานก่อนใช้งาน</span>${instruction ? `<details class="provider-instruction-details" style="margin-top:8px" ${hasEducationalProgram ? 'open' : ''}><summary>${hasEducationalProgram ? 'รายละเอียด Case Study และคำแนะนำ' : 'ดูคำแนะนำภาษาไทย'}</summary><div class="small" style="white-space:pre-wrap;margin-top:8px">${esc(instruction)}</div></details>` : ''}</div>
-      ${programHtml}${antigenHtml}${generalHtml}
+      return `<div class="field"><label>${esc(field.label || fieldKey)}</label>${generatedFieldControl(field, p[fieldKey], attrs, disabled)}</div>`;
+    }).join('')}</div></details>` : '';
+    const html = `<div class="result-grid provider-generated-result-form" data-provider-form-shell="${esc(shellToken)}">
+      <div class="provider-form-intro"><div><span class="eyebrow">${esc(schema.title || 'แบบกรอกจากผู้ให้บริการ')}</span><h3>กรอกผลทีละ Part และทีละตัวอย่าง</h3><p>เลือก Part และตัวอย่างด้านล่าง ระบบจะแสดงเฉพาะช่องที่เกี่ยวข้อง ไม่มีตารางยาวให้เลื่อนแนวนอน</p></div><span class="badge success">Responsive form</span></div>
+      ${providerInstructionDetails(instruction)}
+      <nav class="provider-program-tabs" role="tablist" aria-label="เลือก Part">${groups.map((group, index) => `<button type="button" class="provider-program-tab ${index ? '' : 'active'}" data-provider-program-tab="${esc(group.scope)}" aria-selected="${index ? 'false' : 'true'}">${esc(providerScopeLabel(group.scope, group.programs))}</button>`).join('')}</nav>
+      <div class="provider-program-panels">${programPanels}</div>
+      ${generalHtml}
     </div>`;
+    delete state.currentResultPayload;
+    return html;
   }
+
+  function bindProviderGeneratedResultControls(root = document) {
+    root.querySelectorAll('[data-provider-form-shell]').forEach((shell) => {
+      shell.querySelectorAll('[data-provider-program-tab]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const target = button.dataset.providerProgramTab;
+          shell.querySelectorAll('[data-provider-program-tab]').forEach((item) => {
+            const active = item === button;
+            item.classList.toggle('active', active);
+            item.setAttribute('aria-selected', String(active));
+          });
+          shell.querySelectorAll('[data-provider-program-panel]').forEach((panel) => { panel.hidden = panel.dataset.providerProgramPanel !== target; });
+        });
+      });
+      shell.querySelectorAll('[data-provider-program-panel]').forEach((programPanel) => {
+        programPanel.querySelectorAll('[data-provider-specimen-tab]').forEach((button) => {
+          button.addEventListener('click', () => {
+            const target = button.dataset.providerSpecimenTab;
+            programPanel.querySelectorAll('[data-provider-specimen-tab]').forEach((item) => {
+              const active = item === button;
+              item.classList.toggle('active', active);
+              item.setAttribute('aria-selected', String(active));
+            });
+            programPanel.querySelectorAll('[data-provider-specimen-panel]').forEach((panel) => { panel.hidden = panel.dataset.providerSpecimenPanel !== target; });
+          });
+        });
+      });
+    });
+  }
+
 
   function collectProviderGeneratedPayload(form, prefix) {
     const schema = generatedResultSchema();
@@ -1998,6 +2254,7 @@
   }
 
   function bindCapWorkupControls(root = document) {
+    bindProviderGeneratedResultControls(root);
     root.querySelectorAll('.cap-antibody-autocomplete').forEach((input) => {
       if (input.dataset.capAntibodyBound === '1') return;
       input.dataset.capAntibodyBound = '1';
@@ -3166,6 +3423,7 @@
       const { data, error } = await state.supabase.from('ec_individual_results').select('*').eq('id', button.dataset.viewIndividual).single();
       if (error) return toast(friendlyError(error), 'danger');
       showModal('ผลย้อนหลังที่กรอกแทนผู้ปฏิบัติ', resultForm(data.result_payload, 'viewHistorical', true), '', true);
+      bindCapWorkupControls(document.getElementById('modal-backdrop') || document);
     }));
     document.querySelectorAll('[data-confirm-historical-result]').forEach((button) => button.addEventListener('click', async () => {
       if (!confirm('ยืนยันว่าข้อมูลที่ผู้ดูแลระบบหรือผู้จัดการคุณภาพกรอกแทน ตรงกับหลักฐานเดิมของคุณหรือไม่')) return;
@@ -3826,7 +4084,7 @@
     };
     document.getElementById('save-individual')?.addEventListener('click',()=>save(false));
     document.getElementById('submit-individual')?.addEventListener('click',()=>{ if(confirm('ยืนยันส่งผลรายบุคคลหรือไม่ หลังส่งจะแก้ไขเองไม่ได้')) save(true); });
-    document.querySelectorAll('[data-view-individual]').forEach((b)=>b.addEventListener('click',async()=>{const {data,error}=await state.supabase.from('ec_individual_results').select('*,ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('id',b.dataset.viewIndividual).single();if(error)return toast(friendlyError(error), 'danger');showModal(`ผลของ ${data.ec_profiles?.full_name||''}`,resultForm(data.result_payload,'view',true),'',true);}));
+    document.querySelectorAll('[data-view-individual]').forEach((b)=>b.addEventListener('click',async()=>{const {data,error}=await state.supabase.from('ec_individual_results').select('*,ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('id',b.dataset.viewIndividual).single();if(error)return toast(friendlyError(error), 'danger');showModal(`ผลของ ${data.ec_profiles?.full_name||''}`,resultForm(data.result_payload,'view',true),'',true);bindCapWorkupControls(document.getElementById('modal-backdrop') || document);}));
   }
 
   function bindConsensus(round) {
@@ -4930,7 +5188,7 @@
   }
 
   async function renderAutomation() {
-    if (!canManage()) {
+    if (!isSystemAdmin() && !canManage()) {
       const content = `<section class="page"><div class="page-header"><div><h1>แจ้งเตือน / Google Drive</h1></div></div><div class="notice warning">หน้านี้ตั้งค่าได้เฉพาะโหมดผู้ดูแลระบบหรือผู้จัดการคุณภาพ กรุณาเปลี่ยนบทบาทจากเมนูด้านซ้าย</div></section>`;
       appEl.innerHTML = shell(content, 'แจ้งเตือน / Google Drive'); bindShell(); return;
     }
@@ -5045,7 +5303,7 @@
   }
 
   async function renderUsers() {
-    if (!hasRole('admin')) {
+    if (!isSystemAdmin() && !hasRole('admin')) {
       const content = `<section class="page">
         <div class="page-header"><div><h1>ผู้ใช้งานและสิทธิ์</h1><p>ขณะนี้อยู่ในโหมด ${esc(ROLE_LABELS[state.activeRole] || 'ไม่ระบุบทบาท')}</p></div></div>
         <div class="notice warning">หน้านี้จัดการได้เฉพาะโหมดผู้ดูแลระบบ กรุณาเลือกโหมดการทำงานจากเมนูด้านซ้าย</div>
@@ -5262,7 +5520,7 @@
     };
   }
 
-  async function renderAudit(){if(!hasRole('admin','qm','viewer')){const content=`<section class="page"><div class="notice warning">บัญชีนี้ไม่มีสิทธิ์ดูประวัติการใช้งาน</div></section>`;appEl.innerHTML=shell(content,'ประวัติการใช้งาน');bindShell();return;}const {data,error}=await state.supabase.from('ec_audit_logs').select('*').order('occurred_at',{ascending:false}).limit(300);if(error)return renderError(error);const content=`<section class="page"><div class="page-header"><div><h1>ประวัติการใช้งาน</h1><p>ตรวจสอบว่าใครทำรายการอะไร เมื่อใด และแก้ไขข้อมูลส่วนใด</p></div></div><div class="card"><div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>รายการที่ทำ</th><th>ส่วนของระบบ</th><th>รหัสรายการ</th><th>เหตุผล</th></tr></thead><tbody>${(data||[]).map(x=>`<tr><td>${fmtDate(x.occurred_at,true)}</td><td>${esc(labelFrom(AUDIT_ACTION_LABELS,x.action,'รายการอื่น'))}</td><td>${esc(labelFrom(AUDIT_TABLE_LABELS,x.table_name,'ส่วนอื่นของระบบ'))}</td><td><code>${esc(x.record_id||'-')}</code></td><td>${esc(x.reason||'-')}</td></tr>`).join('')}</tbody></table></div></div></section>`;appEl.innerHTML=shell(content,'ประวัติการใช้งาน');bindShell();}
+  async function renderAudit(){if(!isSystemAdmin() && !hasRole('admin','qm','viewer')){const content=`<section class="page"><div class="notice warning">บัญชีนี้ไม่มีสิทธิ์ดูประวัติการใช้งาน</div></section>`;appEl.innerHTML=shell(content,'ประวัติการใช้งาน');bindShell();return;}const {data,error}=await state.supabase.from('ec_audit_logs').select('*').order('occurred_at',{ascending:false}).limit(300);if(error)return renderError(error);const content=`<section class="page"><div class="page-header"><div><h1>ประวัติการใช้งาน</h1><p>ตรวจสอบว่าใครทำรายการอะไร เมื่อใด และแก้ไขข้อมูลส่วนใด</p></div></div><div class="card"><div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>รายการที่ทำ</th><th>ส่วนของระบบ</th><th>รหัสรายการ</th><th>เหตุผล</th></tr></thead><tbody>${(data||[]).map(x=>`<tr><td>${fmtDate(x.occurred_at,true)}</td><td>${esc(labelFrom(AUDIT_ACTION_LABELS,x.action,'รายการอื่น'))}</td><td>${esc(labelFrom(AUDIT_TABLE_LABELS,x.table_name,'ส่วนอื่นของระบบ'))}</td><td><code>${esc(x.record_id||'-')}</code></td><td>${esc(x.reason||'-')}</td></tr>`).join('')}</tbody></table></div></div></section>`;appEl.innerHTML=shell(content,'ประวัติการใช้งาน');bindShell();}
 
   async function renderSettings(){
     const {data:factors}=await state.supabase.auth.mfa.listFactors();
