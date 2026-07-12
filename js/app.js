@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.4.2
+/* CNMI EQA and Competency Management System v2.4.5
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -20,13 +20,15 @@
   };
 
   const SIDEBAR_COLLAPSED_KEY = 'cnmi-eqa-sidebar-collapsed';
-  const AI_EXTRACTION_SCHEMA_VERSION = 'v2.4.2';
+  const AI_EXTRACTION_SCHEMA_VERSION = 'v2.4.5';
 
   function isAiExtractionCurrent(doc) {
     const version = String(doc?.ai_extraction?.schema_version || '');
     if (version === AI_EXTRACTION_SCHEMA_VERSION) return true;
+    const category = String(doc?.category || '');
+    if (version === 'v2.4.2') return category !== 'instruction';
     if (version !== 'v2.3.2') return false;
-    return !['source_document', 'instruction'].includes(String(doc?.category || ''));
+    return !['source_document', 'instruction'].includes(category);
   }
 
   const PROGRAM_PROFILE_DEFINITIONS = Object.freeze({
@@ -420,6 +422,13 @@
     return resolveProgramProfile(round).code === 'CAP_J_JE';
   }
 
+  function isLegacyCapJJeARound(round = state.currentRound) {
+    if (!isCapJJeRound(round)) return false;
+    const text = `${round?.program_code || ''} ${round?.round_code || ''} ${round?.program_name || ''}`.toUpperCase();
+    return Number(round?.survey_year || 0) === 2026
+      && (/\bJ(?:\s*\/\s*JE)?[-\s]?A\b/.test(text) || (/\bJ[-\s]?A\b/.test(text) && /\bJE[-\s]?A\b/.test(text)));
+  }
+
   function resultSpecimensForRound(round = state.currentRound, payload = null) {
     const payloadKeys = Object.keys(payload?.specimens || {});
     if (payload?.schema === PROVIDER_GENERATED_SCHEMA || generatedResultSchema(round)) {
@@ -430,7 +439,7 @@
         .filter(Boolean))];
       if (schemaKeys.length) return schemaKeys;
     }
-    if (isCapJJeRound(round) || payload?.schema === CAP_J_JE_SCHEMA) return [...CAP_J_RESULT_SPECIMENS, ...CAP_JE_RESULT_SPECIMENS];
+    if (isLegacyCapJJeARound(round) || payload?.schema === CAP_J_JE_SCHEMA) return [...CAP_J_RESULT_SPECIMENS, ...CAP_JE_RESULT_SPECIMENS];
     return payloadKeys.length ? payloadKeys : LEGACY_RESULT_SPECIMENS;
   }
 
@@ -462,6 +471,15 @@
 
   function questionPromptParts(value) {
     const raw = String(value || '').trim();
+    const marker = raw.match(/^\[\[CASE_CONTEXT\]\]\s*([\s\S]*?)\s*\[\[QUESTION\]\]\s*([\s\S]*)$/i);
+    if (marker) {
+      const context = String(marker[1] || '').trim();
+      const promptRaw = String(marker[2] || '').trim();
+      return {
+        context,
+        prompt: displayQuestionPrompt(promptRaw) || promptRaw,
+      };
+    }
     const parts = raw.split(/\n\s*\n/).map((item) => item.trim()).filter(Boolean);
     if (parts.length >= 2 && /^ข้อมูลกรณีศึกษา/i.test(parts[0])) {
       return {
@@ -1488,18 +1506,27 @@
     const images = questionImageIds(question).map((id) => imageMap.get(id)).filter(Boolean);
     if (!images.length) return '';
     const isAbId = isAntibodyIdentificationQuestion(question);
+    const questionText = `${question?.section || ''} ${question?.prompt || ''}`;
+    const isProviderCase = /DRY\s*CHALLENGE|EDUCATIONAL\s*CHALLENGE|แบบฟอร์มผู้ให้บริการ|\[\[CASE_CONTEXT\]\]/i.test(questionText);
+    const documentLabel = (image) => {
+      if (image.category === 'instruction') return 'รายละเอียดเคสและคู่มือ';
+      if (image.category === 'source_document') return 'โจทย์และแบบฟอร์มต้นฉบับ';
+      return 'เอกสารอ้างอิง';
+    };
     const items = images.map((image, index) => {
       const isPanel = image.category === 'antibody_panel' || /antigram/i.test(`${image.file_name || ''} ${image.title || ''}`);
       const className = isPanel ? 'question-gallery-panel' : 'question-gallery-result';
-      const pdfFrame = `<iframe class="question-gallery-pdf" src="${esc(image.url)}#toolbar=0&navpanes=0" title="${esc(image.title || image.file_name || 'เอกสาร PDF')}"></iframe>`;
+      const title = image.title || image.file_name || 'เอกสาร PDF';
+      const pdfFrame = `<iframe class="question-gallery-pdf" src="${esc(image.url)}#toolbar=0&navpanes=0" title="${esc(title)}"></iframe>`;
+      const collapsePdf = variant === 'quiz' || isProviderCase;
       const media = image.mime_type === 'application/pdf'
-        ? (variant === 'quiz'
-          ? `<details class="question-reference-document"><summary>เปิดเอกสารอ้างอิง: ${esc(image.title || image.file_name || 'เอกสาร PDF')}</summary>${pdfFrame}</details>`
+        ? (collapsePdf
+          ? `<details class="question-reference-document"><summary>${esc(documentLabel(image))}: ${esc(title)}</summary>${pdfFrame}</details>`
           : pdfFrame)
         : `<img src="${esc(image.url)}" alt="${esc(image.title || image.file_name || 'รูปประกอบคำถาม')}">`;
       return `<figure class="question-gallery-item ${className}">
         ${media}
-        <figcaption>${esc(image.title || image.file_name || `รูปประกอบ ${index + 1}`)}</figcaption>
+        <figcaption>${esc(title || `รูปประกอบ ${index + 1}`)}</figcaption>
       </figure>`;
     }).join('');
     return `<div class="question-image-gallery ${isAbId ? 'is-abid' : ''} ${variant === 'admin' ? 'is-admin' : ''}">${items}</div>`;
@@ -1635,12 +1662,29 @@
     const antigenTyping = p.antigen_typing || {};
     const methodsByProgram = p.methods_by_program || {};
     const instruction = String(state.currentRound?.generated_instruction_th || '').trim();
+    const hasEducationalProgram = (schema.programs || []).some((program) => String(program?.challenge_mode || '').toLowerCase() === 'dry'
+      || /(?:JE1|educational|dry\s*challenge)/i.test(`${program?.key || ''} ${program?.title || ''} ${program?.description || ''}`));
     const programHtml = schema.programs.map((program) => {
       const programKey = String(program.key || 'PROGRAM');
       const specimenRows = Array.isArray(program.specimens) ? program.specimens : [];
       const specimenFields = Array.isArray(program.specimen_fields) ? program.specimen_fields : [];
       const methodFields = Array.isArray(program.method_fields) ? program.method_fields : [];
-      const table = specimenRows.length && specimenFields.length ? `<div class="table-wrap"><table class="compact-table cap-entry-table" style="min-width:${Math.max(720, 180 + specimenFields.length * 190)}px"><thead><tr><th>ตัวอย่าง</th>${specimenFields.map((field) => `<th>${esc(field.label || field.key)}</th>`).join('')}</tr></thead><tbody>${specimenRows.map((specimen) => {
+      const challengeMode = String(program.challenge_mode || '').toLowerCase();
+      const relationships = Array.isArray(program.relationships) ? program.relationships : [];
+      const isProviderCase = (challengeMode === 'dry' || /(?:JE1|educational|dry\s*challenge)/i.test(`${programKey} ${program.title || ''} ${program.description || ''}`))
+        && specimenRows.length === 1
+        && specimenFields.length >= 2
+        && specimenFields.every((field) => Array.isArray(field.options) && field.options.length >= 2);
+      const table = specimenRows.length && specimenFields.length ? (isProviderCase ? (() => {
+        const specimen = specimenRows[0];
+        const specimenId = String(specimen.id || specimen.label || '');
+        const values = specimens[specimenId] || {};
+        return `<div class="provider-case-form"><div class="provider-case-id"><span class="badge info">${esc(specimen.label || specimenId)}</span><span>ตอบตามโจทย์และรหัสตัวเลือกของผู้ให้บริการ</span></div><div class="provider-case-question-list">${specimenFields.map((field, index) => {
+          const fieldKey = String(field.key || '');
+          const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimenId)}" data-provider-field="${esc(fieldKey)}"`;
+          return `<div class="provider-case-question"><div class="provider-case-question-head"><span class="question-number">${index + 1}</span><label>${esc(field.label || fieldKey)}</label></div>${generatedFieldControl(field, values[fieldKey], attrs, disabled)}</div>`;
+        }).join('')}</div></div>`;
+      })() : `<div class="table-wrap"><table class="compact-table cap-entry-table" style="min-width:${Math.max(720, 180 + specimenFields.length * 190)}px"><thead><tr><th>ตัวอย่าง</th>${specimenFields.map((field) => `<th>${esc(field.label || field.key)}</th>`).join('')}</tr></thead><tbody>${specimenRows.map((specimen) => {
         const specimenId = String(specimen.id || specimen.label || '');
         const values = specimens[specimenId] || {};
         return `<tr><td><strong>${esc(specimen.label || specimenId)}</strong></td>${specimenFields.map((field) => {
@@ -1648,13 +1692,24 @@
           const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimenId)}" data-provider-field="${esc(fieldKey)}"`;
           return `<td>${generatedFieldControl(field, values[fieldKey], attrs, disabled)}</td>`;
         }).join('')}</tr>`;
-      }).join('')}</tbody></table></div>` : '<div class="notice warning">แบบกรอกส่วนนี้ยังไม่มีรายการตัวอย่างหรือช่องกรอก กรุณาตรวจเอกสารต้นทางแล้วสร้างใหม่</div>';
+      }).join('')}</tbody></table></div>`) : '<div class="notice warning">แบบกรอกส่วนนี้ยังไม่มีรายการตัวอย่างหรือช่องกรอก กรุณาตรวจเอกสารต้นทางแล้วสร้างใหม่</div>';
       const methods = methodFields.length ? `<details class="result-method-details"><summary>${esc(program.title || programKey)} — วิธีตรวจและรหัสที่ใช้</summary><div class="form-grid cols-3" style="margin-top:12px">${methodFields.map((field) => {
         const fieldKey = String(field.key || '');
         const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="method" data-provider-item="${esc(programKey)}" data-provider-field="${esc(fieldKey)}"`;
         return `<div class="field"><label>${esc(field.label || fieldKey)}</label>${generatedFieldControl(field, methodsByProgram?.[programKey]?.[fieldKey], attrs, disabled)}</div>`;
       }).join('')}</div></details>` : '';
-      return `<div class="subcard"><h3>${esc(program.title || programKey)}</h3>${program.description ? `<p class="small muted">${esc(program.description)}</p>` : ''}${table}${methods}</div>`;
+      const modeLabel = challengeMode === 'dry' ? 'Dry challenge'
+        : challengeMode === 'wet' ? 'ตัวอย่างจริง / Wet challenge'
+          : challengeMode === 'mixed' ? 'Mixed challenge'
+            : '';
+      const relationshipHtml = relationships.length ? `<div class="notice info small" style="margin:8px 0 12px"><strong>ความสัมพันธ์ของตัวอย่าง</strong><br>${relationships.map((relationship) => {
+        const from = String(relationship?.from_specimen || '').trim();
+        const to = String(relationship?.to_specimen || '').trim();
+        const type = String(relationship?.type || '').trim();
+        const note = String(relationship?.note || '').trim();
+        return esc([from && `จาก ${from}`, to && `กับ ${to}`, type, note].filter(Boolean).join(' · '));
+      }).join('<br>')}</div>` : '';
+      return `<div class="subcard"><div class="provider-program-heading"><h3>${esc(program.title || programKey)}</h3>${modeLabel ? `<span class="badge info">${esc(modeLabel)}</span>` : ''}</div>${program.description ? `<p class="small muted">${esc(program.description)}</p>` : ''}${relationshipHtml}${table}${methods}</div>`;
     }).join('');
 
     const antigenHtml = (Array.isArray(schema.antigen_sections) ? schema.antigen_sections : []).map((section) => {
@@ -1668,22 +1723,22 @@
       }).join('')}</div></div>`;
     }).join('');
 
-    const generalFields = Array.isArray(schema.general_fields) && schema.general_fields.length
+    const generalFields = Array.isArray(schema.general_fields)
       ? schema.general_fields
       : [
           { key: 'reagents', label: 'น้ำยา / เลขรุ่นผลิต', input_type: 'textarea' },
           { key: 'instrument', label: 'เครื่องมือ', input_type: 'textarea' },
           { key: 'overall_note', label: 'หมายเหตุรวม', input_type: 'textarea' }
         ];
-    const generalHtml = `<div class="form-grid cols-2">${generalFields.map((field, index) => {
+    const generalHtml = generalFields.length ? `<div class="form-grid cols-2">${generalFields.map((field, index) => {
       const fieldKey = String(field.key || '');
       const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="general" data-provider-field="${esc(fieldKey)}"`;
       const full = index === generalFields.length - 1 && generalFields.length % 2 === 1 ? ' style="grid-column:1/-1"' : '';
       return `<div class="field"${full}><label>${esc(field.label || fieldKey)}</label>${generatedFieldControl(field, p[fieldKey], attrs, disabled)}</div>`;
-    }).join('')}</div>`;
+    }).join('')}</div>` : '';
 
     return `<div class="result-grid provider-generated-result-form">
-      <div class="notice info"><strong>${esc(schema.title || 'แบบกรอกที่สร้างจากเอกสารผู้ให้บริการ')}</strong><br><span class="small">โครงสร้าง จำนวนช่อง หน่วย และตัวเลือกสร้างจากแบบฟอร์มเปล่าของผู้ให้บริการ ส่วนคู่มือใช้ประกอบคำอธิบาย ผู้จัดการคุณภาพต้องตรวจทานก่อนใช้งาน</span>${instruction ? `<details style="margin-top:8px"><summary>ดูคำแนะนำภาษาไทย</summary><div class="small" style="white-space:pre-wrap;margin-top:8px">${esc(instruction)}</div></details>` : ''}</div>
+      <div class="notice info"><strong>${esc(schema.title || 'แบบกรอกที่สร้างจากเอกสารผู้ให้บริการ')}</strong><br><span class="small">โครงสร้าง จำนวนช่อง หน่วย และตัวเลือกสร้างจากแบบฟอร์มเปล่าของผู้ให้บริการ ส่วนคู่มือใช้ประกอบคำอธิบาย ผู้จัดการคุณภาพต้องตรวจทานก่อนใช้งาน</span>${instruction ? `<details class="provider-instruction-details" style="margin-top:8px" ${hasEducationalProgram ? 'open' : ''}><summary>${hasEducationalProgram ? 'รายละเอียด Case Study และคำแนะนำ' : 'ดูคำแนะนำภาษาไทย'}</summary><div class="small" style="white-space:pre-wrap;margin-top:8px">${esc(instruction)}</div></details>` : ''}</div>
       ${programHtml}${antigenHtml}${generalHtml}
     </div>`;
   }
@@ -1764,7 +1819,19 @@
   }
 
   function defaultResultPayload(round = state.currentRound) {
-    if (isCapJJeRound(round)) {
+    if (generatedResultSchema(round)) {
+      return {
+        schema: PROVIDER_GENERATED_SCHEMA,
+        form_schema_version: String(generatedResultSchema(round)?.schema_version || '1'),
+        specimens: {},
+        antigen_typing: {},
+        methods_by_program: {},
+        reagents: '',
+        instrument: '',
+        overall_note: ''
+      };
+    }
+    if (isLegacyCapJJeARound(round)) {
       return {
         schema: CAP_J_JE_SCHEMA,
         specimens: Object.fromEntries([...CAP_J_RESULT_SPECIMENS, ...CAP_JE_RESULT_SPECIMENS].map((s) => [s, defaultCapSpecimenPayload()])),
@@ -1777,18 +1844,6 @@
           JE: { abo_manufacturer: '', abo_method: '', rh_manufacturer: '', rh_method: '', d_control_manufacturer: '', d_control_method: '', screen_cells: '', screen_manufacturer: '', screen_method: '', antibody_primary_manufacturer: '', antibody_primary_method: '', antibody_secondary_manufacturer: '', antibody_secondary_method: '', crossmatch_method: '', antigen_manufacturer: '' }
         },
         reagents: '', instrument: '', overall_note: ''
-      };
-    }
-    if (generatedResultSchema(round)) {
-      return {
-        schema: PROVIDER_GENERATED_SCHEMA,
-        form_schema_version: String(generatedResultSchema(round)?.schema_version || '1'),
-        specimens: {},
-        antigen_typing: {},
-        methods_by_program: {},
-        reagents: '',
-        instrument: '',
-        overall_note: ''
       };
     }
     return {
@@ -2058,11 +2113,17 @@
     </div>`;
   }
 
-  function resultForm(payload, prefix = 'result', disabled = false) {
-    // CAP J/JE ใช้แบบกรอกเฉพาะทางที่ยึดตัวเลือกจาก Result Form ของ CAP
-    // ไม่ใช้ตารางช่องปฏิกิริยาดิบจาก schema ทั่วไป เพราะผู้ใช้ต้องกรอก “ผลที่รายงาน”
-    if (isCapJJeRound(state.currentRound) || payload?.schema === CAP_J_JE_SCHEMA) return capJJeResultForm(payload, prefix, disabled);
-    if (payload?.schema === PROVIDER_GENERATED_SCHEMA || (generatedResultSchema(state.currentRound) && !payload?.schema)) return providerGeneratedResultForm(payload, prefix, disabled);
+  function resultForm(payload, prefix = 'result', disabled = false, preferCurrentGeneratedForm = false) {
+    // ถ้ารอบมี schema ที่สร้างจากแบบฟอร์มจริง ให้ใช้ก่อนเสมอ เพื่อแยก Program J, JE1 และโปรแกรมอื่นตามเอกสารของรอบนั้น
+    // ผลที่ส่งแล้วจากฟอร์มรุ่นเก่ายังคงเปิดอ่านด้วยรูปแบบเดิม แต่ฉบับร่าง/ผลว่างจะเปลี่ยนมาใช้ฟอร์มจริงของรอบแม้กำลังเปิดดูด้วยบทบาทอื่น
+    if (preferCurrentGeneratedForm && generatedResultSchema(state.currentRound)) {
+      const currentPayload = payload?.schema === PROVIDER_GENERATED_SCHEMA ? payload : defaultResultPayload(state.currentRound);
+      return providerGeneratedResultForm(currentPayload, prefix, disabled);
+    }
+    if (payload?.schema === CAP_J_JE_SCHEMA && (!generatedResultSchema(state.currentRound) || disabled)) return capJJeResultForm(payload, prefix, disabled);
+    if (payload?.schema === PROVIDER_GENERATED_SCHEMA || generatedResultSchema(state.currentRound)) return providerGeneratedResultForm(payload, prefix, disabled);
+    if (isLegacyCapJJeARound(state.currentRound)) return capJJeResultForm(payload, prefix, disabled);
+    if (isCapJJeRound(state.currentRound)) return `<div class="notice warning" data-provider-form-required="true"><strong>ยังไม่มีแบบกรอกจากฟอร์มของรอบนี้</strong><br>รอบ J/JE แต่ละรอบอาจเป็นตัวอย่างจริงหรือ Dry Challenge และอาจใช้ Donor ร่วมกันต่างกัน กรุณาไปที่ “2. เอกสาร/ภาพ” แล้วกด “1. สร้างแบบกรอกจากฟอร์มเปล่า” ก่อนบันทึกผล เพื่อไม่ให้ระบบนำแบบ J-A/JE-A เดิมมาใช้ผิดรอบ</div>`;
     return genericResultForm(payload, prefix, disabled);
   }
 
@@ -2118,8 +2179,9 @@
   }
 
   function collectResultPayload(form, prefix = 'result') {
+    if (!form || form.querySelector('[data-provider-form-required]')) return null;
     if (form.querySelector('[data-provider-field]')) return collectProviderGeneratedPayload(form, prefix);
-    if (isCapJJeRound(state.currentRound)) return collectCapResultPayload(form, prefix);
+    if (isLegacyCapJJeARound(state.currentRound)) return collectCapResultPayload(form, prefix);
     const fd = new FormData(form);
     const specimens = {};
     const names = resultSpecimensForRound(state.currentRound, state.currentRound?.result_payload);
@@ -2214,6 +2276,7 @@
       if (!form.reportValidity()) return;
       const fd = new FormData(form);
       const payload = checkbox.checked ? defaultResultPayload() : collectResultPayload(form, 'historicalIndividual');
+      if (!payload) return toast('กรุณาสร้างแบบกรอกจากฟอร์มเปล่าของรอบนี้ก่อนบันทึกผล', 'warning');
       setBusy(true);
       const { error } = await state.supabase.rpc('ec_record_historical_individual_result', {
         p_round_id: round.id,
@@ -2236,9 +2299,10 @@
     const own = (rows || []).find((r) => r.user_id === state.user.id);
     const practitioner = await isPractitioner(round.id);
     const canEditOwn = practitioner && hasRole('staff') && (!own || ['draft','returned'].includes(own.status));
+    const useCurrentGeneratedForm = Boolean(generatedResultSchema(round) && (!own || ['draft','returned'].includes(own.status)));
     return `<div class="grid ${canReview() ? 'cols-2' : ''}">
       <div class="card"><div class="card-header"><div><h2>ผลที่ฉันบันทึก</h2><div class="small muted">ระบบเก็บประวัติฉบับเดิมทุกครั้งที่แก้ไข</div></div>${own ? `<span class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, own.status))} · ฉบับที่ ${own.version}</span>` : ''}</div>
-        ${practitioner ? `<form id="individual-result-form">${resultForm(own?.result_payload, 'individual', !canEditOwn)}</form>
+        ${practitioner ? `<form id="individual-result-form">${resultForm(own?.result_payload, 'individual', !canEditOwn, useCurrentGeneratedForm)}</form>
           ${canEditOwn ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-individual">บันทึกร่าง</button><button class="btn btn-primary" id="submit-individual">ยืนยันและส่งผล</button></div>` : practitioner && !hasRole('staff') && (!own || ['draft','returned'].includes(own.status)) ? `<div class="notice warning">คุณได้รับมอบหมายเป็นผู้ปฏิบัติจริง กรุณาเปลี่ยน “ใช้งานในบทบาท” เป็นเจ้าหน้าที่ก่อนบันทึกหรือส่งผล</div>` : `<div class="notice">ผลถูกส่งแล้วและล็อกการแก้ไข หากต้องแก้ระบบจะส่งกลับทั้งชุดผ่านขั้นผู้ทบทวนหรือผู้จัดการคุณภาพ</div>`}` : `<div class="notice">หน้านี้ใช้สำหรับผู้ปฏิบัติจริงที่ได้รับมอบหมายเท่านั้น</div>`}
       </div>
       ${canReview() ? `<div class="card"><h2>ผลของผู้ปฏิบัติทั้งหมด</h2>${(rows || []).length ? (rows || []).map((r) => `<div style="padding:12px 0;border-bottom:1px solid var(--line)"><strong>${esc(r.ec_profiles?.full_name || r.user_id)}</strong><span style="float:right" class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, r.status))} · ฉบับที่ ${r.version}</span><br><span class="small muted">ส่ง ${fmtDate(r.submitted_at, true)}</span><div style="margin-top:8px"><button class="btn btn-outline btn-sm" data-view-individual="${r.id}">ดูผล</button></div></div>`).join('') : empty('ยังไม่มีผู้ปฏิบัติส่งผล')}</div>` : ''}
@@ -2808,7 +2872,7 @@
         </table></div>
       </section>`).join('') : '';
     const specimenTable = specimenRows.length
-      ? (isCapJJeRound(round) ? capOfficialSummaryTables(specimenRows) : genericSpecimenTable)
+      ? (isLegacyCapJJeARound(round) && !generatedResultSchema(round) ? capOfficialSummaryTables(specimenRows) : genericSpecimenTable)
       : `<div class="notice warning">ยังไม่มีตารางสรุปแบบแยกรายการ กด “5. สร้างสรุปผลอย่างเป็นทางการ” ใหม่หลังอัปเดตระบบ เพื่อให้ AI จัดผลเป็นตารางตามตัวอย่าง</div>`;
 
     const structuredView = official ? `<div class="official-report-preview">
@@ -3050,6 +3114,7 @@
       const form = document.getElementById('historical-consensus-form');
       if (!form?.reportValidity()) return;
       const payload = collectResultPayload(form, 'historicalConsensus');
+      if (!payload) return toast('กรุณาสร้างแบบกรอกจากฟอร์มเปล่าของรอบนี้ก่อนบันทึกผล', 'warning');
       const sourceNote = String(new FormData(form).get('source_note') || '').trim();
       setBusy(true);
       const { error } = await state.supabase.rpc('ec_record_historical_consensus', { p_round_id: round.id, p_result_payload: payload, p_source_note: sourceNote });
@@ -3257,9 +3322,9 @@
 
     const pendingFormDocuments = (docs) => {
       const sourceDocs = docs.filter((doc) => doc.category === 'source_document');
-      const completedIds = new Set(Array.isArray(round.generated_form_source_document_ids) ? round.generated_form_source_document_ids : []);
-      const pending = sourceDocs.filter((doc) => !completedIds.has(doc.id));
-      return pending.length ? { targets: pending, reset: !round.generated_result_form_schema } : { targets: sourceDocs, reset: true };
+      // การกดสร้างแบบกรอกด้วยตนเองหมายถึงให้ประกอบ schema ใหม่จากฟอร์มต้นฉบับที่มีอยู่ทั้งหมด
+      // เพื่อไม่ให้ Program J/JE หรือรูปแบบ Wet/Dry จากรอบก่อนค้างปนกับรอบปัจจุบัน
+      return { targets: sourceDocs, reset: true };
     };
     const generateFormsOneByOne = async (docs, progressState) => {
       const { targets, reset } = pendingFormDocuments(docs);
@@ -3378,6 +3443,9 @@
       const providerQuestionNotice = needsQuestionSettings
         ? '<div class="notice success"><strong>ประหยัด Token หลังอ่านเอกสาร</strong><br>เมื่อระบบพบข้อสอบต้นฉบับ จะใช้ข้อมูลที่สกัดไว้สร้างข้อสอบโดยตรง ไม่เรียก AI รอบสร้างคำถามซ้ำ และไม่กระทบข้อสอบเดิมหรือคำถามจากภาพผลดิบ</div>'
         : '';
+      const sharedKitNotice = ['form','instructions','historical'].includes(mode) && isCapJJeRound(round)
+        ? '<div class="notice info"><strong>Kit Instruction ใช้ร่วมกันได้</strong><br>อัปโหลดไฟล์คู่มือเพียงครั้งเดียว ระบบจะแยกหัวข้อภายในเป็นข้อมูลร่วม, Part J, Part JXM และ Part JE/JE1 แล้วเลือกใช้เฉพาะส่วนที่ตรงกับ Blank Result Form แต่ละฉบับ</div>'
+        : '';
       const countField = needsQuestionSettings && !isCapJJeRound(round)
         ? `<div class="field"><label>จำนวนข้อโดยประมาณ</label><input class="input" type="number" name="question_count" min="3" max="50" value="12" required></div>`
         : '';
@@ -3393,7 +3461,7 @@
             ? '<div class="notice info">Official Evaluation ใช้ Intended Response/Grade ส่วน Participant Summary ใช้ peer comparison หรือ Educational Challenge</div>'
             : '';
       showModal(title, `<form id="document-ai-bundle-form" class="form-grid">
-        ${capCompleteNotice}${providerQuestionNotice}${countField}${replaceField}${regenerateAnswerField}
+        ${sharedKitNotice}${capCompleteNotice}${providerQuestionNotice}${countField}${replaceField}${regenerateAnswerField}
         ${isHistoricalBundle ? '<div class="notice info">ระบบจะทำทีละส่วน: ฟอร์ม → คำแนะนำ → ข้อสอบ → เฉลยชุดย่อย → สรุปอย่างเป็นทางการ</div>' : ''}
         <label><input type="checkbox" name="confirm_privacy" required> ยืนยันว่าไฟล์ไม่มีชื่อผู้ป่วย HN หรือข้อมูลส่วนบุคคลที่ไม่ควรส่งไปประมวลผล</label>
         ${roleNotice}
@@ -3676,6 +3744,7 @@
     const save = async (submit) => {
       const form=document.getElementById('individual-result-form'); if(!form)return;
       const payload=collectResultPayload(form,'individual');
+      if (!payload) return toast('กรุณาสร้างแบบกรอกจากฟอร์มเปล่าของรอบนี้ก่อนบันทึกผล', 'warning');
       const {data: existing}=await state.supabase.from('ec_individual_results').select('id,status').eq('round_id',round.id).eq('user_id',state.user.id).maybeSingle();
       const row={round_id:round.id,user_id:state.user.id,result_payload:payload,status:submit?'submitted':'draft',started_at:new Date().toISOString(),submitted_at:submit?new Date().toISOString():null};
       const res=existing?await state.supabase.from('ec_individual_results').update(row).eq('id',existing.id):await state.supabase.from('ec_individual_results').insert(row);
@@ -3692,9 +3761,11 @@
 
     document.getElementById('save-reviewer-summary')?.addEventListener('click', async () => {
       setBusy(true);
+      const payload = reviewerPayload();
+      if (!payload) { setBusy(false); return toast('กรุณาสร้างแบบกรอกจากฟอร์มเปล่าของรอบนี้ก่อนบันทึกผล', 'warning'); }
       const { error } = await state.supabase.rpc('ec_reviewer_save_lab_summary', {
         p_round_id: round.id,
-        p_result_payload: reviewerPayload(),
+        p_result_payload: payload,
         p_note: reviewerNote() || null
       });
       setBusy(false);
@@ -3705,9 +3776,11 @@
     document.getElementById('finalize-reviewer-summary')?.addEventListener('click', async () => {
       if (!confirm('ยืนยันว่าตรวจค่าที่ต่างกันครบแล้ว และส่งสรุปผลให้ผู้จัดการคุณภาพหรือไม่')) return;
       setBusy(true);
+      const payload = reviewerPayload();
+      if (!payload) { setBusy(false); return toast('กรุณาสร้างแบบกรอกจากฟอร์มเปล่าของรอบนี้ก่อนบันทึกผล', 'warning'); }
       const { data, error } = await state.supabase.rpc('ec_reviewer_finalize_lab_summary', {
         p_round_id: round.id,
-        p_result_payload: reviewerPayload(),
+        p_result_payload: payload,
         p_note: reviewerNote() || null
       });
       setBusy(false);
