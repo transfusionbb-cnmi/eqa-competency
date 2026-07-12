@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.4.9
+/* CNMI EQA and Competency Management System v2.5.0
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -1834,28 +1834,296 @@
       .replace(/\(Blood Group A, Rh Negative\)/i, '(หมู่ A, Rh(D) ลบ)');
   }
 
-  function generatedOptionLabel(option) {
-    const label = String(option?.label || option?.value || '').trim();
-    const code = String(option?.code || '').trim();
-    if (!code) return providerThaiText(label);
-    const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const cleanLabel = label
-      .replace(new RegExp(`^\\s*${escapedCode}\\s*(?:[|│:–—-]+)\\s*`, 'i'), '')
-      .replace(new RegExp(`\\s*\\(?\\s*CAP\\s*${escapedCode}\\s*\\)?\\s*$`, 'i'), '')
-      .trim();
-    return `${code} │ ${providerThaiText(cleanLabel || label)}`;
+  const CAP_CODE_OPTIONS = Object.freeze({
+    reaction: [
+      { code: '1', label: 'NT' },
+      { code: '2', label: 'POS' },
+      { code: '3', label: 'NEG' }
+    ],
+    aboGroup: [
+      { code: '188', label: 'Group A' },
+      { code: '191', label: 'Group B' },
+      { code: '192', label: 'Group AB' },
+      { code: '195', label: 'Group O' },
+      { code: '199', label: 'Serum/Plasma and cell group do not agree; additional testing or sample required' }
+    ],
+    aboSubgroup: [
+      { code: '189', label: 'Group A1' },
+      { code: '124', label: 'Group Asub' },
+      { code: '193', label: 'Group A1B' },
+      { code: '125', label: 'Group AsubB' },
+      { code: '105', label: 'ABO subtyping not performed' }
+    ],
+    rhType: [
+      { code: '207', label: 'Rh positive' },
+      { code: '208', label: 'Rh negative' }
+    ],
+    antibodyScreen: [
+      { code: '110', label: 'Unexpected antibody not detected' },
+      { code: '111', label: 'Unexpected antibody detected' }
+    ],
+    crossmatchResult: [
+      { code: '29', label: 'Negative' },
+      { code: '30', label: 'Positive' },
+      { code: '20', label: 'Would refer for testing' }
+    ],
+    crossmatchType: [
+      { code: '58', label: 'Immediate spin only' },
+      { code: '59', label: 'Antiglobulin crossmatch with IgG AHG' },
+      { code: '60', label: 'Antiglobulin crossmatch with polyspecific AHG' }
+    ],
+    strength: [
+      { code: '24', label: 'Microscopic reaction' },
+      { code: '25', label: '1+ reaction' },
+      { code: '26', label: '2+ reaction' },
+      { code: '27', label: '3+ reaction' },
+      { code: '28', label: '4+ reaction' },
+      { code: '80', label: 'Not applicable' }
+    ],
+    antigenResult: [
+      { code: '209', label: 'Negative' },
+      { code: '210', label: 'Positive' },
+      { code: '235', label: 'Reagent not available' },
+      { code: '435', label: 'Test not indicated' }
+    ],
+    exception: [
+      { code: '11', label: 'Unable to analyze' },
+      { code: '33', label: 'Specimen unsatisfactory' }
+    ],
+    manufacturer: [
+      { code: '125', label: 'Laboratory developed' },
+      { code: '113', label: 'Alba Bioscience (Quotient Biodiagnostics)' },
+      { code: '120', label: 'American Red Cross' },
+      { code: '183', label: 'Bio-Rad / DiaMed' },
+      { code: '115', label: 'DBL NOVACLONE Blood Grouping Reagent' },
+      { code: '123', label: 'Grifols' },
+      { code: '119', label: 'Immucor' },
+      { code: '118', label: 'Medion Diagnostics' },
+      { code: '121', label: 'Ortho-Clinical Diagnostics' },
+      { code: '112', label: 'Siemens' },
+      { code: '111', label: 'Selected cells from any of these in this list' },
+      { code: '010', label: 'Other manufacturer, specify on result form' }
+    ],
+    aboMethod: [
+      { code: '29', label: 'Column Agglutination (Gel Testing)' },
+      { code: '96', label: 'Column Agglutination (semi-automated)' },
+      { code: '28', label: 'Liquid Micro Well Testing' },
+      { code: '27', label: 'Solid Phase Red Cell Adherence' },
+      { code: '26', label: 'Tube Testing' },
+      { code: '01', label: 'Other, specify on result form' }
+    ],
+    dControlMethod: [
+      { code: '26', label: 'Tube Testing' },
+      { code: '27', label: 'Solid Phase Red Cell Adherence' },
+      { code: '28', label: 'Liquid Micro Well Testing' },
+      { code: '29', label: 'Column Agglutination (Gel Testing)' },
+      { code: '96', label: 'Column Agglutination (semi-automated)' },
+      { code: '88', label: 'D control not run; control not required by method' },
+      { code: '01', label: 'Other, specify on result form' }
+    ],
+    screeningCell: [
+      { code: '1891', label: 'Two cell suspensions used separately' },
+      { code: '2207', label: 'Three cell suspensions used separately' },
+      { code: '2382', label: 'Four cell suspensions used separately' },
+      { code: '1892', label: 'One suspension of pooled cells prepared by the manufacturer' },
+      { code: '1893', label: 'One suspension of pooled cells prepared by the user' },
+      { code: '0010', label: 'Other, specify in final section' }
+    ],
+    antibodyMethod: [
+      { code: '10', label: 'Saline - AHG' },
+      { code: '11', label: 'Albumin - AHG' },
+      { code: '12', label: 'LISS - AHG' },
+      { code: '13', label: 'PEG - AHG' },
+      { code: '14', label: 'Other tube testing' },
+      { code: '27', label: 'Solid Phase Red Cell Adherence' },
+      { code: '28', label: 'Liquid Micro Well Testing' },
+      { code: '29', label: 'Column Agglutination (Gel Testing)' },
+      { code: '96', label: 'Column Agglutination (semi-automated)' },
+      { code: '01', label: 'Other, specify on result form' }
+    ],
+    antibody: [
+      { code: '184', label: 'Antibody identification not indicated (no antibody detected)' },
+      { code: '200', label: 'Unable to complete testing or would refer to outside laboratory for testing' },
+      { code: '112', label: 'Anti-D' },
+      { code: '113', label: 'Anti-C' },
+      { code: '114', label: 'Anti-c' },
+      { code: '115', label: 'Anti-E' },
+      { code: '116', label: 'Anti-e' },
+      { code: '124', label: 'Anti-K' },
+      { code: '125', label: 'Anti-k' },
+      { code: '126', label: 'Anti-Fya' },
+      { code: '127', label: 'Anti-Fyb' },
+      { code: '128', label: 'Anti-Jka' },
+      { code: '129', label: 'Anti-Jkb' },
+      { code: '131', label: 'Anti-Lea' },
+      { code: '132', label: 'Anti-Leb' },
+      { code: '133', label: 'Anti-P1' },
+      { code: '134', label: 'Anti-M' },
+      { code: '135', label: 'Anti-N' },
+      { code: '136', label: 'Anti-S' },
+      { code: '137', label: 'Anti-s' },
+      { code: '147', label: 'Antibody to other (nonlisted) high incidence antigen' },
+      { code: '148', label: 'Antibody to other (nonlisted) low incidence antigen' },
+      { code: '149', label: 'Warm autoantibody, specificity unknown' },
+      { code: '010', label: 'Other, specify on result form' }
+    ],
+    otherAntigen: [
+      { code: '112', label: 'Anti-D' },
+      { code: '124', label: 'Anti-K' },
+      { code: '125', label: 'Anti-k' },
+      { code: '126', label: 'Anti-Fya' },
+      { code: '127', label: 'Anti-Fyb' },
+      { code: '128', label: 'Anti-Jka' },
+      { code: '129', label: 'Anti-Jkb' },
+      { code: '131', label: 'Anti-Lea' },
+      { code: '132', label: 'Anti-Leb' },
+      { code: '133', label: 'Anti-P1' },
+      { code: '134', label: 'Anti-M' },
+      { code: '135', label: 'Anti-N' },
+      { code: '136', label: 'Anti-S' },
+      { code: '137', label: 'Anti-s' },
+      { code: '147', label: 'Antibody to other (nonlisted) high incidence antigen' },
+      { code: '148', label: 'Antibody to other (nonlisted) low incidence antigen' },
+      { code: '010', label: 'Other, specify on result form' }
+    ]
+  });
+
+  function providerNormalizedOption(option) {
+    const rawValue = String(option?.value ?? '').trim();
+    let code = String(option?.code || '').trim();
+    let label = String(option?.label ?? rawValue ?? code).trim();
+    if (!code && /^\d{1,4}$/.test(rawValue) && label && label !== rawValue) code = rawValue;
+    if (!code) {
+      const prefixed = label.match(/^\s*(\d{1,4})\s*(?:[|│:–—-]+)\s*(.+)$/);
+      if (prefixed) {
+        code = prefixed[1];
+        label = prefixed[2].trim();
+      }
+    }
+    if (code) {
+      const originalLabel = label;
+      const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      label = label
+        .replace(new RegExp(`^\\s*${escapedCode}\\s*(?:[|│:–—-]+)\\s*`, 'i'), '')
+        .replace(new RegExp(`\\s*\\(?\\s*CAP\\s*${escapedCode}\\s*\\)?\\s*$`, 'i'), '')
+        .trim() || originalLabel;
+    }
+    const value = String(code || rawValue || label).trim();
+    return { code, label, value };
   }
 
-  function generatedFieldControl(field, value, attributes, disabled) {
+  function providerFieldText(field, context = {}) {
+    return `${field?.key || ''} ${field?.label || ''} ${field?.placeholder || ''} ${context?.category || ''} ${context?.program?.key || ''} ${context?.program?.title || ''}`.replace(/\s+/g, ' ').trim();
+  }
+
+  function providerResolvedOptions(field, context = {}) {
+    const existing = (Array.isArray(field?.options) ? field.options : []).map(providerNormalizedOption).filter((option) => option.value || option.label);
+    if (existing.some((option) => option.code)) return existing;
+    const text = providerFieldText(field, context);
+    const upper = text.toUpperCase();
+    const category = String(context?.category || '').toLowerCase();
+    let options = null;
+
+    if (/PRIMARY\s+ANTIBODY/.test(upper)) options = CAP_CODE_OPTIONS.antibody;
+    else if (/ADDITIONAL\s+ANTIBOD/.test(upper)) options = CAP_CODE_OPTIONS.antibody.filter((option) => !['184', '200'].includes(option.code));
+    else if (/IDENTIFICATION\s+OF\s+OTHER\s+RED\s+CELL\s+ANTIGENS|ANTIGENS?\s*\/\s*ANTISERA|OTHER\s+RED\s+CELL\s+ANTIGEN/.test(upper)) options = CAP_CODE_OPTIONS.otherAntigen;
+    else if (/SEROLOGIC\s+CROSSMATCH\s+RESULT|CROSSMATCH\s+RESULT/.test(upper)) options = CAP_CODE_OPTIONS.crossmatchResult;
+    else if (/TYPE\s+OF\s+CROSSMATCH/.test(upper)) options = CAP_CODE_OPTIONS.crossmatchType;
+    else if (/STRENGTH\s+OF\s+REACTION/.test(upper)) options = CAP_CODE_OPTIONS.strength;
+    else if (/ABO\s+SUBGROUP/.test(upper)) options = CAP_CODE_OPTIONS.aboSubgroup;
+    else if (/\bABO\s+GROUP\b/.test(upper) && !/GROUP\s*\/\s*RH/.test(upper)) options = CAP_CODE_OPTIONS.aboGroup;
+    else if (/\bRH(?:\(D\))?\s+TYPE\b|RH\s+POSITIVE|RH\s+NEGATIVE/.test(upper) && !/METHOD|MANUFACTURER/.test(upper)) options = CAP_CODE_OPTIONS.rhType;
+    else if (/UNEXPECTED\s+ANTIBODY.*(?:RESULT|DETECTION)|ANTIBODY\s+SCREEN(?:ING)?\s+RESULT/.test(upper)) options = CAP_CODE_OPTIONS.antibodyScreen;
+    else if (/SCREENING\s+CELL/.test(upper) && /CODE|BOX/.test(upper)) options = CAP_CODE_OPTIONS.screeningCell;
+    else if (/EXCEPTION\s+CODE/.test(upper)) options = CAP_CODE_OPTIONS.exception;
+    else if (/MANUFACTURER\s+CODE/.test(upper)) options = CAP_CODE_OPTIONS.manufacturer;
+    else if (/METHOD\s+CODE/.test(upper)) {
+      if (/D\s*CONTROL/.test(upper)) options = CAP_CODE_OPTIONS.dControlMethod;
+      else if (/ABO|ANTI-D|RH\s+TYPE/.test(upper) && !/ANTIBODY|CROSSMATCH/.test(upper)) options = CAP_CODE_OPTIONS.aboMethod;
+      else options = CAP_CODE_OPTIONS.antibodyMethod;
+    }
+    else if (category === 'antigen' && (/INTERPRETATION|\bRESULT\b|ANTI[- ]?[CE]\b/.test(upper))) options = CAP_CODE_OPTIONS.antigenResult;
+    else if (/\bANTI[- ]?A(?:1|,B)?\b|\bANTI[- ]?B\b|\bANTI[- ]?D\b|\bD\s*CONTROL\b|\bA1\s*CELLS?\b|\bB\s*CELLS?\b/.test(upper) && !/MANUFACTURER|METHOD|ANTIBODY|QUESTION|SOURCE/.test(upper)) options = CAP_CODE_OPTIONS.reaction;
+
+    if (!options && existing.length) return existing;
+    return (options || []).map(providerNormalizedOption);
+  }
+
+  function providerCapFieldLabel(field) {
+    let label = String(field?.label || field?.key || '').trim();
+    const replacements = [
+      [/Anti-A \(ABO typing\)/gi, 'Anti-A'],
+      [/Anti-B \(ABO typing\)/gi, 'Anti-B'],
+      [/Anti-A1 \(ABO subtyping \/ if performed\)/gi, 'Anti-A1'],
+      [/Anti-A,B \(ABO typing\)/gi, 'Anti-A,B'],
+      [/A1 Cells \(reverse typing\)/gi, 'A1 Cells'],
+      [/B Cells \(reverse typing\)/gi, 'B Cells'],
+      [/\s*\(box\)\s*/gi, ''],
+      [/\s*\(Anti-D column header\)\s*/gi, ''],
+      [/Rh Type per reagent column.*$/gi, 'Rh Type'],
+      [/Unexpected Antibody Screen result.*$/gi, 'Unexpected Antibody Detection'],
+      [/Identification of Other Red Cell Antigens\/Antisera/gi, 'Identification of Other Red Cell Antigens / Antisera']
+    ];
+    replacements.forEach(([pattern, replacement]) => { label = label.replace(pattern, replacement); });
+    return label.replace(/\s+/g, ' ').trim();
+  }
+
+  function providerCapSpecimenLabel(value) {
+    const raw = String(value || '').trim();
+    const pair = raw.match(/^(J-\d{2})S$/i);
+    if (pair) return `${pair[1].toUpperCase()}R / ${pair[1].toUpperCase()}S`;
+    return raw.replace(/\(Blood Group A,\s*Rh Negative\)/i, '(Blood Group A, Rh Negative)');
+  }
+
+  function providerOptionMatches(option, value) {
+    const current = String(value || '').trim().toLowerCase();
+    if (!current) return false;
+    const candidates = [option?.value, option?.code, option?.label, `${option?.code || ''} │ ${option?.label || ''}`]
+      .map((item) => String(item || '').trim().toLowerCase())
+      .filter(Boolean);
+    return candidates.includes(current);
+  }
+
+  function providerOptionDisplay(option) {
+    const normalized = providerNormalizedOption(option);
+    return normalized.code ? `${normalized.code} │ ${normalized.label}` : normalized.label;
+  }
+
+  function providerIsReportingCodeField(field) {
+    const upper = providerFieldText(field).toUpperCase();
+    return /MANUFACTURER\s+CODE|METHOD\s+CODE|EXCEPTION\s+CODE|SCREENING\s+CELL.*(?:CODE|BOX)|INSTRUMENT|SYSTEM\s+USED/.test(upper);
+  }
+
+  function providerFieldBlock(row) {
+    const label = providerCapFieldLabel(row.field);
+    const requiredMark = row.field?.required ? '<span class="cap-required" aria-label="required">*</span>' : '';
+    return `<div class="cap-form-question"><div class="cap-form-question-label">${esc(label)} ${requiredMark}</div>${row.html}</div>`;
+  }
+
+  function generatedOptionLabel(option) {
+    return providerOptionDisplay(option);
+  }
+
+  function generatedFieldControl(field, value, attributes, disabled, context = {}) {
     const inputType = String(field?.input_type || 'text');
     const required = field?.required ? 'required' : '';
     const disabledAttr = disabled ? 'disabled' : '';
-    const placeholder = field?.placeholder ? `placeholder="${esc(providerThaiText(field.placeholder))}"` : '';
-    const options = Array.isArray(field?.options) ? field.options : [];
-    if (inputType === 'select' || options.length) {
-      return `<select class="select" ${attributes} ${required} ${disabledAttr}><option value="">— เลือก —</option>${options.map((option) => {
-        const optionValue = String(option?.value ?? option?.code ?? option?.label ?? '');
-        return `<option value="${esc(optionValue)}" ${String(value || '') === optionValue ? 'selected' : ''}>${esc(generatedOptionLabel(option))}</option>`;
+    const placeholderText = String(field?.placeholder || '').trim();
+    const placeholder = placeholderText ? `placeholder="${esc(placeholderText)}"` : '';
+    const options = providerResolvedOptions(field, context);
+    if (options.length) {
+      if (options.length <= 5) {
+        const radioName = `cap-${providerDomToken(`${attributes}-${field?.key || field?.label || 'field'}`)}`;
+        return `<div class="cap-choice-control"><div class="cap-choice-list" role="radiogroup" aria-label="${esc(providerCapFieldLabel(field))}">${options.map((option, index) => {
+          const normalized = providerNormalizedOption(option);
+          const checked = providerOptionMatches(normalized, value) ? 'checked' : '';
+          const requiredAttr = field?.required && index === 0 ? 'required' : '';
+          return `<label class="cap-choice-option"><input type="radio" name="${esc(radioName)}" value="${esc(normalized.value)}" ${attributes} ${checked} ${requiredAttr} ${disabledAttr}><span class="cap-choice-dot" aria-hidden="true"></span><span class="cap-choice-copy">${normalized.code ? `<strong>${esc(normalized.code)}</strong><span class="cap-choice-divider">│</span>` : ''}<span>${esc(normalized.label)}</span></span></label>`;
+        }).join('')}</div>${!disabled ? `<button type="button" class="cap-clear-choice" data-clear-cap-radio="${esc(radioName)}">Clear selection</button>` : ''}</div>`;
+      }
+      return `<select class="select cap-code-select" ${attributes} ${required} ${disabledAttr}><option value="">— Select —</option>${options.map((option) => {
+        const normalized = providerNormalizedOption(option);
+        return `<option value="${esc(normalized.value)}" ${providerOptionMatches(normalized, value) ? 'selected' : ''}>${esc(providerOptionDisplay(normalized))}</option>`;
       }).join('')}</select>`;
     }
     if (inputType === 'textarea') {
@@ -1868,12 +2136,12 @@
   }
 
   const PROVIDER_FIELD_GROUPS = Object.freeze([
-    ['abo_rh', 'หมู่เลือด ABO และ Rh'],
-    ['screening', 'การคัดกรองแอนติบอดี'],
-    ['antibody_id', 'การระบุชนิดแอนติบอดี'],
-    ['crossmatch', 'การทดสอบ Crossmatch'],
-    ['antigen', 'การตรวจแอนติเจนเม็ดเลือดแดง'],
-    ['other', 'ข้อมูลการทดสอบเพิ่มเติม']
+    ['abo_rh', 'ABO Group / Rh Type'],
+    ['screening', 'Unexpected Antibody'],
+    ['antibody_id', 'Antibody Identification'],
+    ['crossmatch', 'Crossmatch / Compatibility Testing'],
+    ['antigen', 'Identification of Red Cell Antigens'],
+    ['other', 'Additional Information']
   ]);
 
   function providerProgramScope(program) {
@@ -1969,15 +2237,15 @@
   const JE14_FALLBACK_CASE = Object.freeze({
     case_id: 'JE-14',
     title: 'JE-14',
-    narrative: 'ผู้ป่วยชายอายุ 45 ปี เป็นโรคปอด interstitial เข้ารับการปลูกถ่ายปอดสองข้าง ก่อนผ่าตัด Hb 10.2 g/dL ไม่มีประวัติรับเลือดหรือ red cell alloantibody ผลก่อนผ่าตัดเป็นหมู่ A, Rh(D) บวก และ antibody screen ลบ ผู้บริจาคอวัยวะเป็นหมู่ O, Rh(D) บวก ผู้ป่วยได้รับเม็ดเลือดแดงเข้มข้น 2 ยูนิตในช่วงผ่าตัด\n\nหลังผ่าตัดวันที่ 10 ผู้ป่วยมีตัวเหลือง indirect bilirubin และ LDH สูง Hb ลดจาก 9.0 เป็น 6.9 g/dL ทีมรักษาจึงขอตรวจหมู่เลือด Crossmatch และ DAT',
+    narrative: '45-year-old man with interstitial lung disease underwent bilateral lung transplantation. Pre-operative testing: Group A, Rh-positive; antibody screen negative. The organ donor was Group O, Rh-positive. Two RBC units were transfused perioperatively.\n\nOn post-operative day 10, the patient developed jaundice, indirect hyperbilirubinemia, elevated LDH, and hemoglobin decreased from 9.0 g/dL to 6.9 g/dL. A type and crossmatch and DAT were ordered.',
     findings: [
       'ABO/Rh: Anti-A 4+, Anti-B 0, Anti-D 4+, A1 cells 2+, B cells 4+',
       'Antibody screen: SC1 0, SC2 0, SC3 0',
       'DAT: Polyspecific 3+, Anti-IgG 3+, Anti-C3d 2+',
       'Eluate panel: SC1 AHG 0 CC 4+ LW 0; SC2 AHG 0 CC 4+ LW 0; SC3 AHG 0 CC 4+ LW 0; A1 cells #1 AHG 3+ CC NT LW 0; A1 cells #2 AHG 3+ CC NT LW 0; A1 cells #3 AHG 3+ CC NT LW 0; B cells #1 AHG 0 CC 4+ LW 0; B cells #2 AHG 0 CC 4+ LW 0; B cells #3 AHG 0 CC 4+ LW 0',
-      'Additional studies: ตรวจพบ Anti-A1 ใน plasma ด้วย IAT และตัวอย่างก่อนรับเลือดให้ผล A1 lectin บวก 4+'
+      'Additional studies: Anti-A1 was detected in the patient plasma by IAT. The pre-transfusion specimen was A1 lectin-positive (4+).'
     ],
-    source_location: 'Kit Instruction หน้า 4–5'
+    source_location: 'Kit Instructions, pages 4–5'
   });
 
   function providerCaseReference(programs = []) {
@@ -2026,10 +2294,10 @@
     const narrative = String(structured?.narrative || '').trim();
     const findings = Array.isArray(structured?.findings) ? structured.findings.filter(Boolean) : [];
     const caseText = [narrative, ...findings].filter(Boolean).join('\n');
-    const caseLabel = structured?.case_id || structured?.title || providerCaseReference(programs) || 'กรณีศึกษา';
-    const aboRows = [['ผล', providerExtractReaction(caseText, '\\bAnti[- ]?A(?!1)\\b'), providerExtractReaction(caseText, '\\bAnti[- ]?B\\b'), providerExtractReaction(caseText, '\\bAnti[- ]?D\\b'), providerExtractReaction(caseText, 'A1\\s*cells?'), providerExtractReaction(caseText, 'B\\s*cells?')]];
+    const caseLabel = structured?.case_id || structured?.title || providerCaseReference(programs) || 'Case Study';
+    const aboRows = [['Result', providerExtractReaction(caseText, '\\bAnti[- ]?A(?!1)\\b'), providerExtractReaction(caseText, '\\bAnti[- ]?B\\b'), providerExtractReaction(caseText, '\\bAnti[- ]?D\\b'), providerExtractReaction(caseText, 'A1\\s*cells?'), providerExtractReaction(caseText, 'B\\s*cells?')]];
     const screenRows = ['SC1', 'SC2', 'SC3'].map((cell) => [cell, providerExtractReaction(caseText, `Antibody\\s*screen[^\\n]{0,120}${cell}|${cell}`)]);
-    const datRows = [['ผล', providerExtractReaction(caseText, 'Polyspecific'), providerExtractReaction(caseText, 'Anti[- ]?IgG'), providerExtractReaction(caseText, 'Anti[- ]?C3d')]];
+    const datRows = [['Result', providerExtractReaction(caseText, 'Polyspecific'), providerExtractReaction(caseText, 'Anti[- ]?IgG'), providerExtractReaction(caseText, 'Anti[- ]?C3d')]];
     const eluateNames = ['SC1', 'SC2', 'SC3', 'A1 cells #1', 'A1 cells #2', 'A1 cells #3', 'B cells #1', 'B cells #2', 'B cells #3'];
     const eluateText = caseText.split(/Eluate\s*panel/i)[1] || caseText;
     const eluateRows = eluateNames.map((name) => {
@@ -2039,17 +2307,17 @@
     });
     const additional = findings.filter((line) => /Anti-A1|pre-transfusion|lectin|additional stud/i.test(line)).join('\n');
     return `<details class="provider-dry-case-details" open>
-      <summary><span>ข้อมูลกรณีศึกษา — ${esc(caseLabel)}</span><span>ย่อ/ขยาย</span></summary>
+      <summary><span>Case Study — ${esc(caseLabel)}</span><span>Show / Hide</span></summary>
       <div class="provider-dry-case-body">
-        ${narrative ? `<div class="provider-case-narrative"><strong>ประวัติและลำดับเหตุการณ์</strong><div>${esc(narrative)}</div></div>` : ''}
+        ${narrative ? `<div class="provider-case-narrative"><strong>Clinical history and timeline</strong><div>${esc(narrative)}</div></div>` : ''}
         <div class="provider-case-table-grid">
           ${providerLabTable('ABO/Rh', ['', 'Anti-A', 'Anti-B', 'Anti-D', 'A1 cells', 'B cells'], aboRows)}
-          ${providerLabTable('การคัดกรองแอนติบอดี', ['', 'ผล'], screenRows)}
+          ${providerLabTable('Antibody Screen', ['', 'Result'], screenRows)}
           ${providerLabTable('DAT', ['', 'Polyspecific', 'Anti-IgG', 'Anti-C3d'], datRows)}
-          ${providerLabTable('Eluate panel', ['', 'AHG', 'Check cell', 'Last wash'], eluateRows)}
+          ${providerLabTable('Eluate Panel', ['', 'AHG', 'Check cell', 'Last wash'], eluateRows)}
         </div>
-        ${additional ? `<div class="notice info provider-additional-study"><strong>การตรวจเพิ่มเติม</strong><div class="provider-additional-copy">${esc(additional.replace(/^Additional studies:\s*/i, ''))}</div></div>` : ''}
-        ${structured?.source_location ? `<div class="small muted">อ้างอิง: ${esc(structured.source_location)}</div>` : ''}
+        ${additional ? `<div class="notice info provider-additional-study"><strong>Additional Studies</strong><div class="provider-additional-copy">${esc(additional.replace(/^Additional studies:\s*/i, ''))}</div></div>` : ''}
+        ${structured?.source_location ? `<div class="small muted">Source: ${esc(structured.source_location)}</div>` : ''}
       </div>
     </details>`;
   }
@@ -2122,34 +2390,41 @@
         const values = (state.currentResultPayload?.specimens || {})[specimen.id] || {};
         (program.specimen_fields || []).forEach((field) => {
           const fieldKey = String(field?.key || '');
+          const category = providerFieldCategory(program, field);
+          const context = { program, category };
           const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimen.id)}" data-provider-field="${esc(fieldKey)}"`;
-          categorized.get(providerFieldCategory(program, field)).push({ program, field, html: generatedFieldControl(field, values[fieldKey], attrs, disabled) });
+          categorized.get(category).push({ program, field, context, html: generatedFieldControl(field, values[fieldKey], attrs, disabled, context) });
         });
       });
       (schema?.antigen_sections || []).filter((section) => String(section?.specimen_id || '') === specimen.id).forEach((section) => {
         const values = antigenTyping[specimen.id] || {};
         (section.fields || []).forEach((field) => {
           const fieldKey = String(field?.key || '');
+          const context = { program: section, category: 'antigen' };
           const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="antigen" data-provider-item="${esc(specimen.id)}" data-provider-field="${esc(fieldKey)}"`;
-          categorized.get('antigen').push({ program: section, field, html: generatedFieldControl(field, values[fieldKey], attrs, disabled) });
+          categorized.get('antigen').push({ program: section, field, context, html: generatedFieldControl(field, values[fieldKey], attrs, disabled, context) });
         });
       });
       const categoryCards = PROVIDER_FIELD_GROUPS.map(([categoryKey, categoryLabel]) => {
         const rows = categorized.get(categoryKey) || [];
         if (!rows.length) return '';
-        return `<section class="provider-test-card provider-test-${esc(categoryKey)}"><h4>${esc(categoryLabel)}</h4><div class="provider-field-grid">${rows.map((row) => `<div class="field"><label>${esc(providerThaiText(row.field.label || row.field.key))}</label>${row.html}</div>`).join('')}</div></section>`;
+        const resultRows = rows.filter((row) => !providerIsReportingCodeField(row.field));
+        const codeRows = rows.filter((row) => providerIsReportingCodeField(row.field));
+        const resultHtml = resultRows.length ? `<div class="cap-form-grid">${resultRows.map(providerFieldBlock).join('')}</div>` : '';
+        const codesHtml = codeRows.length ? `<details class="cap-reporting-code-details"><summary>CAP reporting codes / methods</summary><div class="cap-form-grid cap-reporting-code-grid">${codeRows.map(providerFieldBlock).join('')}</div></details>` : '';
+        return `<section class="provider-test-card provider-test-${esc(categoryKey)}"><h4>${esc(categoryLabel)}</h4>${resultHtml}${codesHtml}</section>`;
       }).join('');
-      const methodRows = relevantPrograms.flatMap((program) => (program.method_fields || []).map((field) => ({ program, field })));
-      const methods = methodRows.length ? `<details class="provider-method-card"><summary>วิธีตรวจ / น้ำยา / เครื่องมือ</summary><div class="provider-field-grid">${methodRows.map(({ program, field }) => {
-        const fieldKey = String(field?.key || '');
-        const programKey = String(program?.key || 'PROGRAM');
+      const methodRows = relevantPrograms.flatMap((program) => (program.method_fields || []).map((field) => ({ program, field, context: { program, category: 'method' } })));
+      const methods = methodRows.length ? `<details class="provider-method-card"><summary>CAP reporting codes / Method / Manufacturer</summary><div class="cap-form-grid cap-reporting-code-grid">${methodRows.map((row) => {
+        const fieldKey = String(row.field?.key || '');
+        const programKey = String(row.program?.key || 'PROGRAM');
         const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="method" data-provider-item="${esc(programKey)}" data-provider-field="${esc(fieldKey)}"`;
-        return `<div class="field"><label>${esc(providerThaiText(field.label || fieldKey))}</label>${generatedFieldControl(field, methodsByProgram?.[programKey]?.[fieldKey], attrs, disabled)}</div>`;
+        return providerFieldBlock({ ...row, html: generatedFieldControl(row.field, methodsByProgram?.[programKey]?.[fieldKey], attrs, disabled, row.context) });
       }).join('')}</div></details>` : '';
       return `<section class="provider-specimen-panel" data-provider-specimen-panel="${esc(specimen.id)}" ${specimenIndex ? 'hidden' : ''}>
-        <div class="provider-specimen-heading"><div><span class="eyebrow">ตัวอย่างที่กำลังกรอก</span><h3>${esc(providerThaiSpecimenLabel(specimen.label))}</h3></div><span class="badge info">ทีละตัวอย่าง</span></div>
+        <div class="provider-specimen-heading"><div><span class="eyebrow">CAP result entry</span><h3>${esc(providerCapSpecimenLabel(specimen.label))}</h3></div><span class="badge info">1 specimen at a time</span></div>
         ${providerRelationshipHtml(group.programs, specimen.id)}
-        <div class="provider-test-card-grid">${categoryCards || '<div class="notice warning">ยังไม่มีช่องกรอกสำหรับตัวอย่างนี้ กรุณาตรวจโครงสร้างแบบฟอร์มต้นทาง</div>'}</div>
+        <div class="provider-test-card-grid">${categoryCards || '<div class="notice warning">No result fields were found for this specimen.</div>'}</div>
         ${methods}
       </section>`;
     }).join('');
@@ -2161,13 +2436,14 @@
       const values = specimensPayload[specimenId] || {};
       return (program.specimen_fields || []).map((field, index) => {
         const fieldKey = String(field?.key || '');
+        const context = { program, category: 'dry' };
         const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimenId)}" data-provider-field="${esc(fieldKey)}"`;
-        return `<div class="provider-case-question"><div class="provider-case-question-head"><span class="question-number">${index + 1}</span><label>${esc(providerThaiText(field.label || fieldKey))}</label></div>${generatedFieldControl(field, values[fieldKey], attrs, disabled)}</div>`;
+        return `<div class="provider-case-question"><div class="provider-case-question-head"><span class="question-number">${index + 1}</span><label>${esc(providerCapFieldLabel(field))}</label></div>${generatedFieldControl(field, values[fieldKey], attrs, disabled, context)}</div>`;
       });
     }));
     return `<div class="provider-dry-page">
       ${providerDryCaseDetails(instruction, group.programs)}
-      <section class="provider-dry-question-section"><div class="provider-specimen-heading"><div><span class="eyebrow">JE1 — กรณีศึกษาแบบแห้ง</span><h3>คำถามจากแบบฟอร์ม CAP</h3></div><span class="badge info">${questionCards.length} ข้อ</span></div><div class="provider-case-question-list">${questionCards.join('') || '<div class="notice warning">ยังไม่พบคำถามจาก Blank Result Form</div>'}</div></section>
+      <section class="provider-dry-question-section"><div class="provider-specimen-heading"><div><span class="eyebrow">JE1 — Dry Challenge</span><h3>CAP questions</h3></div><span class="badge info">${questionCards.length} questions</span></div><div class="provider-case-question-list">${questionCards.join('') || '<div class="notice warning">Questions from the Blank Result Form were not found.</div>'}</div></section>
     </div>`;
   }
 
@@ -2192,18 +2468,18 @@
       }
       const groupSpecimens = providerGroupSpecimens(group, schema);
       return `<section class="provider-program-panel" data-provider-program-panel="${esc(group.scope)}" ${groupIndex ? 'hidden' : ''}>
-        <div class="provider-specimen-tabs" role="tablist" aria-label="เลือกตัวอย่างใน ${esc(scopeLabel)}">${groupSpecimens.map((specimen, index) => `<button type="button" class="provider-specimen-tab ${index ? '' : 'active'}" data-provider-specimen-tab="${esc(specimen.id)}" aria-selected="${index ? 'false' : 'true'}">${esc(providerThaiSpecimenLabel(specimen.label))}</button>`).join('')}</div>
+        <div class="provider-specimen-tabs" role="tablist" aria-label="เลือกตัวอย่างใน ${esc(scopeLabel)}">${groupSpecimens.map((specimen, index) => `<button type="button" class="provider-specimen-tab ${index ? '' : 'active'}" data-provider-specimen-tab="${esc(specimen.id)}" aria-selected="${index ? 'false' : 'true'}">${esc(providerCapSpecimenLabel(specimen.label))}</button>`).join('')}</div>
         ${providerSpecimenCards(group, schema, groupSpecimens, antigenTyping, methodsByProgram, prefix, disabled)}
       </section>`;
     }).join('');
     const generalFields = Array.isArray(schema.general_fields) ? schema.general_fields : [];
-    const generalHtml = generalFields.length ? `<details class="provider-general-card"><summary>ข้อมูลรวมของรอบ / หมายเหตุ</summary><div class="provider-field-grid">${generalFields.map((field) => {
+    const generalHtml = generalFields.length ? `<details class="provider-general-card"><summary>ข้อมูลรวมของรอบ / หมายเหตุ</summary><div class="cap-form-grid cap-reporting-code-grid">${generalFields.map((field) => {
       const fieldKey = String(field?.key || '');
       const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="general" data-provider-field="${esc(fieldKey)}"`;
-      return `<div class="field"><label>${esc(providerThaiText(field.label || fieldKey))}</label>${generatedFieldControl(field, p[fieldKey], attrs, disabled)}</div>`;
+      return `${providerFieldBlock({ field, context: { category: 'general' }, html: generatedFieldControl(field, p[fieldKey], attrs, disabled, { category: 'general' }) })}`;
     }).join('')}</div></details>` : '';
     const html = `<div class="result-grid provider-generated-result-form" data-provider-form-shell="${esc(shellToken)}">
-      <div class="provider-form-intro provider-form-intro-compact"><div><h3>เลือก Part และตัวอย่าง</h3><p>กรอกเฉพาะผลที่ตรวจได้จริง ช่องอื่นเว้นว่างได้ตามแบบฟอร์ม</p></div></div>
+      <div class="provider-form-intro provider-form-intro-compact"><div><h3>CAP result entry</h3><p>Select the CAP reporting code. Free text is available only where the provider form requires it.</p></div></div>
       ${providerInstructionDetails(instruction)}
       <nav class="provider-program-tabs" role="tablist" aria-label="เลือก Part">${groups.map((group, index) => `<button type="button" class="provider-program-tab ${index ? '' : 'active'}" data-provider-program-tab="${esc(group.scope)}" aria-selected="${index ? 'false' : 'true'}">${esc(providerScopeLabel(group.scope, group.programs))}</button>`).join('')}</nav>
       <div class="provider-program-panels">${programPanels}</div>
@@ -2239,6 +2515,12 @@
           });
         });
       });
+      shell.querySelectorAll('[data-clear-cap-radio]').forEach((button) => {
+        button.addEventListener('click', () => {
+          const radioName = button.dataset.clearCapRadio;
+          shell.querySelectorAll('input[type="radio"]').forEach((radio) => { if (radio.name === radioName) radio.checked = false; });
+        });
+      });
     });
   }
 
@@ -2257,6 +2539,7 @@
     };
     form.querySelectorAll('[data-provider-field]').forEach((field) => {
       if (field.dataset.providerPrefix !== prefix) return;
+      if (field.type === 'radio' && !field.checked) return;
       const group = field.dataset.providerGroup;
       const item = field.dataset.providerItem || '';
       const key = field.dataset.providerField || '';
