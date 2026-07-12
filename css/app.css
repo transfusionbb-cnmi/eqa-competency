@@ -1657,3 +1657,96 @@ tr:last-child td { border-bottom: 0; }
 @media (max-width: 420px) {
   .provider-specimen-tabs { grid-template-columns: 1fr; }
 }
+
+
+/* v2.4.9 — compact Thai form, complete JE case and staff-page preview */
+.provider-form-intro-compact {
+  padding: 12px 14px;
+  align-items: center;
+}
+.provider-form-intro-compact h3 { margin: 0 0 3px; font-size: 1rem; }
+.provider-form-intro-compact p { font-size: .86rem; }
+.provider-instruction-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 12px;
+  background: var(--surface-2);
+}
+.provider-instruction-summary-grid section {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+.provider-instruction-summary-grid h4 { margin: 0 0 7px; color: #1f5e82; }
+.provider-instruction-summary-grid ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; }
+.provider-instruction-summary-grid li { color: #405f72; font-size: .86rem; line-height: 1.45; }
+.provider-relationship-chips {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin: -2px 0 12px;
+}
+.provider-relationship-chips span {
+  display: inline-flex;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #eef7fc;
+  color: #245f82;
+  border: 1px solid #cfe4f1;
+  font-size: .78rem;
+  font-weight: 700;
+}
+.provider-case-narrative { max-height: none; }
+.provider-case-narrative > strong { display: block; margin-bottom: 7px; color: #1e5879; }
+.provider-case-narrative > div { white-space: pre-line; line-height: 1.65; }
+.provider-additional-study { margin: 0; }
+.provider-additional-study .provider-additional-copy { margin-top: 5px; }
+.provider-field-source { display: none !important; }
+.competency-system-details {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2);
+  margin: 0 0 10px;
+}
+.competency-system-details > summary { cursor: pointer; padding: 9px 12px; font-weight: 700; font-size: .84rem; color: var(--muted); }
+.competency-system-details > .compact-status,
+.competency-system-details > .small { margin: 0 10px 10px; }
+.competency-compact-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid #cae7d2;
+  border-radius: 12px;
+  background: #f1fbf4;
+  color: #2b5f3a;
+}
+.competency-compact-note span { font-size: .84rem; }
+.staff-preview-ribbon {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff7d8;
+  border: 1px solid #eadb96;
+  color: #624d0b;
+  margin-bottom: 12px;
+}
+.staff-preview-ribbon span { font-size: .82rem; }
+.staff-preview-section { border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin-top: 12px; background: #fff; }
+.staff-preview-section > h3 { margin: 0 0 10px; }
+.quiz-intro-compact { padding: 14px 16px; }
+.quiz-intro-compact h2 { margin-bottom: 0; }
+.provider-case-question-head label { color: #173f58; }
+.provider-case-question .select { font-size: .92rem; }
+
+@media (max-width: 900px) {
+  .provider-instruction-summary-grid { grid-template-columns: 1fr; }
+  .staff-preview-ribbon { align-items: flex-start; flex-direction: column; }
+}

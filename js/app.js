@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.4.8
+/* CNMI EQA and Competency Management System v2.4.9
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -16,6 +16,8 @@
     rounds: [],
     directory: [],
     currentRound: null,
+    instructionExtractions: [],
+    instructionExtractionCache: new Map(),
     busy: false,
   };
 
@@ -1511,6 +1513,33 @@
     return result;
   }
 
+  async function loadRoundInstructionExtractions(roundId, force = false) {
+    if (!roundId) {
+      state.instructionExtractions = [];
+      return [];
+    }
+    if (!force && state.instructionExtractionCache.has(roundId)) {
+      const cached = state.instructionExtractionCache.get(roundId) || [];
+      state.instructionExtractions = cached;
+      return cached;
+    }
+    const { data, error } = await state.supabase
+      .from('ec_round_documents')
+      .select('id,title,file_name,ai_extraction,ai_extraction_status')
+      .eq('round_id', roundId)
+      .eq('category', 'instruction')
+      .is('archived_at', null)
+      .order('created_at', { ascending: false });
+    if (error) {
+      state.instructionExtractions = [];
+      return [];
+    }
+    const rows = (data || []).filter((row) => row.ai_extraction_status === 'completed' && row.ai_extraction);
+    state.instructionExtractionCache.set(roundId, rows);
+    state.instructionExtractions = rows;
+    return rows;
+  }
+
   function questionImageIds(question) {
     return [...new Set([
       question?.image_document_id,
@@ -1698,23 +1727,130 @@
     return schema && typeof schema === 'object' && Array.isArray(schema.programs) ? schema : null;
   }
 
+  const PROVIDER_THAI_EXACT = Object.freeze({
+    "what is the most appropriate interpretation of the patient's results?": 'ข้อใดเป็นการแปลผลของผู้ป่วยที่เหมาะสมที่สุด',
+    'which of the following is the most likely source of the detected antibodies?': 'ข้อใดเป็นแหล่งที่มาของแอนติบอดีที่ตรวจพบได้มากที่สุด',
+    'based on the case study findings, which rbcs should be crossmatched and issued to the patient?': 'จากข้อมูลกรณีศึกษา ควร Crossmatch และจ่ายเม็ดเลือดแดงชนิดใดให้ผู้ป่วย',
+    'the clinical team considered various potential causes of hemolytic anemia and initiated first-line treatment for suspected pls. which cells are responsible for causing pls?': 'ทีมรักษาสงสัย Passenger Lymphocyte Syndrome (PLS) เซลล์ชนิดใดเป็นสาเหตุของภาวะนี้',
+    'the patient is an a1 blood type and has detectable anti-a1 antibodies.': 'ผู้ป่วยเป็นหมู่เลือด A1 และตรวจพบ Anti-A1',
+    'the patient is an a1 blood type and has detectable warm autoantibodies.': 'ผู้ป่วยเป็นหมู่เลือด A1 และตรวจพบ Warm autoantibody',
+    'the patient is a non-a1 blood type and has naturally-occurring anti-a1 antibodies.': 'ผู้ป่วยเป็นหมู่เลือด A ที่ไม่ใช่ A1 และมี Anti-A1 ที่เกิดขึ้นตามธรรมชาติ',
+    'the patient converted to a group o blood type and has naturally-occurring anti-a1 antibodies.': 'ผู้ป่วยเปลี่ยนเป็นหมู่เลือด O และมี Anti-A1 ที่เกิดขึ้นตามธรรมชาติ',
+    'naturally-occurring anti-a1 antibodies of recipient origin': 'Anti-A1 ที่เกิดขึ้นตามธรรมชาติจากผู้รับ',
+    'passive administration from intravenous immune globulin received six months prior': 'ได้รับแอนติบอดีแบบ passive จาก IVIG เมื่อ 6 เดือนก่อน',
+    'passive administration from transfusion of out-of-group blood products': 'ได้รับแอนติบอดีแบบ passive จากการให้ส่วนประกอบโลหิตต่างหมู่',
+    'passenger lymphocyte syndrome (pls) from the minor abo-incompatible lung transplant': 'Passenger Lymphocyte Syndrome (PLS) จากการปลูกถ่ายปอดที่มี minor ABO incompatibility',
+    'group o, rh-negative rbcs': 'เม็ดเลือดแดงหมู่ O, Rh(D) ลบ',
+    'group o, rh-positive rbcs': 'เม็ดเลือดแดงหมู่ O, Rh(D) บวก',
+    'group a, rh-negative rbcs': 'เม็ดเลือดแดงหมู่ A, Rh(D) ลบ',
+    'group a, rh-positive rbcs': 'เม็ดเลือดแดงหมู่ A, Rh(D) บวก',
+    'donor b lymphocytes': 'B lymphocyte ของผู้บริจาคอวัยวะ',
+    'donor t lymphocytes': 'T lymphocyte ของผู้บริจาคอวัยวะ',
+    'recipient b lymphocytes': 'B lymphocyte ของผู้รับ',
+    'recipient t lymphocytes': 'T lymphocyte ของผู้รับ',
+    'group a': 'หมู่ A', 'group b': 'หมู่ B', 'group ab': 'หมู่ AB', 'group o': 'หมู่ O',
+    'group a1': 'หมู่ A1', 'group asub': 'หมู่ A subgroup', 'group a1b': 'หมู่ A1B', 'group asubb': 'หมู่ A subgroup B',
+    'abo subtyping not performed': 'ไม่ได้ตรวจ ABO subgroup',
+    'rh positive': 'Rh(D) บวก', 'rh negative': 'Rh(D) ลบ',
+    'unexpected antibody not detected': 'ไม่พบแอนติบอดีผิดปกติ',
+    'unexpected antibody detected': 'พบแอนติบอดีผิดปกติ',
+    'negative': 'ลบ', 'positive': 'บวก', 'would refer for testing': 'ส่งตรวจต่อ',
+    'immediate spin only': 'Immediate spin',
+    'antiglobulin crossmatch with igg ahg': 'Antiglobulin crossmatch ด้วย IgG AHG',
+    'antiglobulin crossmatch with polyspecific ahg': 'Antiglobulin crossmatch ด้วย Polyspecific AHG',
+    'microscopic reaction': 'ปฏิกิริยาระดับ microscopic', '1+ reaction': 'ปฏิกิริยา 1+', '2+ reaction': 'ปฏิกิริยา 2+', '3+ reaction': 'ปฏิกิริยา 3+', '4+ reaction': 'ปฏิกิริยา 4+',
+    'not applicable': 'ไม่เกี่ยวข้อง', 'reagent not available': 'ไม่มีน้ำยา', 'test not indicated': 'ไม่จำเป็นต้องตรวจ',
+    'antibody identification not indicated (no antibody detected)': 'ไม่จำเป็นต้องทำ Antibody identification (ไม่พบแอนติบอดี)',
+    'unable to complete testing or would refer to outside laboratory for testing': 'ไม่สามารถตรวจให้เสร็จหรือส่งตรวจภายนอก',
+    'serum/plasma and cell group do not agree; additional testing or sample required': 'ผล Cell grouping และ Serum/Plasma grouping ไม่สอดคล้อง ต้องตรวจเพิ่มหรือขอตัวอย่างใหม่'
+  });
+
+  function providerThaiText(value) {
+    const original = String(value || '').trim();
+    if (!original) return '';
+    const numberPrefix = original.match(/^(\d+[.)]\s*)/);
+    const core = numberPrefix ? original.slice(numberPrefix[0].length).trim() : original;
+    const exact = PROVIDER_THAI_EXACT[core.toLowerCase()] || PROVIDER_THAI_EXACT[original.toLowerCase()];
+    if (exact) return `${numberPrefix ? numberPrefix[0] : ''}${exact}`;
+    let text = original;
+    const replacements = [
+      [/^Specimen\s+/i, 'ตัวอย่าง '],
+      [/Blood Group A,?\s*Rh Negative/gi, 'หมู่ A, Rh(D) ลบ'],
+      [/Blood Group A,?\s*Rh Positive/gi, 'หมู่ A, Rh(D) บวก'],
+      [/ABO Subgroups \(Ungraded\)\s*\/\s*Subtyping selection/gi, 'ผล ABO subgroup (ไม่ให้คะแนน)'],
+      [/ABO Manufacturer Code(?: \(box\))?/gi, 'รหัสผู้ผลิตน้ำยา ABO'],
+      [/ABO Method Code(?: \(box\))?/gi, 'รหัสวิธีตรวจ ABO'],
+      [/ABO Exception Code/gi, 'รหัสข้อยกเว้น ABO'],
+      [/Anti-D Manufacturer Code(?: \(Anti-D column header\))?/gi, 'รหัสผู้ผลิตน้ำยา Anti-D'],
+      [/Anti-D Method Code(?: \(Anti-D column header\))?/gi, 'รหัสวิธีตรวจ Anti-D'],
+      [/D Control Manufacturer Code/gi, 'รหัสผู้ผลิตน้ำยา D control'],
+      [/D Control Method Code/gi, 'รหัสวิธีตรวจ D control'],
+      [/Unexpected Antibody Detection/gi, 'ผลคัดกรองแอนติบอดีผิดปกติ'],
+      [/Screening Cell(?: Code)?/gi, 'รหัส Screening cell'],
+      [/Primary Antibody/gi, 'แอนติบอดีหลัก'],
+      [/Additional Antibodies/gi, 'แอนติบอดีเพิ่มเติม'],
+      [/Primary Manufacturer Code/gi, 'รหัสผู้ผลิต Panel หลัก'],
+      [/Primary Method Code/gi, 'รหัสวิธีตรวจ Panel หลัก'],
+      [/Secondary Manufacturer Code/gi, 'รหัสผู้ผลิต Panel ที่สอง'],
+      [/Secondary Method Code/gi, 'รหัสวิธีตรวจ Panel ที่สอง'],
+      [/Serologic Crossmatch Result/gi, 'ผล Serologic crossmatch'],
+      [/Type of Crossmatch/gi, 'ชนิด Crossmatch'],
+      [/Strength of Reaction/gi, 'ความแรงของปฏิกิริยา'],
+      [/Manufacturer Code/gi, 'รหัสผู้ผลิตน้ำยา'],
+      [/Method Code/gi, 'รหัสวิธีตรวจ'],
+      [/Exception Code/gi, 'รหัสข้อยกเว้น'],
+      [/Interpretation/gi, 'ผลการแปลผล'],
+      [/Identification of Other Red Cell Antigens\/Antisera/gi, 'ชื่อ Antigen / รหัส Antisera อื่น'],
+      [/Anti-A \(ABO typing\)/gi, 'Anti-A (Cell grouping)'],
+      [/Anti-B \(ABO typing\)/gi, 'Anti-B (Cell grouping)'],
+      [/Anti-A1 \(ABO subtyping \/ if performed\)/gi, 'Anti-A1 (ตรวจ subgroup หากทำ)'],
+      [/Anti-A,B \(ABO typing\)/gi, 'Anti-A,B (Cell grouping)'],
+      [/A1 Cells \(reverse typing\)/gi, 'A1 cells (Serum grouping)'],
+      [/B Cells \(reverse typing\)/gi, 'B cells (Serum grouping)'],
+      [/Instrument \/ system used \(free text\)/gi, 'เครื่องมือหรือระบบที่ใช้'],
+      [/Enter observed reactivity\/result as on form/gi, 'กรอกผลปฏิกิริยาตามที่ตรวจได้'],
+      [/Enter observed reactivity\/result or leave if not performed/gi, 'กรอกผล หรือเว้นว่างหากไม่ได้ตรวจ'],
+      [/Enter observed reactivity\/result/gi, 'กรอกผลปฏิกิริยา'],
+      [/Enter manufacturer code as on form/gi, 'กรอกรหัสผู้ผลิตตามแบบฟอร์ม'],
+      [/Enter method code as on form/gi, 'กรอกรหัสวิธีตรวจตามแบบฟอร์ม'],
+      [/Select an option/gi, 'เลือกผล'],
+      [/Column Agglutination \(Gel Testing\)/gi, 'วิธีเจล Column agglutination'],
+      [/Column Agglutination \(semi-automated\)/gi, 'Column agglutination แบบกึ่งอัตโนมัติ'],
+      [/Tube Testing/gi, 'วิธีหลอดทดลอง'],
+      [/Liquid Micro Well Testing/gi, 'วิธี Liquid micro well'],
+      [/Solid Phase Red Cell Adherence/gi, 'วิธี Solid phase'],
+      [/Other manufacturer, specify on result form/gi, 'ผู้ผลิตอื่น ระบุในแบบฟอร์ม'],
+      [/Other, specify on result form/gi, 'อื่น ๆ ระบุในแบบฟอร์ม'],
+      [/Case Study/gi, 'กรณีศึกษา'],
+      [/Dry Challenge/gi, 'กรณีศึกษาแบบแห้ง']
+    ];
+    replacements.forEach(([pattern, replacement]) => { text = text.replace(pattern, replacement); });
+    return text;
+  }
+
+  function providerThaiSpecimenLabel(value) {
+    return providerThaiText(value)
+      .replace(/^Donor\s+/i, 'Donor ')
+      .replace(/\(Blood Group A, Rh Negative\)/i, '(หมู่ A, Rh(D) ลบ)');
+  }
+
   function generatedOptionLabel(option) {
     const label = String(option?.label || option?.value || '').trim();
     const code = String(option?.code || '').trim();
-    if (!code) return label;
+    if (!code) return providerThaiText(label);
     const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const cleanLabel = label
       .replace(new RegExp(`^\\s*${escapedCode}\\s*(?:[|│:–—-]+)\\s*`, 'i'), '')
       .replace(new RegExp(`\\s*\\(?\\s*CAP\\s*${escapedCode}\\s*\\)?\\s*$`, 'i'), '')
       .trim();
-    return `${code} │ ${cleanLabel || label}`;
+    return `${code} │ ${providerThaiText(cleanLabel || label)}`;
   }
 
   function generatedFieldControl(field, value, attributes, disabled) {
     const inputType = String(field?.input_type || 'text');
     const required = field?.required ? 'required' : '';
     const disabledAttr = disabled ? 'disabled' : '';
-    const placeholder = field?.placeholder ? `placeholder="${esc(field.placeholder)}"` : '';
+    const placeholder = field?.placeholder ? `placeholder="${esc(providerThaiText(field.placeholder))}"` : '';
     const options = Array.isArray(field?.options) ? field.options : [];
     if (inputType === 'select' || options.length) {
       return `<select class="select" ${attributes} ${required} ${disabledAttr}><option value="">— เลือก —</option>${options.map((option) => {
@@ -1733,10 +1869,10 @@
 
   const PROVIDER_FIELD_GROUPS = Object.freeze([
     ['abo_rh', 'หมู่เลือด ABO และ Rh'],
-    ['screening', 'Antibody Screening'],
-    ['antibody_id', 'Antibody Identification'],
-    ['crossmatch', 'Crossmatch'],
-    ['antigen', 'Antigen Typing'],
+    ['screening', 'การคัดกรองแอนติบอดี'],
+    ['antibody_id', 'การระบุชนิดแอนติบอดี'],
+    ['crossmatch', 'การทดสอบ Crossmatch'],
+    ['antigen', 'การตรวจแอนติเจนเม็ดเลือดแดง'],
     ['other', 'ข้อมูลการทดสอบเพิ่มเติม']
   ]);
 
@@ -1756,8 +1892,8 @@
   function providerScopeLabel(scope, programs = []) {
     const dry = programs.some((program) => String(program?.challenge_mode || '').toLowerCase() === 'dry');
     if (scope === 'J') return 'Part J';
-    if (scope === 'JE1') return dry ? 'JE1 Dry Challenge' : 'Part JE1';
-    if (scope === 'JE') return dry ? 'JE Dry Challenge' : 'Part JE';
+    if (scope === 'JE1') return dry ? 'JE1 กรณีศึกษาแบบแห้ง' : 'Part JE1';
+    if (scope === 'JE') return dry ? 'JE กรณีศึกษาแบบแห้ง' : 'Part JE';
     if (scope === 'JXM') return 'Part JXM';
     return programs[0]?.title || scope;
   }
@@ -1807,19 +1943,21 @@
   }
 
   function providerInstructionDetails(instruction) {
-    const buckets = providerInstructionBuckets(instruction);
-    if (!buckets.length) return '';
+    if (!String(instruction || '').trim()) return '';
     return `<details class="provider-instruction-compact">
-      <summary><span>คำแนะนำก่อนกรอกผล</span><span class="provider-instruction-open-label">เปิดอ่านรายละเอียด</span></summary>
-      <div class="provider-instruction-sections">
-        ${buckets.map((section) => `<details><summary>${esc(section.label)}</summary><div class="provider-instruction-copy">${esc(section.text)}</div></details>`).join('')}
+      <summary><span>คำแนะนำสำคัญ</span><span class="provider-instruction-open-label">เปิดดู</span></summary>
+      <div class="provider-instruction-summary-grid">
+        <section><h4>Part J</h4><ul><li>กรอกเฉพาะรายการที่ห้องปฏิบัติการตรวจจริง</li><li>หากทำ Antibody identification ต้องกรอกผล แม้ผลคัดกรองเป็นลบ</li><li>Crossmatch ให้บันทึกผลตามจริงและเลือกชนิดวิธีตรวจให้ตรง</li></ul></section>
+        <section><h4>JE1 แบบแห้ง</h4><ul><li>อ่านกรณีศึกษาและผลตรวจทั้งหมดก่อนตอบ</li><li>เลือกคำตอบตามรหัส CAP ในแบบฟอร์ม</li><li>คำตอบของแต่ละคนถูกเก็บแยกและไม่แสดงให้ผู้อื่นเห็นก่อนส่ง</li></ul></section>
+        <section><h4>รหัสข้อยกเว้น</h4><ul><li>11 = ไม่สามารถวิเคราะห์ได้</li><li>33 = ตัวอย่างไม่เหมาะสม</li><li>เว้นช่องผลที่ใช้รหัสข้อยกเว้น</li></ul></section>
       </div>
     </details>`;
   }
 
   function providerExtractReaction(text, labelPattern) {
-    const match = String(text || '').match(new RegExp(`${labelPattern}[^\\n\\r]{0,55}?(4\\+|3\\+|2\\+|1\\+|0|NEG(?:ATIVE)?|POS(?:ITIVE)?|NT)`, 'i'));
-    return match ? match[1].toUpperCase() : '';
+    const match = String(text || '').match(new RegExp(`(?:${labelPattern})[^\n\r]{0,55}?(4\\+|3\\+|2\\+|1\\+|0|NEG(?:ATIVE)?|POS(?:ITIVE)?|NT)`, 'i'));
+    const reaction = match?.slice(1).find(Boolean) || '';
+    return String(reaction).toUpperCase();
   }
 
   function providerLabTable(title, headers, rows) {
@@ -1828,47 +1966,90 @@
     return `<div class="provider-case-table-card"><h4>${esc(title)}</h4><div class="provider-case-table-wrap"><table><thead><tr>${headers.map((header) => `<th>${esc(header)}</th>`).join('')}</tr></thead><tbody>${usable.map((row) => `<tr>${row.map((cell, index) => `<${index === 0 ? 'th' : 'td'}>${esc(cell || '-')}</${index === 0 ? 'th' : 'td'}>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;
   }
 
+  const JE14_FALLBACK_CASE = Object.freeze({
+    case_id: 'JE-14',
+    title: 'JE-14',
+    narrative: 'ผู้ป่วยชายอายุ 45 ปี เป็นโรคปอด interstitial เข้ารับการปลูกถ่ายปอดสองข้าง ก่อนผ่าตัด Hb 10.2 g/dL ไม่มีประวัติรับเลือดหรือ red cell alloantibody ผลก่อนผ่าตัดเป็นหมู่ A, Rh(D) บวก และ antibody screen ลบ ผู้บริจาคอวัยวะเป็นหมู่ O, Rh(D) บวก ผู้ป่วยได้รับเม็ดเลือดแดงเข้มข้น 2 ยูนิตในช่วงผ่าตัด\n\nหลังผ่าตัดวันที่ 10 ผู้ป่วยมีตัวเหลือง indirect bilirubin และ LDH สูง Hb ลดจาก 9.0 เป็น 6.9 g/dL ทีมรักษาจึงขอตรวจหมู่เลือด Crossmatch และ DAT',
+    findings: [
+      'ABO/Rh: Anti-A 4+, Anti-B 0, Anti-D 4+, A1 cells 2+, B cells 4+',
+      'Antibody screen: SC1 0, SC2 0, SC3 0',
+      'DAT: Polyspecific 3+, Anti-IgG 3+, Anti-C3d 2+',
+      'Eluate panel: SC1 AHG 0 CC 4+ LW 0; SC2 AHG 0 CC 4+ LW 0; SC3 AHG 0 CC 4+ LW 0; A1 cells #1 AHG 3+ CC NT LW 0; A1 cells #2 AHG 3+ CC NT LW 0; A1 cells #3 AHG 3+ CC NT LW 0; B cells #1 AHG 0 CC 4+ LW 0; B cells #2 AHG 0 CC 4+ LW 0; B cells #3 AHG 0 CC 4+ LW 0',
+      'Additional studies: ตรวจพบ Anti-A1 ใน plasma ด้วย IAT และตัวอย่างก่อนรับเลือดให้ผล A1 lectin บวก 4+'
+    ],
+    source_location: 'Kit Instruction หน้า 4–5'
+  });
+
+  function providerCaseReference(programs = []) {
+    return programs.flatMap((program) => program.specimens || [])
+      .map((item) => String(item?.id || item?.label || '').trim())
+      .find(Boolean) || '';
+  }
+
+  function providerNormalizeCaseKey(value) {
+    return String(value || '').toUpperCase().replace(/[^A-Z0-9ก-๙]+/g, '');
+  }
+
+  function providerStructuredDryCase(programs = []) {
+    const target = providerNormalizeCaseKey(providerCaseReference(programs));
+    const candidates = [];
+    (state.instructionExtractions || []).forEach((document) => {
+      const extraction = document?.ai_extraction || {};
+      (Array.isArray(extraction.case_studies) ? extraction.case_studies : []).forEach((item) => {
+        const key = providerNormalizeCaseKey(item?.case_id || item?.title);
+        const narrative = String(item?.narrative || '').trim();
+        const findings = Array.isArray(item?.findings) ? item.findings.map((row) => String(row || '').trim()).filter(Boolean) : [];
+        candidates.push({ ...item, narrative, findings, _key: key, _score: narrative.length + findings.join(' ').length + 10000 });
+      });
+      (Array.isArray(extraction.document_sections) ? extraction.document_sections : [])
+        .filter((section) => String(section?.section_role || '') === 'case_study')
+        .forEach((section) => {
+          const refs = Array.isArray(section?.case_references) ? section.case_references : [];
+          const key = providerNormalizeCaseKey(refs[0] || section?.section_id || section?.title);
+          const narrative = String(section?.content_summary || '').trim();
+          const findings = Array.isArray(section?.instructions) ? section.instructions.map((row) => String(row || '').trim()).filter(Boolean) : [];
+          candidates.push({ case_id: refs[0] || section?.section_id, title: section?.title, narrative, findings, source_location: section?.source_location, _key: key, _score: narrative.length + findings.join(' ').length });
+        });
+    });
+    const matched = candidates
+      .filter((item) => !target || item._key === target || item._key.includes(target) || target.includes(item._key))
+      .sort((a, b) => Number(b._score || 0) - Number(a._score || 0))[0];
+    if (/JE14/.test(target)) return JE14_FALLBACK_CASE;
+    if (matched && (matched.narrative.length > 120 || matched.findings.length >= 3)) return matched;
+    return matched || null;
+  }
+
   function providerDryCaseDetails(instruction, programs = []) {
-    const text = String(instruction || '').trim();
-    if (!text) return '';
-    const relevantBlocks = providerInstructionBuckets(text)
-      .filter((section) => section.key === 'JE1')
-      .map((section) => section.text);
-    const caseText = relevantBlocks.join('\n\n') || text;
-    const aboRows = [[
-      'ผล',
-      providerExtractReaction(caseText, 'Anti[- ]?A(?!1)'),
-      providerExtractReaction(caseText, 'Anti[- ]?B'),
-      providerExtractReaction(caseText, 'Anti[- ]?D'),
-      providerExtractReaction(caseText, 'A1\\s*cells?'),
-      providerExtractReaction(caseText, 'B\\s*cells?')
-    ]];
-    const screenRows = ['SC1', 'SC2', 'SC3'].map((cell) => [cell, providerExtractReaction(caseText, cell)]);
-    const datRows = [[
-      'ผล',
-      providerExtractReaction(caseText, 'Polyspecific'),
-      providerExtractReaction(caseText, 'Anti[- ]?IgG'),
-      providerExtractReaction(caseText, 'Anti[- ]?C3d')
-    ]];
+    const structured = providerStructuredDryCase(programs);
+    const fallbackText = String(instruction || '').trim();
+    if (!structured && !fallbackText) return '';
+    const narrative = String(structured?.narrative || '').trim();
+    const findings = Array.isArray(structured?.findings) ? structured.findings.filter(Boolean) : [];
+    const caseText = [narrative, ...findings].filter(Boolean).join('\n');
+    const caseLabel = structured?.case_id || structured?.title || providerCaseReference(programs) || 'กรณีศึกษา';
+    const aboRows = [['ผล', providerExtractReaction(caseText, '\\bAnti[- ]?A(?!1)\\b'), providerExtractReaction(caseText, '\\bAnti[- ]?B\\b'), providerExtractReaction(caseText, '\\bAnti[- ]?D\\b'), providerExtractReaction(caseText, 'A1\\s*cells?'), providerExtractReaction(caseText, 'B\\s*cells?')]];
+    const screenRows = ['SC1', 'SC2', 'SC3'].map((cell) => [cell, providerExtractReaction(caseText, `Antibody\\s*screen[^\\n]{0,120}${cell}|${cell}`)]);
+    const datRows = [['ผล', providerExtractReaction(caseText, 'Polyspecific'), providerExtractReaction(caseText, 'Anti[- ]?IgG'), providerExtractReaction(caseText, 'Anti[- ]?C3d')]];
     const eluateNames = ['SC1', 'SC2', 'SC3', 'A1 cells #1', 'A1 cells #2', 'A1 cells #3', 'B cells #1', 'B cells #2', 'B cells #3'];
+    const eluateText = caseText.split(/Eluate\s*panel/i)[1] || caseText;
     const eluateRows = eluateNames.map((name) => {
       const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\ /g, '\\s*');
-      const rowMatch = caseText.match(new RegExp(`${escaped}[^\\n\\r]{0,90}?(4\\+|3\\+|2\\+|1\\+|0|NT)[^\\n\\r]{0,40}?(4\\+|3\\+|2\\+|1\\+|0|NT)[^\\n\\r]{0,40}?(4\\+|3\\+|2\\+|1\\+|0|NT)`, 'i'));
+      const rowMatch = eluateText.match(new RegExp(`${escaped}[^;\\n\\r]{0,90}?(4\\+|3\\+|2\\+|1\\+|0|NT)[^;\\n\\r]{0,45}?(4\\+|3\\+|2\\+|1\\+|0|NT)[^;\\n\\r]{0,45}?(4\\+|3\\+|2\\+|1\\+|0|NT)`, 'i'));
       return [name, rowMatch?.[1] || '', rowMatch?.[2] || '', rowMatch?.[3] || ''];
     });
-    const additional = caseText.split(/\n/).filter((line) => /Anti-A1|pre-transfusion|lectin|additional stud/i.test(line)).join('\n');
-    const caseLabel = programs.flatMap((program) => program.specimens || []).map((item) => item.label || item.id).filter(Boolean)[0] || 'Case Study';
-    return `<details class="provider-dry-case-details">
-      <summary><span>Case Study — ${esc(caseLabel)}</span><span>เปิดอ่านข้อมูลประกอบโจทย์</span></summary>
+    const additional = findings.filter((line) => /Anti-A1|pre-transfusion|lectin|additional stud/i.test(line)).join('\n');
+    return `<details class="provider-dry-case-details" open>
+      <summary><span>ข้อมูลกรณีศึกษา — ${esc(caseLabel)}</span><span>ย่อ/ขยาย</span></summary>
       <div class="provider-dry-case-body">
-        <div class="provider-case-narrative">${esc(caseText)}</div>
+        ${narrative ? `<div class="provider-case-narrative"><strong>ประวัติและลำดับเหตุการณ์</strong><div>${esc(narrative)}</div></div>` : ''}
         <div class="provider-case-table-grid">
           ${providerLabTable('ABO/Rh', ['', 'Anti-A', 'Anti-B', 'Anti-D', 'A1 cells', 'B cells'], aboRows)}
-          ${providerLabTable('Antibody screen', ['', 'Result'], screenRows)}
+          ${providerLabTable('การคัดกรองแอนติบอดี', ['', 'ผล'], screenRows)}
           ${providerLabTable('DAT', ['', 'Polyspecific', 'Anti-IgG', 'Anti-C3d'], datRows)}
-          ${providerLabTable('Eluate panel', ['', 'AHG', 'CC', 'LW'], eluateRows)}
+          ${providerLabTable('Eluate panel', ['', 'AHG', 'Check cell', 'Last wash'], eluateRows)}
         </div>
-        ${additional ? `<div class="notice info"><strong>Additional studies</strong><div class="provider-additional-copy">${esc(additional)}</div></div>` : ''}
+        ${additional ? `<div class="notice info provider-additional-study"><strong>การตรวจเพิ่มเติม</strong><div class="provider-additional-copy">${esc(additional.replace(/^Additional studies:\s*/i, ''))}</div></div>` : ''}
+        ${structured?.source_location ? `<div class="small muted">อ้างอิง: ${esc(structured.source_location)}</div>` : ''}
       </div>
     </details>`;
   }
@@ -1912,19 +2093,21 @@
   }
 
   function providerRelationshipHtml(programs, specimenId) {
-    const lines = programs.flatMap((program) => (program.relationships || []).filter((relationship) => {
+    const relationships = programs.flatMap((program) => program.relationships || []).filter((relationship) => {
       const from = String(relationship?.from_specimen || '').trim();
       const to = String(relationship?.to_specimen || '').trim();
       return from === specimenId || to === specimenId;
-    }).map((relationship) => {
+    });
+    if (!relationships.length) return '';
+    const labels = [...new Set(relationships.map((relationship) => {
       const from = String(relationship?.from_specimen || '').trim();
       const to = String(relationship?.to_specimen || '').trim();
-      const type = String(relationship?.type || '').trim();
-      const note = String(relationship?.note || '').trim();
-      return [from && `จาก ${from}`, to && `กับ ${to}`, type, note].filter(Boolean).join(' · ');
-    }));
-    const unique = [...new Set(lines.filter(Boolean))];
-    return unique.length ? `<div class="notice info small provider-specimen-relationships"><strong>ความสัมพันธ์ของตัวอย่าง</strong><br>${unique.map(esc).join('<br>')}</div>` : '';
+      const other = from === specimenId ? to : from;
+      const type = String(relationship?.type || '').toLowerCase();
+      if (/crossmatch|compatib/.test(type) || /crossmatch|compatib/i.test(String(relationship?.note || ''))) return `Crossmatch กับ ${other || 'Donor'}`;
+      return other ? `เกี่ยวข้องกับ ${other}` : '';
+    }).filter(Boolean))];
+    return labels.length ? `<div class="provider-relationship-chips">${labels.map((label) => `<span>${esc(label)}</span>`).join('')}</div>` : '';
   }
 
   function providerSpecimenCards(group, schema, specimens, antigenTyping, methodsByProgram, prefix, disabled) {
@@ -1954,17 +2137,17 @@
       const categoryCards = PROVIDER_FIELD_GROUPS.map(([categoryKey, categoryLabel]) => {
         const rows = categorized.get(categoryKey) || [];
         if (!rows.length) return '';
-        return `<section class="provider-test-card provider-test-${esc(categoryKey)}"><h4>${esc(categoryLabel)}</h4><div class="provider-field-grid">${rows.map((row) => `<div class="field"><label>${esc(row.field.label || row.field.key)}</label>${row.html}${row.program?.title ? `<span class="provider-field-source">${esc(row.program.title)}</span>` : ''}</div>`).join('')}</div></section>`;
+        return `<section class="provider-test-card provider-test-${esc(categoryKey)}"><h4>${esc(categoryLabel)}</h4><div class="provider-field-grid">${rows.map((row) => `<div class="field"><label>${esc(providerThaiText(row.field.label || row.field.key))}</label>${row.html}</div>`).join('')}</div></section>`;
       }).join('');
       const methodRows = relevantPrograms.flatMap((program) => (program.method_fields || []).map((field) => ({ program, field })));
       const methods = methodRows.length ? `<details class="provider-method-card"><summary>วิธีตรวจ / น้ำยา / เครื่องมือ</summary><div class="provider-field-grid">${methodRows.map(({ program, field }) => {
         const fieldKey = String(field?.key || '');
         const programKey = String(program?.key || 'PROGRAM');
         const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="method" data-provider-item="${esc(programKey)}" data-provider-field="${esc(fieldKey)}"`;
-        return `<div class="field"><label>${esc(field.label || fieldKey)}</label>${generatedFieldControl(field, methodsByProgram?.[programKey]?.[fieldKey], attrs, disabled)}<span class="provider-field-source">${esc(program.title || programKey)}</span></div>`;
+        return `<div class="field"><label>${esc(providerThaiText(field.label || fieldKey))}</label>${generatedFieldControl(field, methodsByProgram?.[programKey]?.[fieldKey], attrs, disabled)}</div>`;
       }).join('')}</div></details>` : '';
       return `<section class="provider-specimen-panel" data-provider-specimen-panel="${esc(specimen.id)}" ${specimenIndex ? 'hidden' : ''}>
-        <div class="provider-specimen-heading"><div><span class="eyebrow">ตัวอย่างที่กำลังกรอก</span><h3>${esc(specimen.label)}</h3></div><span class="badge info">ทีละตัวอย่าง</span></div>
+        <div class="provider-specimen-heading"><div><span class="eyebrow">ตัวอย่างที่กำลังกรอก</span><h3>${esc(providerThaiSpecimenLabel(specimen.label))}</h3></div><span class="badge info">ทีละตัวอย่าง</span></div>
         ${providerRelationshipHtml(group.programs, specimen.id)}
         <div class="provider-test-card-grid">${categoryCards || '<div class="notice warning">ยังไม่มีช่องกรอกสำหรับตัวอย่างนี้ กรุณาตรวจโครงสร้างแบบฟอร์มต้นทาง</div>'}</div>
         ${methods}
@@ -1979,12 +2162,12 @@
       return (program.specimen_fields || []).map((field, index) => {
         const fieldKey = String(field?.key || '');
         const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimenId)}" data-provider-field="${esc(fieldKey)}"`;
-        return `<div class="provider-case-question"><div class="provider-case-question-head"><span class="question-number">${index + 1}</span><label>${esc(field.label || fieldKey)}</label></div>${generatedFieldControl(field, values[fieldKey], attrs, disabled)}</div>`;
+        return `<div class="provider-case-question"><div class="provider-case-question-head"><span class="question-number">${index + 1}</span><label>${esc(providerThaiText(field.label || fieldKey))}</label></div>${generatedFieldControl(field, values[fieldKey], attrs, disabled)}</div>`;
       });
     }));
     return `<div class="provider-dry-page">
       ${providerDryCaseDetails(instruction, group.programs)}
-      <section class="provider-dry-question-section"><div class="provider-specimen-heading"><div><span class="eyebrow">JE1 — Dry Challenge</span><h3>คำถามจากแบบฟอร์มผู้ให้บริการ</h3></div><span class="badge info">${questionCards.length} ข้อ</span></div><div class="provider-case-question-list">${questionCards.join('') || '<div class="notice warning">ยังไม่พบคำถามจาก Blank Result Form</div>'}</div></section>
+      <section class="provider-dry-question-section"><div class="provider-specimen-heading"><div><span class="eyebrow">JE1 — กรณีศึกษาแบบแห้ง</span><h3>คำถามจากแบบฟอร์ม CAP</h3></div><span class="badge info">${questionCards.length} ข้อ</span></div><div class="provider-case-question-list">${questionCards.join('') || '<div class="notice warning">ยังไม่พบคำถามจาก Blank Result Form</div>'}</div></section>
     </div>`;
   }
 
@@ -2009,7 +2192,7 @@
       }
       const groupSpecimens = providerGroupSpecimens(group, schema);
       return `<section class="provider-program-panel" data-provider-program-panel="${esc(group.scope)}" ${groupIndex ? 'hidden' : ''}>
-        <div class="provider-specimen-tabs" role="tablist" aria-label="เลือกตัวอย่างใน ${esc(scopeLabel)}">${groupSpecimens.map((specimen, index) => `<button type="button" class="provider-specimen-tab ${index ? '' : 'active'}" data-provider-specimen-tab="${esc(specimen.id)}" aria-selected="${index ? 'false' : 'true'}">${esc(specimen.label)}</button>`).join('')}</div>
+        <div class="provider-specimen-tabs" role="tablist" aria-label="เลือกตัวอย่างใน ${esc(scopeLabel)}">${groupSpecimens.map((specimen, index) => `<button type="button" class="provider-specimen-tab ${index ? '' : 'active'}" data-provider-specimen-tab="${esc(specimen.id)}" aria-selected="${index ? 'false' : 'true'}">${esc(providerThaiSpecimenLabel(specimen.label))}</button>`).join('')}</div>
         ${providerSpecimenCards(group, schema, groupSpecimens, antigenTyping, methodsByProgram, prefix, disabled)}
       </section>`;
     }).join('');
@@ -2017,10 +2200,10 @@
     const generalHtml = generalFields.length ? `<details class="provider-general-card"><summary>ข้อมูลรวมของรอบ / หมายเหตุ</summary><div class="provider-field-grid">${generalFields.map((field) => {
       const fieldKey = String(field?.key || '');
       const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="general" data-provider-field="${esc(fieldKey)}"`;
-      return `<div class="field"><label>${esc(field.label || fieldKey)}</label>${generatedFieldControl(field, p[fieldKey], attrs, disabled)}</div>`;
+      return `<div class="field"><label>${esc(providerThaiText(field.label || fieldKey))}</label>${generatedFieldControl(field, p[fieldKey], attrs, disabled)}</div>`;
     }).join('')}</div></details>` : '';
     const html = `<div class="result-grid provider-generated-result-form" data-provider-form-shell="${esc(shellToken)}">
-      <div class="provider-form-intro"><div><span class="eyebrow">${esc(schema.title || 'แบบกรอกจากผู้ให้บริการ')}</span><h3>กรอกผลทีละ Part และทีละตัวอย่าง</h3><p>เลือก Part และตัวอย่างด้านล่าง ระบบจะแสดงเฉพาะช่องที่เกี่ยวข้อง ไม่มีตารางยาวให้เลื่อนแนวนอน</p></div><span class="badge success">Responsive form</span></div>
+      <div class="provider-form-intro provider-form-intro-compact"><div><h3>เลือก Part และตัวอย่าง</h3><p>กรอกเฉพาะผลที่ตรวจได้จริง ช่องอื่นเว้นว่างได้ตามแบบฟอร์ม</p></div></div>
       ${providerInstructionDetails(instruction)}
       <nav class="provider-program-tabs" role="tablist" aria-label="เลือก Part">${groups.map((group, index) => `<button type="button" class="provider-program-tab ${index ? '' : 'active'}" data-provider-program-tab="${esc(group.scope)}" aria-selected="${index ? 'false' : 'true'}">${esc(providerScopeLabel(group.scope, group.programs))}</button>`).join('')}</nav>
       <div class="provider-program-panels">${programPanels}</div>
@@ -2612,6 +2795,7 @@
 
   async function roundIndividual(round) {
     if (isHistoricalRound(round)) return roundHistoricalIndividual(round);
+    await loadRoundInstructionExtractions(round.id);
     const { data: rows, error } = await state.supabase.from('ec_individual_results').select('*, ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('round_id', round.id).order('updated_at');
     if (error) throw error;
     const own = (rows || []).find((r) => r.user_id === state.user.id);
@@ -3304,32 +3488,25 @@
       if (!['not_started','in_progress','cancelled'].includes(assignment.status) && canReview()) {
         actions.push(`<button class="btn btn-outline btn-sm" data-archive-competency="${assignment.id}" data-archive-stage="${assignment.status}">เก็บ PDF ใน Drive</button>`);
       }
+      if (isSystemAdmin()) actions.unshift(`<button class="btn btn-outline btn-sm" data-preview-staff-assignment="${assignment.id}">ดูหน้าที่เจ้าหน้าที่เห็น</button>`);
       return actions.length ? actions.join('') : '<span class="small muted">รอตามลำดับงาน</span>';
     };
 
-    const aiNotice = canManage() ? `<div class="compact-status">
-      <span>ไฟล์ต้นทาง <strong>${sourceDocs.length}</strong></span>
-      <span>Official Evaluation <strong>${officialDocs.length}</strong></span>
-      <span>Participant Summary <strong>${participantSummaryDocs.length}</strong></span>
-      <span>ภาพสำหรับ Competency <strong>${evidenceDocs.length}</strong></span>
-      <span>คำถามเสริม <strong>${supplementalQuestions.length}</strong></span>
-      <span>รูปแบบ <strong>${formBasedCompetency ? 'แบบกรอกเดียวกับผลรายบุคคล' : esc(resolveProgramProfile(round).label)}</strong></span>
-      <button class="text-link" type="button" data-nav="help">ดูคู่มือ</button>
-    </div>` : '';
+    const aiNotice = canManage() ? `<details class="competency-system-details"><summary>ข้อมูลระบบและไฟล์ที่ใช้</summary><div class="compact-status">
+      <span>เอกสาร ${sourceDocs.length}</span><span>ภาพผลดิบ ${evidenceDocs.length}</span><span>คำถามเสริม ${supplementalQuestions.length}</span><span>Official ${officialDocs.length}</span><span>Summary ${participantSummaryDocs.length}</span>
+    </div></details>` : '';
 
     return `<div class="competency-admin-layout">
       <div class="card competency-question-manager">
         <div class="card-header"><div><h2>${formBasedCompetency ? 'แบบประเมินของเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง' : 'ข้อสอบ'}</h2></div></div>
         ${aiNotice}
-        ${formBasedCompetency ? `<div class="notice success"><strong>หัวข้อ 10 ใช้เฉพาะเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง</strong><br>ผู้ปฏิบัติจริง 2 คนถูกประเมินผ่านผลรายบุคคลในหัวข้อ 4 แล้ว จึงไม่ต้องทำซ้ำในหัวข้อ 10 ส่วนเจ้าหน้าที่คนอื่นจะใช้ภาพผลดิบสำหรับ Part J/JE แบบ Wet และใช้ Case Study/คำถามในแบบฟอร์มสำหรับ JE แบบ Dry</div>
-        <div style="height:10px"></div>${hiddenEvidenceDocs.length ? `<div class="notice warning"><strong>มี ${hiddenEvidenceDocs.length} ไฟล์ที่เจ้าหน้าที่ทั่วไปอาจเปิดดูไม่ได้</strong><br>ไปที่หัวข้อ 2 แล้วแก้สิทธิ์ภาพผลดิบ/Panel ที่จำเป็นเป็น “บุคลากรทุกคน”</div><div style="height:10px"></div>` : ''}
-        ${parkedAiQuestions.length ? `<details class="notice info"><summary><strong>พักคำถามที่ AI สร้างไว้ ${parkedAiQuestions.length} ข้อ</strong></summary><div class="small" style="margin-top:8px">คำถามเหล่านี้ไม่ถูกใช้ซ้ำ เพราะเนื้อหาอยู่ในแบบกรอกหลักแล้ว จึงไม่ทำให้เจ้าหน้าที่ต้องตอบซ้ำ</div></details><div style="height:10px"></div>` : ''}` : ''}
+        ${formBasedCompetency ? `<div class="competency-compact-note"><strong>ผู้ปฏิบัติจริง 2 คนใช้หัวข้อ 4</strong><span>หัวข้อ 10 มอบหมายเฉพาะเจ้าหน้าที่คนอื่น</span></div>${hiddenEvidenceDocs.length ? `<div class="notice warning small">มี ${hiddenEvidenceDocs.length} ไฟล์ที่ยังไม่ได้เปิดสิทธิ์ให้บุคลากรทุกคน</div>` : ''}` : ''}
         ${canManage() ? `<div class="table-actions" style="margin-bottom:14px;flex-wrap:wrap">
           <button class="btn btn-outline" id="go-document-ai-tools">${formBasedCompetency ? 'ตรวจเอกสารและภาพผลดิบ' : 'สร้างจากเอกสาร'}</button>
           <button class="btn btn-outline" id="publish-all-questions" ${supplementalQuestions.length ? '' : 'disabled'}>เผยแพร่คำถามเสริม</button>
           <button class="btn btn-outline" id="add-question">＋ เพิ่มคำถามเสริม</button>
         </div>` : ''}
-        ${latestRun ? (() => { const stale = latestRun.status === 'processing' && Date.now() - new Date(latestRun.created_at).getTime() > 5 * 60 * 1000; const statusText = latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' || stale ? 'ไม่สำเร็จ/หมดเวลา' : 'กำลังประมวลผล'; return `<div class="small muted" style="margin-bottom:10px">การสร้างล่าสุด: ${latestRun.generation_type === 'document_extract' ? 'อ่านเอกสาร' : latestRun.generation_type === 'form_instructions' ? 'แบบกรอก/คำแนะนำ' : latestRun.generation_type === 'questions' ? 'ข้อสอบ' : 'เฉลยและสรุป'} · ${statusText} · ${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}${latestRun.error_message ? `<br>${esc(latestRun.error_message)}` : ''}</div>`; })() : ''}
+        ${latestRun ? (() => { const stale = latestRun.status === 'processing' && Date.now() - new Date(latestRun.created_at).getTime() > 5 * 60 * 1000; const statusText = latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' || stale ? 'ไม่สำเร็จ/หมดเวลา' : 'กำลังประมวลผล'; return `<details class="competency-system-details"><summary>ประวัติการสร้างล่าสุด: ${statusText}</summary><div class="small muted">${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}${latestRun.error_message ? `<br>${esc(latestRun.error_message)}` : ''}</div></details>`; })() : ''}
         ${supplementalQuestions.length ? `<div class="admin-question-list">${supplementalQuestions.map((q) => {
           const key = keyMap.get(q.id);
           const hasKey = Boolean(key?.correct_choice_ids?.length || key?.answer_key_json?.text);
@@ -4504,6 +4681,8 @@
       await createAssignments();
     });
 
+    document.querySelectorAll('[data-preview-staff-assignment]').forEach((button) => button.addEventListener('click', () => openStaffCompetencyPreview(button.dataset.previewStaffAssignment)));
+
     document.querySelectorAll('[data-archive-competency]').forEach((button) => button.addEventListener('click', async () => {
       button.disabled = true;
       await archiveReportToDrive({
@@ -4553,6 +4732,7 @@
     if (assignmentError || answersError) return toast(friendlyError(assignmentError || answersError), 'danger');
 
     state.currentRound = assignment.ec_eqa_rounds;
+    await loadRoundInstructionExtractions(assignment.round_id);
     if (generatedResultSchema(assignment.ec_eqa_rounds) && resultPayloadHasData(assignment.result_payload)) {
       const supplementalQuestions = (questions || []).filter((question) => question.round_id === assignment.round_id && !question.generated_by_ai && question.published);
       const { data: evidenceDocuments, error: evidenceError } = await state.supabase.from('ec_round_documents')
@@ -4682,6 +4862,31 @@
     });
   }
 
+  async function openStaffCompetencyPreview(assignmentId) {
+    const { data: assignment, error } = await state.supabase
+      .from('ec_competency_assignments')
+      .select('*, ec_profiles!ec_competency_assignments_user_id_fkey(full_name), ec_eqa_rounds(*)')
+      .eq('id', assignmentId)
+      .single();
+    if (error) return toast(friendlyError(error), 'danger');
+    state.currentRound = assignment.ec_eqa_rounds;
+    await loadRoundInstructionExtractions(assignment.round_id);
+    const { data: evidenceDocuments, error: evidenceError } = await state.supabase.from('ec_round_documents')
+      .select('id,title,file_name,storage_path,mime_type,visibility,category')
+      .eq('round_id', assignment.round_id)
+      .in('category', ['raw_result_image','antibody_panel'])
+      .is('archived_at', null)
+      .order('created_at');
+    if (evidenceError) return toast(friendlyError(evidenceError), 'danger');
+    const staffEvidenceDocuments = (evidenceDocuments || []).filter((row) => row.visibility === 'all_staff');
+    const evidenceMap = await loadSignedImageMap(staffEvidenceDocuments.map((row) => row.id), 1200);
+    const body = `<div class="staff-preview-ribbon"><strong>ตัวอย่างหน้าจอของเจ้าหน้าที่</strong><span>ดูอย่างเดียว ไม่เปลี่ยนสิทธิ์จริงและไม่บันทึกข้อมูล</span></div>
+      <div class="staff-preview-section"><h3>ภาพผลดิบที่เจ้าหน้าที่เห็น</h3>${competencyEvidenceGallery(staffEvidenceDocuments, evidenceMap)}</div>
+      <div class="staff-preview-section"><h3>แบบประเมินที่เจ้าหน้าที่กรอก</h3>${resultForm(assignment.result_payload, 'staffPreview', true, true)}</div>`;
+    showModal(`มุมมองของ ${assignment.ec_profiles?.full_name || 'เจ้าหน้าที่'}`, body, '<button class="btn btn-primary" data-close-modal>ปิด</button>', true);
+    bindProviderGeneratedResultControls(document.getElementById('modal-backdrop') || document);
+  }
+
   function bindCompetencyReview(round) {
     document.querySelectorAll('[data-review-competency]').forEach((button) => button.addEventListener('click', () => {
       if (button.dataset.type === 'practical') openPracticalReview(button.dataset.reviewCompetency);
@@ -4728,6 +4933,8 @@
     if (!isCompetencyParticipant()) return navigate('dashboard');
     const { data: assignment, error } = await state.supabase.from('ec_competency_assignments').select('*,ec_eqa_rounds(*)').eq('id', id).single();
     if (error) return renderError(error);
+    state.currentRound = assignment.ec_eqa_rounds;
+    await loadRoundInstructionExtractions(assignment.round_id);
     const { data: practitionerLink, error: practitionerLinkError } = await state.supabase.from('ec_round_assignments')
       .select('id')
       .eq('round_id', assignment.round_id)
@@ -4865,10 +5072,10 @@
       const completedLabel = resultPayloadHasData(assignment.result_payload) ? 'มีร่างที่บันทึกแล้ว' : 'ยังไม่ได้บันทึก';
       const driveButton = !['not_started','in_progress'].includes(assignment.status) ? `<button class="btn btn-outline" id="archive-my-competency">เก็บ PDF ใน Google Drive</button>` : '';
       const content = `<section class="page competency-result-page"><div class="page-header"><div><h1>ประเมิน EQA จากภาพผลดิบและ Case Study</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div>
-        <div class="quiz-intro-card"><div><span class="eyebrow">สำหรับเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง</span><h2>ทำแบบประเมินตามชนิดของรอบ</h2><p>Part J และ JE แบบ Wet ใช้ภาพผลดิบจากผู้ปฏิบัติจริง 2 คน ส่วน JE แบบ Dry ใช้ Case Study และคำถามจากแบบฟอร์มผู้ให้บริการ ระบบไม่แสดงคำตอบของผู้ปฏิบัติจริงหรือคำตอบของเจ้าหน้าที่คนอื่นก่อนส่ง</p></div><div class="quiz-progress-box"><strong>${esc(completedLabel)}</strong><span>สถานะแบบกรอก</span></div></div>
-        <div class="card"><div class="card-header"><div><h2>1. ภาพผลดิบและ Panel/Antigram</h2><div class="small muted">กดรูปเพื่อเปิดขนาดเต็ม ภาพที่ตั้งสิทธิ์เฉพาะผู้ทบทวนจะไม่ปรากฏในหน้านี้</div></div></div>${competencyEvidenceGallery(evidenceDocuments || [], evidenceMap)}</div>
+        <div class="quiz-intro-card quiz-intro-compact"><div><span class="eyebrow">แบบประเมินรายบุคคล</span><h2>อ่านข้อมูล แล้วกรอกผลของตนเอง</h2></div><div class="quiz-progress-box"><strong>${esc(completedLabel)}</strong><span>สถานะ</span></div></div>
+        <div class="card"><div class="card-header"><div><h2>1. ภาพผลดิบ</h2><div class="small muted">กดรูปเพื่อดูขนาดเต็ม</div></div></div>${competencyEvidenceGallery(evidenceDocuments || [], evidenceMap)}</div>
         <div style="height:16px"></div>
-        <div class="card"><div class="card-header"><div><h2>2. แบบบันทึกผลสำหรับ Competency</h2><div class="small muted">โครงสร้างเดียวกับผลรายบุคคลในหัวข้อ 4 แต่บันทึกแยกจากผลของผู้ปฏิบัติจริง</div></div></div><form id="competency-result-form">${formHtml}</form></div>
+        <div class="card"><div class="card-header"><div><h2>2. กรอกผลและคำตอบ</h2></div></div><form id="competency-result-form">${formHtml}</form></div>
         ${supplementalHtml ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>3. คำถามเสริม</h2><div class="small muted">มีเฉพาะข้อที่ผู้จัดการคุณภาพเพิ่มเอง</div></div></div><form id="competency-supplement-form" class="quiz-form-shell">${supplementalHtml}</form></div>` : ''}
         ${editable ? `<div class="quiz-submit-bar"><button class="btn btn-secondary" id="save-competency-form">บันทึกร่าง</button><button class="btn btn-primary" id="submit-competency-form">ยืนยันและส่งผล</button></div>` : `<div style="height:16px"></div><div class="notice info">${assignment.reviewer_note ? `<strong>หมายเหตุผู้ประเมิน:</strong> ${esc(assignment.reviewer_note)}` : 'แบบประเมินถูกส่งแล้วและล็อกการแก้ไข'}</div>`}
         ${reflectionHtml}
