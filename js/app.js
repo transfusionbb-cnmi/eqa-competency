@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.4.5
+/* CNMI EQA and Competency Management System v2.4.7
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -1532,6 +1532,67 @@
     return `<div class="question-image-gallery ${isAbId ? 'is-abid' : ''} ${variant === 'admin' ? 'is-admin' : ''}">${items}</div>`;
   }
 
+  function competencyEvidenceSpecimen(document) {
+    const source = `${document?.title || ''} ${document?.file_name || ''}`
+      .replace(/[_]+/g, '-')
+      .replace(/\s+/g, ' ');
+    const match = source.match(/\b(JE|J|ELU|TRC|AABT)[- ]?(\d{1,2})(R|S)?\b/i);
+    if (!match) return document?.category === 'antibody_panel' ? 'Panel / Antigram' : 'ภาพผลดิบอื่น';
+    const prefix = String(match[1] || '').toUpperCase();
+    const number = String(match[2] || '').padStart(2, '0');
+    const suffix = String(match[3] || '').toUpperCase();
+    return `${prefix}-${number}${suffix}`;
+  }
+
+  function competencyEvidenceTest(document) {
+    const source = `${document?.title || ''} ${document?.file_name || ''}`.toLowerCase();
+    if (document?.category === 'antibody_panel' || /antigram|antigen profile/.test(source)) return 'Panel / Antigram';
+    if (/agtyping|antigen typing|ag typing/.test(source)) return 'Antigen typing';
+    if (/x-?match|crossmatch/.test(source)) return 'Crossmatch';
+    if (/abid|antibody identification/.test(source)) return 'Antibody Identification';
+    if (/abscreen|antibody screen/.test(source)) return 'Antibody Screening';
+    if (/rhd|rh[_ -]?d|rh type/.test(source)) return 'Rh(D)';
+    if (/abo/.test(source)) return 'ABO';
+    return 'ภาพผลดิบ';
+  }
+
+  function competencyEvidenceGallery(documents, imageMap) {
+    const visible = (documents || []).map((document) => imageMap.get(document.id)).filter(Boolean);
+    if (!visible.length) return `<div class="notice warning"><strong>ยังไม่พบภาพผลดิบที่ผู้ทำ Competency เปิดดูได้</strong><br>ตรวจว่าภาพผลดิบและ Panel/Antigram ตั้งสิทธิ์เป็น “บุคลากรทุกคน”</div>`;
+    const groups = new Map();
+    visible.forEach((document) => {
+      const specimen = competencyEvidenceSpecimen(document);
+      if (!groups.has(specimen)) groups.set(specimen, []);
+      groups.get(specimen).push(document);
+    });
+    const sortKey = (value) => value === 'Panel / Antigram' ? 'ZZ1' : value === 'ภาพผลดิบอื่น' ? 'ZZ2' : value;
+    const sections = [...groups.entries()].sort((a, b) => sortKey(a[0]).localeCompare(sortKey(b[0]), 'en')).map(([specimen, rows], groupIndex) => {
+      const cards = rows.sort((a, b) => competencyEvidenceTest(a).localeCompare(competencyEvidenceTest(b), 'en')).map((document) => {
+        const title = document.title || document.file_name || 'ภาพผลดิบ';
+        const test = competencyEvidenceTest(document);
+        const media = document.mime_type === 'application/pdf'
+          ? `<iframe class="competency-evidence-pdf" src="${esc(document.url)}#toolbar=0&navpanes=0" title="${esc(title)}"></iframe>`
+          : `<a href="${esc(document.url)}" target="_blank" rel="noopener"><img src="${esc(document.url)}" alt="${esc(title)}"></a>`;
+        return `<figure class="competency-evidence-card">${media}<figcaption><strong>${esc(test)}</strong><span>${esc(title)}</span></figcaption></figure>`;
+      }).join('');
+      return `<details class="competency-evidence-group" ${groupIndex < 2 ? 'open' : ''}><summary><strong>${esc(specimen)}</strong><span class="badge info">${rows.length} ไฟล์</span></summary><div class="competency-evidence-grid">${cards}</div></details>`;
+    }).join('');
+    return `<div class="competency-evidence-shell"><div class="notice info"><strong>หลักฐานผลดิบจากผู้ปฏิบัติจริง 2 คน</strong><br>ใช้ภาพชุดนี้แปลผล แล้วกรอกแบบประเมินด้านล่างเหมือนแบบผลรายบุคคล ห้ามเปิดดูคำตอบของผู้ปฏิบัติจริง</div>${sections}</div>`;
+  }
+
+  function resultPayloadHasData(payload) {
+    if (!payload || typeof payload !== 'object') return false;
+    const copy = JSON.parse(JSON.stringify(payload));
+    delete copy.schema;
+    delete copy.form_schema_version;
+    const hasValue = (value) => {
+      if (Array.isArray(value)) return value.some(hasValue);
+      if (value && typeof value === 'object') return Object.values(value).some(hasValue);
+      return String(value ?? '').trim() !== '';
+    };
+    return hasValue(copy);
+  }
+
   async function roundDocuments(round) {
     const { data: docs, error } = await state.supabase.from('ec_round_documents').select('*').eq('round_id', round.id).order('created_at', { ascending: false });
     if (error) throw error;
@@ -1559,7 +1620,7 @@
       ${canManage() ? `<div class="ai-action-grid">
         <button class="btn btn-primary" id="generate-form-only" ${formReady ? '' : 'disabled'}>1. สร้างแบบกรอกจากฟอร์มเปล่า</button>
         <button class="btn btn-outline" id="generate-instruction-only" ${instructionReady ? '' : 'disabled'}>2. สร้างคำแนะนำจากคู่มือ</button>
-        <button class="btn btn-secondary" id="generate-questions-only" ${questionReady ? '' : 'disabled'}>3. สร้างข้อสอบจากภาพ/เอกสาร</button>
+        <button class="btn btn-secondary" id="generate-questions-only" ${round.generated_result_form_schema ? 'disabled' : (questionReady ? '' : 'disabled')}>${round.generated_result_form_schema ? '3. ไม่ต้องสร้าง — Part 10 ใช้แบบกรอกและภาพผลดิบ' : '3. สร้างข้อสอบจากภาพ/เอกสาร'}</button>
         <button class="btn btn-success" id="generate-answer-keys" ${answerBundleReady ? '' : 'disabled'}>4. สร้างเฉลยข้อสอบ</button>
         <button class="btn btn-outline" id="generate-official-summary" ${answerBundleReady ? '' : 'disabled'}>5. สร้างสรุปผลอย่างเป็นทางการ</button>
         <button class="btn btn-outline" id="generate-historical-bundle" ${historicalBundleReady ? '' : 'disabled'}>สร้างย้อนหลังครบชุดอัตโนมัติ</button>
@@ -2939,7 +3000,7 @@
       directory
     ] = await Promise.all([
       state.supabase.from('ec_questions').select('*, ec_question_choices(*)').eq('round_id', round.id).order('question_order'),
-      state.supabase.from('ec_competency_assignments').select('*').eq('round_id', round.id).order('created_at'),
+      state.supabase.from('ec_competency_assignments').select('*').eq('round_id', round.id).neq('status', 'cancelled').order('created_at'),
       state.supabase.from('ec_round_documents').select('id,title,file_name,mime_type,visibility,category').eq('round_id', round.id).is('archived_at', null).order('created_at', { ascending: false }),
       state.supabase.from('ec_question_answer_keys').select('question_id,correct_choice_ids,answer_key_json,explanation'),
       state.supabase.from('ec_ai_generation_runs').select('*').eq('round_id', round.id).order('created_at', { ascending: false }).limit(5),
@@ -2955,6 +3016,15 @@
     const sourceDocs = (documents || []).filter((doc) => sourceCategories.has(doc.category));
     const officialDocs = (documents || []).filter((doc) => doc.category === 'official_result');
     const participantSummaryDocs = (documents || []).filter((doc) => doc.category === 'participant_summary');
+    const formBasedCompetency = Boolean(generatedResultSchema(round));
+    const supplementalQuestions = formBasedCompetency
+      ? (questions || []).filter((question) => !question.generated_by_ai)
+      : (questions || []);
+    const parkedAiQuestions = formBasedCompetency
+      ? (questions || []).filter((question) => question.generated_by_ai)
+      : [];
+    const evidenceDocs = (documents || []).filter((doc) => ['raw_result_image','antibody_panel'].includes(doc.category));
+    const hiddenEvidenceDocs = evidenceDocs.filter((doc) => doc.visibility !== 'all_staff');
     const latestRun = generationRuns?.[0] || null;
     const canCreateCompetency = canManage() && (!isHistoricalRound(round) || round.historical_review_status === 'qm_certified');
     const closePassed = round.competency_close_at && new Date(round.competency_close_at).getTime() < Date.now();
@@ -2984,22 +3054,26 @@
       <span>ไฟล์ต้นทาง <strong>${sourceDocs.length}</strong></span>
       <span>Official Evaluation <strong>${officialDocs.length}</strong></span>
       <span>Participant Summary <strong>${participantSummaryDocs.length}</strong></span>
-      <span>ข้อสอบ <strong>${(questions || []).length}</strong></span>
-      <span>รูปแบบ <strong>${esc(resolveProgramProfile(round).label)}</strong></span>
+      <span>ภาพสำหรับ Competency <strong>${evidenceDocs.length}</strong></span>
+      <span>คำถามเสริม <strong>${supplementalQuestions.length}</strong></span>
+      <span>รูปแบบ <strong>${formBasedCompetency ? 'แบบกรอกเดียวกับผลรายบุคคล' : esc(resolveProgramProfile(round).label)}</strong></span>
       <button class="text-link" type="button" data-nav="help">ดูคู่มือ</button>
     </div>` : '';
 
     return `<div class="competency-admin-layout">
       <div class="card competency-question-manager">
-        <div class="card-header"><div><h2>ข้อสอบ</h2></div></div>
+        <div class="card-header"><div><h2>${formBasedCompetency ? 'แบบประเมินของเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง' : 'ข้อสอบ'}</h2></div></div>
         ${aiNotice}
+        ${formBasedCompetency ? `<div class="notice success"><strong>หัวข้อ 10 ใช้เฉพาะเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง</strong><br>ผู้ปฏิบัติจริง 2 คนถูกประเมินผ่านผลรายบุคคลในหัวข้อ 4 แล้ว จึงไม่ต้องทำซ้ำในหัวข้อ 10 ส่วนเจ้าหน้าที่คนอื่นจะใช้ภาพผลดิบสำหรับ Part J/JE แบบ Wet และใช้ Case Study/คำถามในแบบฟอร์มสำหรับ JE แบบ Dry</div>
+        <div style="height:10px"></div>${hiddenEvidenceDocs.length ? `<div class="notice warning"><strong>มี ${hiddenEvidenceDocs.length} ไฟล์ที่เจ้าหน้าที่ทั่วไปอาจเปิดดูไม่ได้</strong><br>ไปที่หัวข้อ 2 แล้วแก้สิทธิ์ภาพผลดิบ/Panel ที่จำเป็นเป็น “บุคลากรทุกคน”</div><div style="height:10px"></div>` : ''}
+        ${parkedAiQuestions.length ? `<details class="notice info"><summary><strong>พักคำถามที่ AI สร้างไว้ ${parkedAiQuestions.length} ข้อ</strong></summary><div class="small" style="margin-top:8px">คำถามเหล่านี้ไม่ถูกใช้ซ้ำ เพราะเนื้อหาอยู่ในแบบกรอกหลักแล้ว จึงไม่ทำให้เจ้าหน้าที่ต้องตอบซ้ำ</div></details><div style="height:10px"></div>` : ''}` : ''}
         ${canManage() ? `<div class="table-actions" style="margin-bottom:14px;flex-wrap:wrap">
-          <button class="btn btn-primary" id="go-document-ai-tools">สร้างจากเอกสาร</button>
-          <button class="btn btn-outline" id="publish-all-questions" ${(questions || []).length ? '' : 'disabled'}>เผยแพร่ทั้งหมด</button>
-          <button class="btn btn-outline" id="add-question">＋ เพิ่มเอง</button>
+          <button class="btn btn-outline" id="go-document-ai-tools">${formBasedCompetency ? 'ตรวจเอกสารและภาพผลดิบ' : 'สร้างจากเอกสาร'}</button>
+          <button class="btn btn-outline" id="publish-all-questions" ${supplementalQuestions.length ? '' : 'disabled'}>เผยแพร่คำถามเสริม</button>
+          <button class="btn btn-outline" id="add-question">＋ เพิ่มคำถามเสริม</button>
         </div>` : ''}
         ${latestRun ? (() => { const stale = latestRun.status === 'processing' && Date.now() - new Date(latestRun.created_at).getTime() > 5 * 60 * 1000; const statusText = latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' || stale ? 'ไม่สำเร็จ/หมดเวลา' : 'กำลังประมวลผล'; return `<div class="small muted" style="margin-bottom:10px">การสร้างล่าสุด: ${latestRun.generation_type === 'document_extract' ? 'อ่านเอกสาร' : latestRun.generation_type === 'form_instructions' ? 'แบบกรอก/คำแนะนำ' : latestRun.generation_type === 'questions' ? 'ข้อสอบ' : 'เฉลยและสรุป'} · ${statusText} · ${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}${latestRun.error_message ? `<br>${esc(latestRun.error_message)}` : ''}</div>`; })() : ''}
-        ${(questions || []).length ? `<div class="admin-question-list">${questions.map((q) => {
+        ${supplementalQuestions.length ? `<div class="admin-question-list">${supplementalQuestions.map((q) => {
           const key = keyMap.get(q.id);
           const hasKey = Boolean(key?.correct_choice_ids?.length || key?.answer_key_json?.text);
           const needsManualReview = Boolean(key?.answer_key_json?.needs_manual_review);
@@ -3042,7 +3116,7 @@
               ${canManage()?`<div class="table-actions"><button class="btn btn-outline btn-sm" data-edit-question="${q.id}">แก้ไข</button><button class="btn btn-danger btn-sm" data-delete-question="${q.id}" data-question-label="${esc(`${q.question_order}. ${q.prompt}`)}">ลบ</button></div>`:''}
             </div>
           </article>`;
-        }).join('')}</div>` : empty('ยังไม่มีคำถาม')}
+        }).join('')}</div>` : (formBasedCompetency ? `<div class="notice info">ยังไม่มีคำถามเสริม ซึ่งไม่เป็นปัญหา แบบประเมินหลักจะใช้แบบกรอกผลและภาพผลดิบโดยตรง</div>` : empty('ยังไม่มีคำถาม'))}
       </div>
       <div class="card">
         <div class="card-header"><div><h2>การมอบหมายและตรวจประเมิน</h2></div>${canCreateCompetency?`<button class="btn btn-primary" id="assign-all-competency">สร้างรายการประเมิน</button>`:''}</div>
@@ -3050,7 +3124,7 @@
         <div style="height:12px"></div>
         ${isHistoricalRound(round) && round.historical_review_status !== 'qm_certified' ? `<div class="notice warning">ต้องให้ผู้ปฏิบัติ ผู้ทบทวน และผู้จัดการคุณภาพรับรองข้อมูลย้อนหลังให้ครบก่อน จึงจะสร้างรายการประเมินได้</div><div style="height:12px"></div>` : ''}
         ${isHistoricalRound(round) && round.historical_review_status === 'qm_certified' && !round.competency_close_at ? `<div class="notice warning">กรุณากำหนดวันปิด Competency ก่อนสร้างรายการประเมิน</div><div style="height:12px"></div>` : ''}
-        ${(assignments || []).length ? `<div class="table-wrap"><table style="min-width:760px"><thead><tr><th>ชื่อ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${assignments.map((a)=>`<tr><td>${esc(name(a.user_id))}</td><td>${esc(labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${assignmentBadge(a.status)}</td><td>${a.score ?? '-'}</td><td><div class="table-actions">${actionFor(a)}</div></td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่ได้สร้างรายการประเมิน')}
+        ${(assignments || []).length ? `<div class="table-wrap"><table style="min-width:760px"><thead><tr><th>ชื่อ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${assignments.map((a)=>`<tr><td>${esc(name(a.user_id))}</td><td>${esc(a.assignment_type === 'quiz' && formBasedCompetency ? 'ประเมินจากภาพผลดิบ' : labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${assignmentBadge(a.status)}</td><td>${a.score ?? '-'}</td><td><div class="table-actions">${actionFor(a)}</div></td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่ได้สร้างรายการประเมิน')}
       </div>
     </div>`;
   }
@@ -4123,7 +4197,21 @@
     });
 
     document.getElementById('publish-all-questions')?.addEventListener('click', async () => {
-      if (!confirm('ยืนยันเผยแพร่ข้อสอบทั้งหมดหรือไม่ เจ้าหน้าที่ที่ได้รับมอบหมายจะเห็นคำถามทันทีตามช่วงเวลาที่กำหนด')) return;
+      const formBased = Boolean(generatedResultSchema(round));
+      if (!confirm(formBased
+        ? 'ยืนยันเผยแพร่คำถามเสริมหรือไม่ แบบกรอกผลหลักไม่ต้องกดเผยแพร่'
+        : 'ยืนยันเผยแพร่ข้อสอบทั้งหมดหรือไม่ เจ้าหน้าที่ที่ได้รับมอบหมายจะเห็นคำถามทันทีตามช่วงเวลาที่กำหนด')) return;
+      if (formBased) {
+        const { data, error } = await state.supabase.from('ec_questions')
+          .update({ published: true, updated_by: state.user.id })
+          .eq('round_id', round.id)
+          .eq('generated_by_ai', false)
+          .is('archived_at', null)
+          .select('id');
+        if (error) return toast(friendlyError(error), 'danger');
+        toast(`เผยแพร่คำถามเสริมแล้ว ${(data || []).length} ข้อ`, 'success'); route();
+        return;
+      }
       const { data, error } = await state.supabase.rpc('ec_publish_all_questions', { p_round_id: round.id });
       if (error) return toast(friendlyError(error), 'danger');
       toast(`เผยแพร่ข้อสอบแล้ว ${data || 0} ข้อ`, 'success'); route();
@@ -4133,29 +4221,28 @@
 
     document.getElementById('assign-all-competency')?.addEventListener('click', async () => {
       if (isHistoricalRound(round) && round.historical_review_status !== 'qm_certified') return toast('ต้องให้ผู้จัดการคุณภาพรับรองข้อมูลย้อนหลังให้ครบก่อน', 'warning');
-      const { count: publishedCount, error: questionCountError } = await state.supabase.from('ec_questions').select('id', { count: 'exact', head: true }).eq('round_id', round.id).eq('published', true).is('archived_at', null);
-      if (questionCountError) return toast(friendlyError(questionCountError), 'danger');
-      if (!publishedCount) return toast('กรุณาตรวจและเผยแพร่ข้อสอบอย่างน้อย 1 ข้อก่อนสร้างรายการประเมิน', 'warning');
+      const formBased = Boolean(generatedResultSchema(round));
+      if (!formBased) {
+        const { count: publishedCount, error: questionCountError } = await state.supabase.from('ec_questions').select('id', { count: 'exact', head: true }).eq('round_id', round.id).eq('published', true).is('archived_at', null);
+        if (questionCountError) return toast(friendlyError(questionCountError), 'danger');
+        if (!publishedCount) return toast('กรุณาตรวจและเผยแพร่ข้อสอบอย่างน้อย 1 ข้อก่อนสร้างรายการประเมิน', 'warning');
+      }
 
       const createAssignments = async () => {
-        let directory;
-        try { directory = await loadDirectory(); } catch (error) { return toast(friendlyError(error), 'danger'); }
-        const { data: practitioners, error: practitionerError } = await state.supabase.from('ec_round_assignments').select('user_id').eq('round_id', round.id).eq('assignment_role', 'practitioner').eq('active', true);
-        if (practitionerError) return toast(friendlyError(practitionerError), 'danger');
-        const practitionerIds = new Set((practitioners || []).map((item) => item.user_id));
-        const eligible = directory.filter((person) => personHasRole(person, 'staff') && !personHasRole(person, 'physician'));
-        const rows = eligible.map((person) => ({ round_id: round.id, user_id: person.id, assignment_type: practitionerIds.has(person.id) ? 'practical' : 'quiz', assigned_by: state.user.id }));
-        if (!rows.length) return toast('ไม่พบเจ้าหน้าที่ที่ต้องรับการประเมิน', 'warning');
-        const { error } = await state.supabase.from('ec_competency_assignments').upsert(rows, { onConflict: 'round_id,user_id', ignoreDuplicates: true });
+        const { data, error } = await state.supabase.rpc('ec_sync_competency_assignments', { p_round_id: round.id });
         if (error) return toast(friendlyError(error), 'danger');
-        toast('สร้างรายการประเมินและกำหนดวันปิดแล้ว', 'success'); route();
+        const created = Number(data?.created_count || 0);
+        const active = Number(data?.active_count || 0);
+        const excluded = Number(data?.practitioner_count || 0);
+        toast(`จัดรายการหัวข้อ 10 แล้ว ${active} คน${created ? ` (เพิ่มใหม่ ${created} คน)` : ''} · ไม่รวมผู้ปฏิบัติจริง ${excluded} คน เพราะประเมินผ่านหัวข้อ 4`, 'success', 8500);
+        route();
       };
 
       if (!round.competency_close_at) {
         openWindowModal(createAssignments);
         return;
       }
-      if (!confirm(`สร้างรายการประเมินให้เจ้าหน้าที่ทั้งหมดหรือไม่\nปิดรับคำตอบ: ${fmtDate(round.competency_close_at, true)}`)) return;
+      if (!confirm(`สร้าง/ปรับรายการหัวข้อ 10 ให้เฉพาะเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริงหรือไม่\nผู้ปฏิบัติจริง 2 คนใช้หัวข้อ 4 เท่านั้น\nปิดรับคำตอบ: ${fmtDate(round.competency_close_at, true)}`)) return;
       await createAssignments();
     });
 
@@ -4199,13 +4286,70 @@
 
   async function openQuizReview(assignmentId) {
     const [{ data: assignment, error: assignmentError }, { data: answers, error: answersError }, { data: questions }, { data: choices }, { data: keys }] = await Promise.all([
-      state.supabase.from('ec_competency_assignments').select('*, ec_profiles!ec_competency_assignments_user_id_fkey(full_name)').eq('id', assignmentId).single(),
+      state.supabase.from('ec_competency_assignments').select('*, ec_profiles!ec_competency_assignments_user_id_fkey(full_name), ec_eqa_rounds(*)').eq('id', assignmentId).single(),
       state.supabase.from('ec_competency_answers').select('*').eq('assignment_id', assignmentId),
       state.supabase.from('ec_questions').select('*').order('question_order'),
       state.supabase.from('ec_question_choices').select('*').order('choice_order'),
       state.supabase.from('ec_question_answer_keys').select('*')
     ]);
     if (assignmentError || answersError) return toast(friendlyError(assignmentError || answersError), 'danger');
+
+    state.currentRound = assignment.ec_eqa_rounds;
+    if (generatedResultSchema(assignment.ec_eqa_rounds) && resultPayloadHasData(assignment.result_payload)) {
+      const supplementalQuestions = (questions || []).filter((question) => question.round_id === assignment.round_id && !question.generated_by_ai && question.published);
+      const { data: evidenceDocuments, error: evidenceError } = await state.supabase.from('ec_round_documents')
+        .select('id,title,file_name,storage_path,mime_type,visibility,category')
+        .eq('round_id', assignment.round_id)
+        .in('category', ['raw_result_image','antibody_panel'])
+        .is('archived_at', null)
+        .order('created_at');
+      if (evidenceError) return toast(friendlyError(evidenceError), 'danger');
+      const evidenceMap = await loadSignedImageMap((evidenceDocuments || []).map((document) => document.id), 1800);
+      const answerMap = new Map((answers || []).map((answer) => [answer.question_id, answer]));
+      const keyMap = new Map((keys || []).map((key) => [key.question_id, key]));
+      const choiceName = (id) => (choices || []).find((choice) => choice.id === id)?.choice_text || id || '-';
+      const supplementalRows = supplementalQuestions.map((question) => {
+        const answer = answerMap.get(question.id);
+        const payload = answer?.answer_payload || {};
+        const userAnswer = payload.choice_id ? choiceName(payload.choice_id) : (payload.text || '-');
+        const key = keyMap.get(question.id);
+        const correctText = (key?.correct_choice_ids || []).map(choiceName).join(', ') || key?.answer_key_json?.text || key?.explanation || 'ให้ผู้ทบทวนพิจารณา';
+        return `<div class="card" style="box-shadow:none;border:1px solid var(--line)"><h3>${question.question_order}. ${esc(displayQuestionPrompt(question.prompt) || question.prompt)}</h3><div class="grid cols-2"><div><strong>คำตอบของผู้ทำ</strong><p>${esc(userAnswer)}</p></div><div><strong>แนวคำตอบ/เฉลย</strong><p>${esc(correctText)}</p></div></div><div class="form-grid cols-2"><div class="field"><label>ผลการตรวจ</label><select class="select" data-answer-result="${answer?.id || ''}" required><option value="">เลือกผล</option><option value="true" ${answer?.is_correct===true?'selected':''}>ถูก</option><option value="false" ${answer?.is_correct===false?'selected':''}>ไม่ถูก</option></select></div><div class="field"><label>ข้อคิดเห็น</label><input class="input" data-answer-comment="${answer?.id || ''}" value="${esc(answer?.reviewer_comment || '')}"></div></div></div>`;
+      }).join('');
+      const formReviewValue = assignment.result_form_review_pass === true ? 'true' : assignment.result_form_review_pass === false ? 'false' : '';
+      const body = `<div class="notice info"><strong>ตรวจผลที่เจ้าหน้าที่แปลจากภาพผลดิบ</strong><br>แบบกรอกนี้แยกจากผลรายบุคคลของผู้ปฏิบัติจริง 2 คน ผู้ทบทวนตรวจความถูกต้องโดยเทียบกับหลักฐานและผลกลางของห้อง</div><div style="height:12px"></div>
+        <details class="competency-review-evidence"><summary><strong>เปิดดูภาพผลดิบที่ใช้ทำ Competency</strong></summary>${competencyEvidenceGallery(evidenceDocuments || [], evidenceMap)}</details>
+        <div style="height:12px"></div><div class="card" style="box-shadow:none;border:1px solid var(--line)"><div class="card-header"><h3>แบบผลที่เจ้าหน้าที่กรอก</h3></div>${resultForm(assignment.result_payload, 'reviewCompetencyResult', true, true)}</div>
+        <div style="height:12px"></div><div class="field"><label>ผลการตรวจแบบกรอกหลัก</label><select class="select" id="result-form-review-pass" required><option value="">เลือกผล</option><option value="true" ${formReviewValue==='true'?'selected':''}>ผ่าน — แปลผลเหมาะสม</option><option value="false" ${formReviewValue==='false'?'selected':''}>ต้องทบทวน — มีผลไม่ถูกต้อง/ไม่ครบ</option></select></div>
+        ${supplementalRows ? `<div style="height:12px"></div><h3>คำถามเสริม</h3><div id="quiz-review-list" class="grid">${supplementalRows}</div>` : ''}
+        <div class="field"><label>หมายเหตุรวมของผู้ทบทวน</label><textarea class="textarea" id="quiz-review-note">${esc(assignment.result_form_review_note || '')}</textarea></div>`;
+      showModal(`ตรวจการแปลผลจากภาพ — ${assignment.ec_profiles?.full_name || ''}`, body, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-quiz-review">ผ่านการทบทวนและส่งให้ผู้จัดการคุณภาพ</button>`, true);
+      document.getElementById('save-quiz-review').addEventListener('click', async () => {
+        const passValue = document.getElementById('result-form-review-pass').value;
+        if (!passValue) return toast('กรุณาเลือกผลการตรวจแบบกรอกหลัก', 'warning');
+        const reviewRows = [...document.querySelectorAll('[data-answer-result]')].map((select) => ({
+          answer_id: select.dataset.answerResult,
+          is_correct: select.value === 'true' ? true : select.value === 'false' ? false : null,
+          comment: document.querySelector(`[data-answer-comment="${select.dataset.answerResult}"]`)?.value || ''
+        }));
+        if (reviewRows.some((row) => !row.answer_id || row.is_correct === null)) return toast('กรุณาตรวจคำถามเสริมให้ครบ', 'warning');
+        const note = document.getElementById('quiz-review-note').value || null;
+        if (reviewRows.length) {
+          const { error: quizError } = await state.supabase.rpc('ec_reviewer_review_quiz', { p_assignment_id: assignmentId, p_reviews: reviewRows, p_note: note });
+          if (quizError) return toast(friendlyError(quizError), 'danger');
+        }
+        const { error: formError } = await state.supabase.rpc('ec_reviewer_review_result_form', {
+          p_assignment_id: assignmentId,
+          p_pass: passValue === 'true',
+          p_note: note
+        });
+        if (formError) return toast(friendlyError(formError), 'danger');
+        await archiveReportToDrive({ report_type: 'competency', assignment_id: assignmentId, stage: 'reviewed' }, true);
+        closeModal(); toast('ตรวจแบบผลแล้ว ส่งให้ผู้จัดการคุณภาพเรียบร้อย', 'success'); route();
+      });
+      return;
+    }
+
     const roundQuestions = (questions || []).filter((question) => question.round_id === assignment.round_id);
     const imageMap = await loadSignedImageMap(roundQuestions.flatMap((question) => questionImageIds(question)));
     const answerMap = new Map((answers || []).map((answer) => [answer.question_id, answer]));
@@ -4307,12 +4451,17 @@
       const content=`<section class="page"><div class="page-header"><div><h1>การประเมินของฉัน</h1></div></div><div class="notice">แพทย์ผู้รับรองและบัญชีที่ไม่มีบทบาทเจ้าหน้าที่ไม่ต้องทำแบบทดสอบบุคลากร</div></section>`;
       appEl.innerHTML=shell(content,'การประเมินของฉัน');bindShell();return;
     }
-    const { data: assignments, error } = await state.supabase.from('ec_competency_assignments').select('*, ec_eqa_rounds(*)').eq('user_id', state.user.id).order('created_at', { ascending: false });
-    if (error) return renderError(error);
-    const content=`<section class="page"><div class="page-header"><div><h1>การประเมินของฉัน</h1><p>คำตอบถูกเก็บแยก และหลังส่งแล้วจะแก้ไขไม่ได้</p></div></div><div class="card">${(assignments||[]).length?`<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>ประเภท</th><th>ปิดรับคำตอบ</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${assignments.map(a=>{
+    const [{ data: assignments, error }, { data: practitionerRows, error: practitionerError }] = await Promise.all([
+      state.supabase.from('ec_competency_assignments').select('*, ec_eqa_rounds(*)').eq('user_id', state.user.id).neq('status', 'cancelled').order('created_at', { ascending: false }),
+      state.supabase.from('ec_round_assignments').select('round_id').eq('user_id', state.user.id).eq('assignment_role', 'practitioner').eq('active', true)
+    ]);
+    if (error || practitionerError) return renderError(error || practitionerError);
+    const practitionerRoundIds = new Set((practitionerRows || []).map((row) => row.round_id));
+    const visibleAssignments = (assignments || []).filter((assignment) => !practitionerRoundIds.has(assignment.round_id));
+    const content=`<section class="page"><div class="page-header"><div><h1>การประเมินของฉัน</h1><p>คำตอบถูกเก็บแยก และหลังส่งแล้วจะแก้ไขไม่ได้</p></div></div><div class="notice info">หากคุณเป็นผู้ปฏิบัติจริงของรอบนั้น ระบบจะใช้ผลรายบุคคลในหัวข้อ 4 เป็นการประเมิน และจะไม่แสดงหัวข้อ 10 ซ้ำ</div><div style="height:12px"></div><div class="card">${visibleAssignments.length?`<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>ประเภท</th><th>ปิดรับคำตอบ</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${visibleAssignments.map(a=>{
       const closeAt = a.ec_eqa_rounds?.competency_close_at;
       const expired = closeAt && new Date(closeAt).getTime() < Date.now() && ['not_started','in_progress'].includes(a.status);
-      return `<tr><td><strong>${esc(a.ec_eqa_rounds?.provider)} ${esc(a.ec_eqa_rounds?.round_code)}</strong></td><td>${esc(labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${closeAt ? fmtDate(closeAt, true) : '-'}${expired ? '<br><span class="badge danger">ปิดแล้ว</span>' : ''}</td><td>${assignmentBadge(a.status)}</td><td>${a.score??'-'}</td><td><button class="btn btn-primary btn-sm" data-open-assignment="${a.id}" ${expired ? 'disabled' : ''}>เปิด</button></td></tr>`;
+      return `<tr><td><strong>${esc(a.ec_eqa_rounds?.provider)} ${esc(a.ec_eqa_rounds?.round_code)}</strong></td><td>${esc(a.assignment_type === 'quiz' && generatedResultSchema(a.ec_eqa_rounds) ? 'ประเมินจากภาพผลดิบ / Case Study' : labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${closeAt ? fmtDate(closeAt, true) : '-'}${expired ? '<br><span class="badge danger">ปิดแล้ว</span>' : ''}</td><td>${assignmentBadge(a.status)}</td><td>${a.score??'-'}</td><td><button class="btn btn-primary btn-sm" data-open-assignment="${a.id}" ${expired ? 'disabled' : ''}>เปิด</button></td></tr>`;
     }).join('')}</tbody></table></div>`:empty('ยังไม่มีรายการประเมิน')}</div></section>`;
     appEl.innerHTML=shell(content,'การประเมินของฉัน');bindShell();document.querySelectorAll('[data-open-assignment]:not([disabled])').forEach(b=>b.addEventListener('click',()=>navigate(`assignment/${b.dataset.openAssignment}`)));
   }
@@ -4321,6 +4470,21 @@
     if (!isCompetencyParticipant()) return navigate('dashboard');
     const { data: assignment, error } = await state.supabase.from('ec_competency_assignments').select('*,ec_eqa_rounds(*)').eq('id', id).single();
     if (error) return renderError(error);
+    const { data: practitionerLink, error: practitionerLinkError } = await state.supabase.from('ec_round_assignments')
+      .select('id')
+      .eq('round_id', assignment.round_id)
+      .eq('user_id', state.user.id)
+      .eq('assignment_role', 'practitioner')
+      .eq('active', true)
+      .maybeSingle();
+    if (practitionerLinkError) return renderError(practitionerLinkError);
+    if (practitionerLink) {
+      const content = `<section class="page"><div class="page-header"><div><h1>ไม่ต้องทำหัวข้อ 10</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><button class="btn btn-outline" id="back-my">กลับ</button></div><div class="notice success"><strong>คุณเป็นผู้ปฏิบัติจริงของรอบนี้</strong><br>ระบบใช้ผลรายบุคคลที่บันทึกในหัวข้อ 4 เป็นการประเมินแล้ว จึงไม่ต้องทำ Competency ซ้ำในหัวข้อ 10</div></section>`;
+      appEl.innerHTML = shell(content, 'การประเมินของฉัน');
+      bindShell();
+      document.getElementById('back-my').onclick = () => navigate('my-competency');
+      return;
+    }
     const openAt = assignment.ec_eqa_rounds?.competency_open_at;
     const closeAt = assignment.ec_eqa_rounds?.competency_close_at;
     const notOpened = openAt && new Date(openAt).getTime() > Date.now();
@@ -4378,6 +4542,148 @@
       });
       return;
     }
+    state.currentRound = assignment.ec_eqa_rounds;
+
+    if (generatedResultSchema(assignment.ec_eqa_rounds)) {
+      const [
+        { data: formQuestions, error: formQuestionError },
+        { data: formChoices, error: formChoiceError },
+        { data: formAnswers, error: formAnswerError },
+        { data: evidenceDocuments, error: evidenceError }
+      ] = await Promise.all([
+        state.supabase.from('ec_questions')
+          .select('id,round_id,question_order,section,question_type,prompt,image_document_id,ai_source_document_ids,points,is_critical,published,generated_by_ai')
+          .eq('round_id', assignment.round_id)
+          .eq('published', true)
+          .eq('generated_by_ai', false)
+          .is('archived_at', null)
+          .order('question_order'),
+        state.supabase.from('ec_question_choices_public').select('*'),
+        state.supabase.from('ec_competency_answers').select('*').eq('assignment_id', id),
+        state.supabase.from('ec_round_documents')
+          .select('id,title,file_name,storage_path,mime_type,visibility,category')
+          .eq('round_id', assignment.round_id)
+          .in('category', ['raw_result_image','antibody_panel'])
+          .is('archived_at', null)
+          .order('created_at')
+      ]);
+      if (formQuestionError || formChoiceError || formAnswerError || evidenceError) {
+        return renderError(formQuestionError || formChoiceError || formAnswerError || evidenceError);
+      }
+
+      const editable = ['not_started','in_progress'].includes(assignment.status) && !deadlinePassed && !notOpened;
+      const evidenceMap = await loadSignedImageMap((evidenceDocuments || []).map((document) => document.id), 1800);
+      const supplementalImageMap = await loadSignedImageMap((formQuestions || []).flatMap((question) => questionImageIds(question)), 1800);
+      const answerMap = new Map((formAnswers || []).map((answer) => [answer.question_id, answer]));
+      const formHtml = resultForm(assignment.result_payload, 'competencyResult', !editable, true);
+
+      let previousSection = '';
+      const supplementalHtml = (formQuestions || []).map((question) => {
+        const answerPayload = answerMap.get(question.id)?.answer_payload || {};
+        const questionChoices = (formChoices || [])
+          .filter((choice) => choice.question_id === question.id)
+          .sort((a, b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
+        const promptParts = questionPromptParts(question.prompt);
+        const section = String(question.section || 'คำถามเสริม');
+        const divider = section !== previousSection ? `<div class="quiz-section-divider"><span>${esc(section)}</span></div>` : '';
+        previousSection = section;
+        const input = question.question_type === 'single_choice'
+          ? `<div class="quiz-choice-list">${questionChoices.map((choice) => `<label class="quiz-choice"><input type="radio" name="q_${question.id}" value="${choice.id}" ${answerPayload.choice_id === choice.id ? 'checked' : ''} ${editable ? '' : 'disabled'}><span class="quiz-radio-ui"></span><span>${esc(choice.choice_text)}</span></label>`).join('')}</div>`
+          : `<textarea class="textarea quiz-text-answer" name="q_${question.id}" ${editable ? '' : 'disabled'} placeholder="พิมพ์คำตอบของคุณ">${esc(answerPayload.text || '')}</textarea>`;
+        return `${divider}<article class="quiz-question-card"><div class="quiz-question-head"><span class="quiz-question-number">${question.question_order}</span><div><span class="small muted">${esc(section)}</span><h3>${esc(promptParts.prompt)}</h3></div>${question.is_critical ? '<span class="badge danger">ข้อสำคัญ</span>' : ''}</div>${promptParts.context ? `<div class="quiz-case-context"><strong>ข้อมูลประกอบโจทย์</strong><div>${esc(promptParts.context)}</div></div>` : ''}${questionImageGallery(question, supplementalImageMap, 'quiz')}${input}</article>`;
+      }).join('');
+
+      let reflectionRows = [];
+      if (['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status)) {
+        const { data: rows } = await state.supabase.from('ec_reflections').select('*').eq('assignment_id', id).is('answer_id', null).order('created_at');
+        reflectionRows = rows || [];
+      }
+      const reflection = reflectionRows[0] || null;
+      const reflectionEditable = assignment.status === 'needs_reflection';
+      const reflectionHtml = ['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status)
+        ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>แบบทบทวนผลการแปลจากภาพ</h2><div class="small muted">ใช้เมื่อผลที่กรอกต้องแก้ไขหรืออธิบายเพิ่มเติม</div></div>${assignmentBadge(assignment.status)}</div><div class="form-grid"><div class="field"><label>สาเหตุที่แปลผลไม่ตรงหรือจุดที่ต้องทบทวน</label><textarea class="textarea" data-form-reflection="reason_for_error" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.reason_for_error || '')}</textarea></div><div class="field"><label>ความเข้าใจที่ถูกต้องหลังทบทวน</label><textarea class="textarea" data-form-reflection="corrected_understanding" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.corrected_understanding || '')}</textarea></div><div class="field"><label>สิ่งที่จะนำไปใช้กับงานจริง</label><textarea class="textarea" data-form-reflection="application_to_work" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.application_to_work || '')}</textarea></div>${reflection?.reviewer_note ? `<div class="notice warning"><strong>ข้อคิดเห็นผู้ทบทวน:</strong> ${esc(reflection.reviewer_note)}</div>` : ''}</div>${reflectionEditable ? `<div class="modal-footer"><button class="btn btn-primary" id="submit-form-reflection">ส่งแบบทบทวน</button></div>` : ''}</div>`
+        : '';
+
+      const completedLabel = resultPayloadHasData(assignment.result_payload) ? 'มีร่างที่บันทึกแล้ว' : 'ยังไม่ได้บันทึก';
+      const driveButton = !['not_started','in_progress'].includes(assignment.status) ? `<button class="btn btn-outline" id="archive-my-competency">เก็บ PDF ใน Google Drive</button>` : '';
+      const content = `<section class="page competency-result-page"><div class="page-header"><div><h1>ประเมิน EQA จากภาพผลดิบและ Case Study</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div>
+        <div class="quiz-intro-card"><div><span class="eyebrow">สำหรับเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง</span><h2>ทำแบบประเมินตามชนิดของรอบ</h2><p>Part J และ JE แบบ Wet ใช้ภาพผลดิบจากผู้ปฏิบัติจริง 2 คน ส่วน JE แบบ Dry ใช้ Case Study และคำถามจากแบบฟอร์มผู้ให้บริการ ระบบไม่แสดงคำตอบของผู้ปฏิบัติจริงหรือคำตอบของเจ้าหน้าที่คนอื่นก่อนส่ง</p></div><div class="quiz-progress-box"><strong>${esc(completedLabel)}</strong><span>สถานะแบบกรอก</span></div></div>
+        <div class="card"><div class="card-header"><div><h2>1. ภาพผลดิบและ Panel/Antigram</h2><div class="small muted">กดรูปเพื่อเปิดขนาดเต็ม ภาพที่ตั้งสิทธิ์เฉพาะผู้ทบทวนจะไม่ปรากฏในหน้านี้</div></div></div>${competencyEvidenceGallery(evidenceDocuments || [], evidenceMap)}</div>
+        <div style="height:16px"></div>
+        <div class="card"><div class="card-header"><div><h2>2. แบบบันทึกผลสำหรับ Competency</h2><div class="small muted">โครงสร้างเดียวกับผลรายบุคคลในหัวข้อ 4 แต่บันทึกแยกจากผลของผู้ปฏิบัติจริง</div></div></div><form id="competency-result-form">${formHtml}</form></div>
+        ${supplementalHtml ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>3. คำถามเสริม</h2><div class="small muted">มีเฉพาะข้อที่ผู้จัดการคุณภาพเพิ่มเอง</div></div></div><form id="competency-supplement-form" class="quiz-form-shell">${supplementalHtml}</form></div>` : ''}
+        ${editable ? `<div class="quiz-submit-bar"><button class="btn btn-secondary" id="save-competency-form">บันทึกร่าง</button><button class="btn btn-primary" id="submit-competency-form">ยืนยันและส่งผล</button></div>` : `<div style="height:16px"></div><div class="notice info">${assignment.reviewer_note ? `<strong>หมายเหตุผู้ประเมิน:</strong> ${esc(assignment.reviewer_note)}` : 'แบบประเมินถูกส่งแล้วและล็อกการแก้ไข'}</div>`}
+        ${reflectionHtml}
+      </section>`;
+      appEl.innerHTML = shell(content, 'ประเมินจากภาพผลดิบ / Case Study');
+      bindShell();
+      bindCapWorkupControls(document.getElementById('competency-result-form') || document);
+
+      document.getElementById('back-my').onclick = () => navigate('my-competency');
+      document.getElementById('archive-my-competency')?.addEventListener('click', async () => {
+        await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: assignment.status });
+      });
+      document.getElementById('submit-form-reflection')?.addEventListener('click', async () => {
+        const item = {
+          answer_id: null,
+          reason_for_error: String(document.querySelector('[data-form-reflection="reason_for_error"]')?.value || '').trim(),
+          corrected_understanding: String(document.querySelector('[data-form-reflection="corrected_understanding"]')?.value || '').trim(),
+          application_to_work: String(document.querySelector('[data-form-reflection="application_to_work"]')?.value || '').trim()
+        };
+        if (!item.reason_for_error || !item.corrected_understanding || !item.application_to_work) return toast('กรุณากรอกแบบทบทวนให้ครบทุกช่อง', 'warning');
+        const { error: reflectionError } = await state.supabase.rpc('ec_submit_reflection', { p_assignment_id: id, p_items: [item] });
+        if (reflectionError) return toast(friendlyError(reflectionError), 'danger');
+        toast('ส่งแบบทบทวนแล้ว', 'success'); route();
+      });
+
+      if (editable) {
+        const startResult = await state.supabase.rpc('ec_start_competency', { p_assignment_id: id });
+        if (startResult.error) toast(friendlyError(startResult.error), 'danger');
+
+        const saveForm = async () => {
+          const form = document.getElementById('competency-result-form');
+          if (!form?.reportValidity()) throw new Error('กรุณากรอกช่องบังคับในแบบผลให้ครบ');
+          const payload = collectResultPayload(form, 'competencyResult');
+          if (!payload || !resultPayloadHasData(payload)) throw new Error('กรุณากรอกผลอย่างน้อย 1 รายการก่อนบันทึก');
+          const { error: resultError } = await state.supabase.rpc('ec_save_competency_result', { p_assignment_id: id, p_result_payload: payload });
+          if (resultError) throw resultError;
+
+          const answerRows = (formQuestions || []).map((question) => {
+            let answerPayload = {};
+            if (question.question_type === 'single_choice') {
+              const checked = document.querySelector(`input[name="q_${question.id}"]:checked`);
+              answerPayload = checked ? { choice_id: checked.value } : {};
+            } else {
+              answerPayload = { text: String(document.querySelector(`[name="q_${question.id}"]`)?.value || '').trim() };
+            }
+            return { assignment_id: id, question_id: question.id, answer_payload: answerPayload };
+          });
+          if (answerRows.length) {
+            const { error: answerError } = await state.supabase.from('ec_competency_answers').upsert(answerRows, { onConflict: 'assignment_id,question_id' });
+            if (answerError) throw answerError;
+          }
+        };
+
+        document.getElementById('save-competency-form').onclick = async () => {
+          try { await saveForm(); toast('บันทึกร่างแบบประเมินแล้ว', 'success'); } catch (saveError) { toast(friendlyError(saveError), 'danger'); }
+        };
+        document.getElementById('submit-competency-form').onclick = async () => {
+          if (!confirm('ยืนยันส่งผลการแปลจากภาพหรือไม่ หลังส่งจะแก้ไขไม่ได้')) return;
+          try {
+            await saveForm();
+            const { error: submitError } = await state.supabase.rpc('ec_submit_competency', { p_assignment_id: id });
+            if (submitError) throw submitError;
+            await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: 'submitted' }, true);
+            toast('ส่งผลการประเมินแล้ว', 'success');
+            navigate('my-competency');
+          } catch (submitError) {
+            toast(friendlyError(submitError), 'danger');
+          }
+        };
+      }
+      return;
+    }
+
     const [{ data: questions }, { data: choices }, { data: answers }] = await Promise.all([
       state.supabase.from('ec_questions').select('id,round_id,question_order,section,question_type,prompt,image_document_id,ai_source_document_ids,points,is_critical,published').eq('round_id', assignment.round_id).eq('published', true).is('archived_at', null).order('question_order'),
       state.supabase.from('ec_question_choices_public').select('*'),
