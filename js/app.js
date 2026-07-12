@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.5.2
+/* CNMI EQA and Competency Management System v2.5.3
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -2177,6 +2177,35 @@
     return /MANUFACTURER\s+CODE|METHOD\s+CODE|EXCEPTION\s+CODE|SCREENING\s+CELL.*(?:CODE|BOX)|INSTRUMENT|SYSTEM\s+USED/.test(upper);
   }
 
+  function providerIsAboGroupResultField(field, context = {}) {
+    const upper = providerFieldText(field, context).toUpperCase();
+    return /\bABO\s+GROUP\b/.test(upper)
+      && !/SUBGROUP|METHOD|MANUFACTURER|EXCEPTION|GROUP\s*\/\s*RH/.test(upper);
+  }
+
+  function providerSyntheticAboGroupField() {
+    return {
+      key: '__cap_abo_group',
+      label: 'ABO Group',
+      input_type: 'select',
+      required: true,
+      options: CAP_CODE_OPTIONS.aboGroup.map((option) => ({ ...option, value: option.code }))
+    };
+  }
+
+  function providerStoredAboGroup(values = {}) {
+    const preferredKeys = ['__cap_abo_group', 'abo_group', 'abo'];
+    for (const key of preferredKeys) {
+      const value = String(values?.[key] || '').trim();
+      if (value) return value;
+    }
+    const dynamic = Object.entries(values || {}).find(([key, value]) => {
+      const upper = String(key || '').toUpperCase();
+      return value != null && String(value).trim() && /ABO.*GROUP/.test(upper) && !/SUB/.test(upper);
+    });
+    return dynamic ? String(dynamic[1]).trim() : '';
+  }
+
   function providerFieldBlock(row) {
     const label = providerCapFieldLabel(row.field);
     const requiredMark = row.field?.required ? '<span class="cap-required" aria-label="required">*</span>' : '';
@@ -2482,16 +2511,19 @@
     return labels.length ? `<div class="provider-relationship-chips">${labels.map((label) => `<span>${esc(label)}</span>`).join('')}</div>` : '';
   }
 
-  function providerSpecimenCards(group, schema, specimens, antigenTyping, methodsByProgram, prefix, disabled, evidenceContext = null) {
+  function providerSpecimenCards(group, schema, specimens, antigenTyping, methodsByProgram, prefix, disabled, formOptions = {}) {
+    const evidenceContext = formOptions?.evidenceContext || null;
+    const showReportingCodes = formOptions?.showReportingCodes !== false;
     return specimens.map((specimen, specimenIndex) => {
       const categorized = new Map(PROVIDER_FIELD_GROUPS.map(([key]) => [key, []]));
       const relevantPrograms = [];
+      const specimenValues = (state.currentResultPayload?.specimens || {})[specimen.id] || {};
       group.programs.forEach((program) => {
         const hasSpecimen = (program.specimens || []).some((item) => String(item?.id || item?.label || '') === specimen.id);
         const hasRelationship = (program.relationships || []).some((relationship) => [relationship?.from_specimen, relationship?.to_specimen].map(String).includes(specimen.id));
         if (hasSpecimen || hasRelationship) relevantPrograms.push(program);
         if (!hasSpecimen) return;
-        const values = (state.currentResultPayload?.specimens || {})[specimen.id] || {};
+        const values = specimenValues;
         (program.specimen_fields || []).forEach((field) => {
           // The CAP Kit Instruction worksheet contains 1=NT, 2=POS, 3=NEG reaction rows.
           // Those rows are for the laboratory worksheet only and are not CAP Result Form
@@ -2505,6 +2537,25 @@
           categorized.get(category).push({ program, field, context, html: generatedFieldControl(field, values[fieldKey], attrs, disabled, context) });
         });
       });
+      const aboRows = categorized.get('abo_rh') || [];
+      const hasAboGroup = aboRows.some((row) => providerIsAboGroupResultField(row.field, row.context));
+      const hasAboReportingContext = aboRows.some((row) => {
+        const upper = providerFieldText(row.field, row.context).toUpperCase();
+        return /ABO\s+SUBGROUP|\bRH(?:\(D\))?\s+TYPE\b/.test(upper);
+      });
+      const isDonorSpecimen = /\bDONOR\b/i.test(String(specimen.label || ''));
+      if (!hasAboGroup && hasAboReportingContext && !isDonorSpecimen) {
+        const field = providerSyntheticAboGroupField();
+        const context = { program: relevantPrograms[0] || group.programs[0], category: 'abo_rh', synthetic: true };
+        const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimen.id)}" data-provider-field="${esc(field.key)}"`;
+        categorized.get('abo_rh').unshift({
+          program: context.program,
+          field,
+          context,
+          html: generatedFieldControl(field, providerStoredAboGroup(specimenValues), attrs, disabled, context)
+        });
+      }
+
       (schema?.antigen_sections || []).filter((section) => String(section?.specimen_id || '') === specimen.id).forEach((section) => {
         const values = antigenTyping[specimen.id] || {};
         (section.fields || []).forEach((field) => {
@@ -2523,12 +2574,13 @@
         if (!rows.length) return '';
         const resultRows = rows.filter((row) => !providerIsReportingCodeField(row.field));
         const codeRows = rows.filter((row) => providerIsReportingCodeField(row.field));
+        if (!resultRows.length && (!showReportingCodes || !codeRows.length)) return '';
         const resultHtml = resultRows.length ? `<div class="cap-form-grid">${resultRows.map(providerFieldBlock).join('')}</div>` : '';
-        const codesHtml = codeRows.length ? `<details class="cap-reporting-code-details"><summary>CAP reporting codes / methods</summary><div class="cap-form-grid cap-reporting-code-grid">${codeRows.map(providerFieldBlock).join('')}</div></details>` : '';
+        const codesHtml = showReportingCodes && codeRows.length ? `<details class="cap-reporting-code-details"><summary>CAP reporting codes / methods</summary><div class="cap-form-grid cap-reporting-code-grid">${codeRows.map(providerFieldBlock).join('')}</div></details>` : '';
         return `<section class="provider-test-card provider-test-${esc(categoryKey)}"><h4>${esc(categoryLabel)}</h4>${resultHtml}${codesHtml}</section>`;
       }).join('');
       const methodRows = relevantPrograms.flatMap((program) => (program.method_fields || []).map((field) => ({ program, field, context: { program, category: 'method' } })));
-      const methods = methodRows.length ? `<details class="provider-method-card"><summary>CAP reporting codes / Method / Manufacturer</summary><div class="cap-form-grid cap-reporting-code-grid">${methodRows.map((row) => {
+      const methods = showReportingCodes && methodRows.length ? `<details class="provider-method-card"><summary>CAP reporting codes / Method / Manufacturer</summary><div class="cap-form-grid cap-reporting-code-grid">${methodRows.map((row) => {
         const fieldKey = String(row.field?.key || '');
         const programKey = String(row.program?.key || 'PROGRAM');
         const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="method" data-provider-item="${esc(programKey)}" data-provider-field="${esc(fieldKey)}"`;
@@ -2583,17 +2635,18 @@
       const groupSpecimens = providerGroupSpecimens(group, schema);
       return `<section class="provider-program-panel" data-provider-program-panel="${esc(group.scope)}" ${groupIndex ? 'hidden' : ''}>
         <div class="provider-specimen-tabs" role="tablist" aria-label="เลือกตัวอย่างใน ${esc(scopeLabel)}">${groupSpecimens.map((specimen, index) => `<button type="button" class="provider-specimen-tab ${index ? '' : 'active'}" data-provider-specimen-tab="${esc(specimen.id)}" aria-selected="${index ? 'false' : 'true'}">${esc(providerCapSpecimenLabel(specimen.label))}</button>`).join('')}</div>
-        ${providerSpecimenCards(group, schema, groupSpecimens, antigenTyping, methodsByProgram, prefix, disabled, options.evidenceContext || null)}
+        ${providerSpecimenCards(group, schema, groupSpecimens, antigenTyping, methodsByProgram, prefix, disabled, options)}
       </section>`;
     }).join('');
-    const generalFields = Array.isArray(schema.general_fields) ? schema.general_fields : [];
+    const generalFields = (Array.isArray(schema.general_fields) ? schema.general_fields : [])
+      .filter((field) => options?.showReportingCodes !== false || !providerIsReportingCodeField(field));
     const generalHtml = generalFields.length ? `<details class="provider-general-card"><summary>ข้อมูลรวมของรอบ / หมายเหตุ</summary><div class="cap-form-grid cap-reporting-code-grid">${generalFields.map((field) => {
       const fieldKey = String(field?.key || '');
       const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="general" data-provider-field="${esc(fieldKey)}"`;
       return `${providerFieldBlock({ field, context: { category: 'general' }, html: generatedFieldControl(field, p[fieldKey], attrs, disabled, { category: 'general' }) })}`;
     }).join('')}</div></details>` : '';
     const html = `<div class="result-grid provider-generated-result-form" data-provider-form-shell="${esc(shellToken)}">
-      <div class="provider-form-intro provider-form-intro-compact"><div><h3>CAP result entry</h3><p>Select the CAP reporting code. Free text is available only where the provider form requires it.</p></div></div>
+      <div class="provider-form-intro provider-form-intro-compact"><div><h3>${options?.showReportingCodes === false ? 'Competency result interpretation' : 'CAP result entry'}</h3><p>${options?.showReportingCodes === false ? 'Interpret the raw results. Manufacturer, method, and exception reporting codes are not required in Part 10.' : 'Select the CAP reporting code. Free text is available only where the provider form requires it.'}</p></div></div>
       ${providerInstructionDetails(instruction)}
       <nav class="provider-program-tabs" role="tablist" aria-label="เลือก Part">${groups.map((group, index) => `<button type="button" class="provider-program-tab ${index ? '' : 'active'}" data-provider-program-tab="${esc(group.scope)}" aria-selected="${index ? 'false' : 'true'}">${esc(providerScopeLabel(group.scope, group.programs))}</button>`).join('')}</nav>
       <div class="provider-program-panels">${programPanels}</div>
@@ -3222,11 +3275,18 @@
       const fieldDefinitions = generatedResultSchema().programs
         .filter((program) => (program.specimens || []).some((item) => String(item.id || item.label || '') === String(specimen)))
         .flatMap((program) => program.specimen_fields || []);
-      const rows = fieldDefinitions.map((field) => {
+      const hasAboGroupDefinition = fieldDefinitions.some((field) => providerIsAboGroupResultField(field));
+      const rows = [];
+      if (!hasAboGroupDefinition && providerStoredAboGroup(x)) {
+        const raw = providerStoredAboGroup(x);
+        const option = CAP_CODE_OPTIONS.aboGroup.find((item) => String(item.code) === String(raw) || String(item.label) === String(raw));
+        rows.push(`ABO Group: ${esc(option ? providerOptionDisplay(option) : raw)}`);
+      }
+      fieldDefinitions.forEach((field) => {
         const raw = x[field.key] || '';
         const option = (field.options || []).find((item) => String(item.value ?? item.code ?? item.label ?? '') === String(raw));
         const shown = option ? generatedOptionLabel(option) : raw;
-        return `${esc(field.label || field.key)}: ${esc(shown || '-')}`;
+        rows.push(`${esc(field.label || field.key)}: ${esc(shown || '-')}`);
       });
       return rows.length ? rows.join('<br>') : '-';
     }
@@ -5175,7 +5235,7 @@
       const formReviewValue = assignment.result_form_review_pass === true ? 'true' : assignment.result_form_review_pass === false ? 'false' : '';
       const body = `<div class="notice info"><strong>ตรวจผลที่เจ้าหน้าที่แปลจากภาพผลดิบ</strong><br>แบบกรอกนี้แยกจากผลรายบุคคลของผู้ปฏิบัติจริง 2 คน ผู้ทบทวนตรวจความถูกต้องโดยเทียบกับหลักฐานและผลกลางของห้อง</div><div style="height:12px"></div>
         <details class="competency-review-evidence"><summary><strong>เปิดดูภาพผลดิบที่ใช้ทำ Competency</strong></summary>${competencyEvidenceGallery(evidenceDocuments || [], evidenceMap)}</details>
-        <div style="height:12px"></div><div class="card" style="box-shadow:none;border:1px solid var(--line)"><div class="card-header"><h3>แบบผลที่เจ้าหน้าที่กรอก</h3></div>${resultForm(assignment.result_payload, 'reviewCompetencyResult', true, true)}</div>
+        <div style="height:12px"></div><div class="card" style="box-shadow:none;border:1px solid var(--line)"><div class="card-header"><h3>แบบผลที่เจ้าหน้าที่กรอก</h3></div>${resultForm(assignment.result_payload, 'reviewCompetencyResult', true, true, { showReportingCodes: false })}</div>
         <div style="height:12px"></div><div class="field"><label>ผลการตรวจแบบกรอกหลัก</label><select class="select" id="result-form-review-pass" required><option value="">เลือกผล</option><option value="true" ${formReviewValue==='true'?'selected':''}>ผ่าน — แปลผลเหมาะสม</option><option value="false" ${formReviewValue==='false'?'selected':''}>ต้องทบทวน — มีผลไม่ถูกต้อง/ไม่ครบ</option></select></div>
         ${supplementalRows ? `<div style="height:12px"></div><h3>คำถามเสริม</h3><div id="quiz-review-list" class="grid">${supplementalRows}</div>` : ''}
         <div class="field"><label>หมายเหตุรวมของผู้ทบทวน</label><textarea class="textarea" id="quiz-review-note">${esc(assignment.result_form_review_note || '')}</textarea></div>`;
@@ -5299,7 +5359,7 @@
     const staffEvidenceDocuments = (evidenceDocuments || []).filter((row) => row.visibility === 'staff');
     const evidenceMap = await loadSignedImageMap(staffEvidenceDocuments.map((row) => row.id), 1200);
     const body = `<div class="staff-preview-ribbon"><strong>ตัวอย่างหน้าจอของเจ้าหน้าที่</strong><span>ดูอย่างเดียว ไม่เปลี่ยนสิทธิ์จริงและไม่บันทึกข้อมูล</span></div>
-      <div class="staff-preview-section"><h3>แบบประเมินพร้อมภาพผลดิบที่ใช้ตอบ</h3>${resultForm(assignment.result_payload, 'staffPreview', true, true, { evidenceContext: { showEvidence: true, documents: staffEvidenceDocuments, imageMap: evidenceMap } })}</div>`;
+      <div class="staff-preview-section"><h3>แบบประเมินพร้อมภาพผลดิบที่ใช้ตอบ</h3>${resultForm(assignment.result_payload, 'staffPreview', true, true, { showReportingCodes: false, evidenceContext: { showEvidence: true, documents: staffEvidenceDocuments, imageMap: evidenceMap } })}</div>`;
     showModal(`มุมมองของ ${assignment.ec_profiles?.full_name || 'เจ้าหน้าที่'}`, body, '<button class="btn btn-primary" data-close-modal>ปิด</button>', true);
     bindProviderGeneratedResultControls(document.getElementById('modal-backdrop') || document);
   }
@@ -5457,7 +5517,7 @@
       const evidenceMap = await loadSignedImageMap((evidenceDocuments || []).map((document) => document.id), 1800);
       const supplementalImageMap = await loadSignedImageMap((formQuestions || []).flatMap((question) => questionImageIds(question)), 1800);
       const answerMap = new Map((formAnswers || []).map((answer) => [answer.question_id, answer]));
-      const formHtml = resultForm(assignment.result_payload, 'competencyResult', !editable, true, { evidenceContext: { showEvidence: true, documents: evidenceDocuments || [], imageMap: evidenceMap } });
+      const formHtml = resultForm(assignment.result_payload, 'competencyResult', !editable, true, { showReportingCodes: false, evidenceContext: { showEvidence: true, documents: evidenceDocuments || [], imageMap: evidenceMap } });
 
       let previousSection = '';
       const supplementalHtml = (formQuestions || []).map((question) => {
