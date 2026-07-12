@@ -1,4 +1,4 @@
-/* CNMI EQA PWA installer v2.4.1 */
+/* CNMI EQA PWA installer v2.4.2 */
 (() => {
   'use strict';
 

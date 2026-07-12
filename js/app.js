@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.4.1
+/* CNMI EQA and Competency Management System v2.4.2
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -20,7 +20,14 @@
   };
 
   const SIDEBAR_COLLAPSED_KEY = 'cnmi-eqa-sidebar-collapsed';
-  const AI_EXTRACTION_SCHEMA_VERSION = 'v2.3.2';
+  const AI_EXTRACTION_SCHEMA_VERSION = 'v2.4.2';
+
+  function isAiExtractionCurrent(doc) {
+    const version = String(doc?.ai_extraction?.schema_version || '');
+    if (version === AI_EXTRACTION_SCHEMA_VERSION) return true;
+    if (version !== 'v2.3.2') return false;
+    return !['source_document', 'instruction'].includes(String(doc?.category || ''));
+  }
 
   const PROGRAM_PROFILE_DEFINITIONS = Object.freeze({
     CAP_J_JE: { code:'CAP_J_JE', label:'CAP Comprehensive Transfusion Medicine J/JE', form_strategy:'cap_j_je', answer_strategy:'official_then_majority', summary_strategy:'cap_j_je_matrix' },
@@ -451,6 +458,18 @@
       .replace(/\s+/g, ' ')
       .replace(/^[-–—:,.\s]+|[-–—:,.\s]+$/g, '')
       .trim();
+  }
+
+  function questionPromptParts(value) {
+    const raw = String(value || '').trim();
+    const parts = raw.split(/\n\s*\n/).map((item) => item.trim()).filter(Boolean);
+    if (parts.length >= 2 && /^ข้อมูลกรณีศึกษา/i.test(parts[0])) {
+      return {
+        context: parts[0],
+        prompt: displayQuestionPrompt(parts.slice(1).join(' ')) || parts.slice(1).join(' '),
+      };
+    }
+    return { context: '', prompt: displayQuestionPrompt(raw) || raw };
   }
 
   function capAntibodyLabel(option) {
@@ -1472,8 +1491,11 @@
     const items = images.map((image, index) => {
       const isPanel = image.category === 'antibody_panel' || /antigram/i.test(`${image.file_name || ''} ${image.title || ''}`);
       const className = isPanel ? 'question-gallery-panel' : 'question-gallery-result';
+      const pdfFrame = `<iframe class="question-gallery-pdf" src="${esc(image.url)}#toolbar=0&navpanes=0" title="${esc(image.title || image.file_name || 'เอกสาร PDF')}"></iframe>`;
       const media = image.mime_type === 'application/pdf'
-        ? `<iframe class="question-gallery-pdf" src="${esc(image.url)}#toolbar=0&navpanes=0" title="${esc(image.title || image.file_name || 'Panel PDF')}"></iframe>`
+        ? (variant === 'quiz'
+          ? `<details class="question-reference-document"><summary>เปิดเอกสารอ้างอิง: ${esc(image.title || image.file_name || 'เอกสาร PDF')}</summary>${pdfFrame}</details>`
+          : pdfFrame)
         : `<img src="${esc(image.url)}" alt="${esc(image.title || image.file_name || 'รูปประกอบคำถาม')}">`;
       return `<figure class="question-gallery-item ${className}">
         ${media}
@@ -2552,7 +2574,7 @@
     if (/^c\s+Type$/.test(raw)) return 62;
     if (/^e\s+Type$/.test(raw)) return 63;
     if (/^K\s+Type$/i.test(raw)) return 64;
-    if (/Type$|antigen/i.test(raw)) return 70;
+    if (/\bType$|antigen/i.test(raw)) return 70;
     return 100;
   }
 
@@ -2928,17 +2950,19 @@
           const referencePercent = String(key?.answer_key_json?.consensus_percent || '').trim();
           const sortedChoices = (q.ec_question_choices || []).slice().sort((a, b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
           const galleryHtml = questionImageGallery(q, adminImageMap, 'admin');
+          const promptParts = questionPromptParts(q.prompt);
           return `<article class="admin-question-card">
             <div class="admin-question-top">
               <div class="question-order-badge">${q.question_order}</div>
-              <div class="admin-question-title"><span class="question-section">${esc(q.section || 'การแปลผล EQA')}</span><h3>${esc(displayQuestionPrompt(q.prompt) || q.prompt)}</h3></div>
+              <div class="admin-question-title"><span class="question-section">${esc(q.section || 'การแปลผล EQA')}</span><h3>${esc(promptParts.prompt)}</h3></div>
               <div class="question-status-stack">
                 <span class="badge ${q.published?'success':'warning'}">${q.published?'เผยแพร่แล้ว':'ฉบับร่าง'}</span>
                 <span class="badge ${hasKey?'success':'warning'}">${hasKey?'มีเฉลย':'รอเฉลย'}</span>
               </div>
             </div>
+            ${promptParts.context ? `<div class="quiz-case-context"><strong>ข้อมูลประกอบโจทย์</strong><div>${esc(promptParts.context)}</div></div>` : ''}
             ${galleryHtml || `<div class="notice warning small">คำถามนี้ยังไม่ได้ผูกกับภาพผลดิบ</div>`}
-            ${questionImageIds(q).length ? `<div class="question-source-chip">รูปประกอบ ${questionImageIds(q).length} ไฟล์</div>` : ''}
+            ${questionImageIds(q).length ? `<div class="question-source-chip">เอกสาร/รูปประกอบ ${questionImageIds(q).length} ไฟล์</div>` : ''}
             ${isAntibodyIdentificationQuestion(q) && q.question_type !== 'single_choice'
               ? `<div class="question-catalog-note"><strong>ตัวอย่างช่องที่ผู้ทำข้อสอบจะเห็น</strong><span>พิมพ์ Anti-K แล้วเลือกรายการจาก CAP Master List ได้มากกว่า 1 รายการ</span><input class="input" type="search" list="cap-antibody-preview-${q.id}" placeholder="พิมพ์ Anti- หรือรหัส CAP เช่น 124" autocomplete="off">${capAntibodyDatalist(`cap-antibody-preview-${q.id}`)}</div>`
               : sortedChoices.length ? `<div class="question-choice-preview">${sortedChoices.map((choice) => `<div><span class="choice-dot"></span>${esc(choice.choice_text)}</div>`).join('')}</div>` : ''}
@@ -3123,7 +3147,7 @@
       const pending = docs.filter((doc) =>
         doc.ai_extraction_status !== 'completed'
         || Number(doc.ai_extraction_file_size || 0) !== Number(doc.file_size || 0)
-        || String(doc.ai_extraction?.schema_version || '') !== AI_EXTRACTION_SCHEMA_VERSION);
+        || !isAiExtractionCurrent(doc));
 
       for (let index = 0; index < pending.length; index += 1) {
         const doc = pending[index];
@@ -3192,6 +3216,7 @@
     const planQuestionBatches = (docs, requestedCount) => {
       const rawDocs = docs.filter((doc) => doc.category === 'raw_result_image' && !/antigram/i.test(`${doc.file_name || ''} ${doc.title || ''}`));
       const knowledgeDocs = docs.filter((doc) => ['source_document','instruction'].includes(doc.category));
+      const hasProviderQuestions = knowledgeDocs.some((doc) => Array.isArray(doc.ai_extraction?.provider_questions) && doc.ai_extraction.provider_questions.length > 0);
       if (isCapJJeRound(round) && rawDocs.length) {
         const batches = [];
         const used = new Set();
@@ -3209,15 +3234,24 @@
         chunkArray(remainingRaw, 3).forEach((batch) => {
           batches.push({ ids: batch.map((doc) => doc.id), count: Math.min(5, batch.length), knowledge: false, label: `ภาพผลดิบ ${batch.length} ไฟล์` });
         });
+        if (hasProviderQuestions) {
+          const providerCount = knowledgeDocs.reduce((sum, doc) => sum + (Array.isArray(doc.ai_extraction?.provider_questions) ? doc.ai_extraction.provider_questions.length : 0), 0);
+          batches.push({ ids: knowledgeDocs.map((doc) => doc.id), count: Math.max(1, providerCount), knowledge: true, providerImport: true, label: `ข้อสอบต้นฉบับจากแบบฟอร์ม ${providerCount} ข้อ` });
+        }
         return batches;
       }
-      const reserveKnowledge = knowledgeDocs.length && requestedCount >= 4 ? Math.min(2, requestedCount) : 0;
+      const reserveKnowledge = !hasProviderQuestions && knowledgeDocs.length && requestedCount >= 4 ? Math.min(2, requestedCount) : 0;
       const rawTarget = Math.min(rawDocs.length, Math.max(0, requestedCount - reserveKnowledge));
       const selectedRaw = selectEvenly(rawDocs, rawTarget);
-      const batches = chunkArray(selectedRaw, 3).map((batch) => ({ ids: batch.map((doc) => doc.id), count: batch.length, knowledge: false }));
-      const remaining = Math.max(0, requestedCount - selectedRaw.length);
-      if (remaining > 0 && knowledgeDocs.length) batches.push({ ids: knowledgeDocs.map((doc) => doc.id), count: Math.min(5, remaining), knowledge: true });
-      if (!batches.length && knowledgeDocs.length) batches.push({ ids: knowledgeDocs.map((doc) => doc.id), count: Math.min(5, requestedCount), knowledge: true });
+      const batches = chunkArray(selectedRaw, 3).map((batch) => ({ ids: batch.map((doc) => doc.id), count: batch.length, knowledge: false, providerImport: false }));
+      if (hasProviderQuestions) {
+        const providerCount = knowledgeDocs.reduce((sum, doc) => sum + (Array.isArray(doc.ai_extraction?.provider_questions) ? doc.ai_extraction.provider_questions.length : 0), 0);
+        batches.push({ ids: knowledgeDocs.map((doc) => doc.id), count: Math.max(1, providerCount), knowledge: true, providerImport: true, label: `ข้อสอบต้นฉบับจากแบบฟอร์ม ${providerCount} ข้อ` });
+      } else {
+        const remaining = Math.max(0, requestedCount - selectedRaw.length);
+        if (remaining > 0 && knowledgeDocs.length) batches.push({ ids: knowledgeDocs.map((doc) => doc.id), count: Math.min(5, remaining), knowledge: true, providerImport: false });
+        if (!batches.length && knowledgeDocs.length) batches.push({ ids: knowledgeDocs.map((doc) => doc.id), count: Math.min(5, requestedCount), knowledge: true, providerImport: false });
+      }
       return batches;
     };
 
@@ -3243,12 +3277,13 @@
     const generateQuestionsInBatches = async (docs, questionCount, replaceDrafts, progressState) => {
       const batches = planQuestionBatches(docs, questionCount);
       if (!batches.length) throw new Error('ยังไม่มีภาพผลหรือเอกสารที่เหมาะสำหรับสร้างข้อสอบ');
+      if (progressState.total < progressState.step + batches.length) progressState.total = progressState.step + batches.length;
       let totalCreated = 0;
       for (let index = 0; index < batches.length; index += 1) {
         const batch = batches[index];
         progressState.step += 1;
-        updateAiProgress(progressState.step, progressState.total, `กำลังสร้างข้อสอบชุด ${index + 1}/${batches.length}`, batch.knowledge ? 'คำถามจากคู่มือและฟอร์มต้นฉบับ' : `ภาพผลดิบ ${batch.ids.length} ไฟล์`);
-        const result = await invokeDocumentAI({ action: 'generate_questions_batch', round_id: round.id, document_ids: batch.ids, knowledge_batch: batch.knowledge, question_count: batch.count, replace_ai_drafts: index === 0 ? replaceDrafts : false });
+        updateAiProgress(progressState.step, progressState.total, `กำลังสร้างข้อสอบชุด ${index + 1}/${batches.length}`, batch.knowledge ? (batch.label || 'นำเข้าคำถามจากแบบฟอร์มและเชื่อม Case Study จากคู่มือ') : (batch.label || `ภาพผลดิบ ${batch.ids.length} ไฟล์`));
+        const result = await invokeDocumentAI({ action: 'generate_questions_batch', round_id: round.id, document_ids: batch.ids, knowledge_batch: batch.knowledge, provider_import_expected: Boolean(batch.providerImport), question_count: batch.count, replace_ai_drafts: index === 0 ? replaceDrafts : false });
         totalCreated += Number(result.generated_count || 0);
       }
       return { generated_count: totalCreated, batch_count: batches.length };
@@ -3338,7 +3373,10 @@
                 : 'สร้างย้อนหลังครบชุดแบบแบ่งขั้นตอน';
       const needsQuestionSettings = mode === 'questions' || isHistoricalBundle;
       const capCompleteNotice = needsQuestionSettings && isCapJJeRound(round)
-        ? '<div class="notice info"><strong>CAP J/JE จะสร้างครบตามภาพที่อัปโหลด</strong><br>ABO, Rh และ Screen แยก J-01–J-05 กับ JE-07; Ab ID รวมภาพ Cell ต่อเนื่องกับ Antigram; Ag typing แยก C, c, E, e และ K</div>'
+        ? '<div class="notice info"><strong>CAP J/JE จะสร้างครบตามหลักฐานที่อัปโหลด</strong><br>ภาพผลดิบใช้สร้างคำถามแปลผลตามเดิม ส่วนข้อสอบที่มีโจทย์และตัวเลือกอยู่ใน Blank Result Form จะถูกนำเข้าตามต้นฉบับ และเชื่อม Case Study/ผลตรวจจาก Kit Instruction โดยไม่แต่งโจทย์ใหม่</div>'
+        : '';
+      const providerQuestionNotice = needsQuestionSettings
+        ? '<div class="notice success"><strong>ประหยัด Token หลังอ่านเอกสาร</strong><br>เมื่อระบบพบข้อสอบต้นฉบับ จะใช้ข้อมูลที่สกัดไว้สร้างข้อสอบโดยตรง ไม่เรียก AI รอบสร้างคำถามซ้ำ และไม่กระทบข้อสอบเดิมหรือคำถามจากภาพผลดิบ</div>'
         : '';
       const countField = needsQuestionSettings && !isCapJJeRound(round)
         ? `<div class="field"><label>จำนวนข้อโดยประมาณ</label><input class="input" type="number" name="question_count" min="3" max="50" value="12" required></div>`
@@ -3355,7 +3393,7 @@
             ? '<div class="notice info">Official Evaluation ใช้ Intended Response/Grade ส่วน Participant Summary ใช้ peer comparison หรือ Educational Challenge</div>'
             : '';
       showModal(title, `<form id="document-ai-bundle-form" class="form-grid">
-        ${capCompleteNotice}${countField}${replaceField}${regenerateAnswerField}
+        ${capCompleteNotice}${providerQuestionNotice}${countField}${replaceField}${regenerateAnswerField}
         ${isHistoricalBundle ? '<div class="notice info">ระบบจะทำทีละส่วน: ฟอร์ม → คำแนะนำ → ข้อสอบ → เฉลยชุดย่อย → สรุปอย่างเป็นทางการ</div>' : ''}
         <label><input type="checkbox" name="confirm_privacy" required> ยืนยันว่าไฟล์ไม่มีชื่อผู้ป่วย HN หรือข้อมูลส่วนบุคคลที่ไม่ควรส่งไปประมวลผล</label>
         ${roleNotice}
@@ -3375,7 +3413,7 @@
           const pendingCount = currentDocs.filter((doc) =>
             doc.ai_extraction_status !== 'completed'
             || Number(doc.ai_extraction_file_size || 0) !== Number(doc.file_size || 0)
-            || String(doc.ai_extraction?.schema_version || '') !== AI_EXTRACTION_SCHEMA_VERSION).length;
+            || !isAiExtractionCurrent(doc)).length;
           const sourceDocCount = pendingFormDocuments(currentDocs).targets.length;
           const questionBatches = (mode === 'questions' || isHistoricalBundle) ? planQuestionBatches(currentDocs, questionCount) : [];
           const answerBatches = mode === 'answers' ? await loadAnswerQuestionBatches(forceRegenerateAnswers) : [];
@@ -3397,17 +3435,18 @@
             : `พบไฟล์ที่ต้องอ่านใหม่ ${pendingCount} ไฟล์`;
           updateAiProgress(0, progressState.total, 'กำลังเตรียมรายการไฟล์', pendingLabel);
           await extractDocumentsOneByOne(mode, progressState);
+          const refreshedDocs = await loadDocumentsForAI(mode);
 
           let formResult = null;
           let instructionResult = null;
           let questionResult = null;
-          if (mode === 'form' || isHistoricalBundle) formResult = await generateFormsOneByOne(currentDocs, progressState);
+          if (mode === 'form' || isHistoricalBundle) formResult = await generateFormsOneByOne(refreshedDocs, progressState);
           if (mode === 'instructions' || isHistoricalBundle) {
             progressState.step += 1;
             updateAiProgress(progressState.step, progressState.total, 'กำลังสร้างคำแนะนำภาษาไทย', 'สรุปเฉพาะข้อมูลจากคู่มือผู้ให้บริการ');
             instructionResult = await invokeDocumentAI({ action: 'generate_instruction_summary', round_id: round.id });
           }
-          if (mode === 'questions' || isHistoricalBundle) questionResult = await generateQuestionsInBatches(currentDocs, questionCount, replaceDrafts, progressState);
+          if (mode === 'questions' || isHistoricalBundle) questionResult = await generateQuestionsInBatches(refreshedDocs, questionCount, replaceDrafts, progressState);
 
           if (mode === 'answers') {
             const answerResult = await generateAnswerKeysInBatches(progressState, forceRegenerateAnswers);
@@ -4291,6 +4330,7 @@
         .filter((choice) => choice.question_id === question.id)
         .sort((a, b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
       const galleryHtml = questionImageGallery(question, imageMap, 'quiz');
+      const promptParts = questionPromptParts(question.prompt);
       const section = String(question.section || 'การแปลผล EQA');
       const sectionDivider = section !== previousSection
         ? `<div class="quiz-section-divider"><span>${esc(section)}</span></div>`
@@ -4310,9 +4350,10 @@
       return `${sectionDivider}<article class="quiz-question-card">
         <div class="quiz-question-head">
           <span class="quiz-question-number">${question.question_order}</span>
-          <div><span class="small muted">${esc(section)}</span><h3>${esc(displayQuestionPrompt(question.prompt) || question.prompt)}</h3></div>
+          <div><span class="small muted">${esc(section)}</span><h3>${esc(promptParts.prompt)}</h3></div>
           ${question.is_critical?'<span class="badge danger">ข้อสำคัญ</span>':''}
         </div>
+        ${promptParts.context ? `<div class="quiz-case-context"><strong>ข้อมูลประกอบโจทย์</strong><div>${esc(promptParts.context)}</div></div>` : ''}
         ${galleryHtml}
         ${input}
       </article>`;

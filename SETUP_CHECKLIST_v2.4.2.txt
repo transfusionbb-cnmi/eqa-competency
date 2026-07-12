@@ -1,0 +1,29 @@
+CNMI EQA & Competency v2.4.2 — Checklist
+
+ส่วน GitHub Pages
+[ ] สำรองไฟล์หน้าเว็บเวอร์ชันเดิม
+[ ] อัปโหลดไฟล์และโฟลเดอร์ทั้งหมดในชุด v2.4.2 ทับ GitHub
+[ ] ตรวจว่า index.html, js/app.js, css/app.css และ service-worker.js เป็นไฟล์รุ่นใหม่
+[ ] รอ GitHub Pages Deploy สำเร็จ
+[ ] เปิดเว็บไซต์แล้วกด Ctrl + F5 หนึ่งครั้ง
+[ ] ถ้าเปิดจากแอปที่ติดตั้งไว้ ให้ปิดแอปแล้วเปิดใหม่
+
+ส่วน Supabase Edge Function
+[ ] เปิด Supabase Dashboard
+[ ] ไปที่ Edge Functions → generate-competency
+[ ] นำไฟล์ supabase/functions/generate-competency/index.ts รุ่น v2.4.2 ไป Deploy
+[ ] ตรวจว่า OPENAI_API_KEY เดิมยังอยู่ใน Edge Function Secrets
+[ ] ไม่ต้อง Run SQL
+
+ทดสอบ CAP JE-B 2026
+[ ] Blank Result Form ตั้งประเภทเป็น “เอกสารต้นฉบับจากผู้ให้บริการ”
+[ ] Kit Instruction ตั้งประเภทเป็น “คู่มือหรือคำแนะนำ”
+[ ] ไปที่ การประเมินความสามารถ → สร้างจากเอกสาร → สร้างข้อสอบ
+[ ] ติ๊กแทนที่ข้อสอบฉบับร่างเดิม
+[ ] ระบบอ่านใหม่เฉพาะ Blank Result Form และ Kit Instruction หนึ่งครั้ง
+[ ] ได้ข้อสอบ JE-14 จำนวน 4 ข้อ
+[ ] แต่ละข้อมี 4 ตัวเลือกและมีรหัส CAP 315–330 ตามต้นฉบับ
+[ ] ข้อมูลกรณีศึกษาจาก Kit Instruction แสดงในกล่อง “ข้อมูลประกอบโจทย์”
+[ ] ข้อสอบยังเป็นฉบับร่างจนกว่า QM จะตรวจและกดเผยแพร่
+
+ไม่ต้องแก้ Google Apps Script

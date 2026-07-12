@@ -1,0 +1,32 @@
+CNMI EQA & Competency v2.4.2 — Validation Report
+วันที่ตรวจ: 12 กรกฎาคม 2569
+
+ตรวจโครงสร้างโค้ด
+PASS - js/app.js ผ่าน Node syntax check
+PASS - js/pwa-install.js และ service-worker.js ผ่าน Node syntax check
+PASS - แก้อักขระควบคุมเดิมใน Regular Expression ให้เป็น word boundary ที่ถูกต้อง
+PASS - supabase/functions/generate-competency/index.ts ผ่าน esbuild TypeScript bundle check
+PASS - service-worker.js ใช้ Cache v2.4.2 และ revision ใหม่
+PASS - ไม่มีการเพิ่มหรือแก้ SQL
+
+ตรวจ Logic ใหม่
+PASS - Extraction schema มี provider_questions และ case_studies
+PASS - Blank Result Form เก็บเลขข้อ โจทย์ รหัส และตัวเลือก
+PASS - Kit Instruction เก็บ Case Study และผลตรวจประกอบ
+PASS - Question builder นำเข้าข้อสอบต้นฉบับโดยไม่เรียก AI รอบสร้างคำถามซ้ำ
+PASS - หากคาดว่าจะนำเข้าข้อสอบต้นฉบับแต่ถอดโจทย์ไม่ได้ ระบบหยุดและแจ้งตรวจไฟล์ แทนการแต่งคำถามทั่วไป
+PASS - ตัวเลือกถูกจัดรูปแบบเป็น “รหัส │ ข้อความ”
+PASS - การจับคู่ Case Study ใช้ case_reference เช่น JE-14
+PASS - ข้อสอบจากภาพผลดิบเดิมยังใช้ Workflow เดิม
+PASS - ลบได้เฉพาะข้อสอบ AI ที่เป็นฉบับร่างและยังไม่มีคำตอบ เมื่อเลือกแทนที่ร่างเดิม
+PASS - ข้อสอบเผยแพร่แล้วและข้อสอบเพิ่มเองไม่ถูกลบ
+PASS - Cache v2.3.2 ของ Raw Result, Antigram, Official Evaluation และ Participant Summary ยังใช้ต่อได้
+
+ผลทดสอบจำลอง
+PASS - สร้างข้อสอบตัวเลือกจากข้อมูลจำลอง JE-14 พร้อมเชื่อม Case Study
+PASS - ตัวเลือก “315 │ ...” ถูกเก็บตามลำดับ
+PASS - PDF อ้างอิงแสดงแบบพับ/เปิดในหน้าทำข้อสอบ
+
+ข้อจำกัดที่ยังคงเดิม
+- การให้คะแนนอัตโนมัติสำหรับข้อเลือกหลายคำตอบยังไม่เปิดใช้ในรุ่นนี้
+- QM ต้องตรวจข้อสอบและตัวเลือกก่อนเผยแพร่

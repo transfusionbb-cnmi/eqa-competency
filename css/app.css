@@ -1269,3 +1269,40 @@ tr:last-child td { border-bottom: 0; }
 @media print {
   .pwa-install-button, .pwa-guide-backdrop { display: none !important; }
 }
+
+/* v2.4.2 — provider-form questions and collapsible case-study references */
+.question-reference-document {
+  text-align: left;
+  border: 1px solid #cfe2ee;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+}
+.question-reference-document > summary {
+  cursor: pointer;
+  padding: 11px 13px;
+  font-weight: 700;
+  color: #245a78;
+  background: #eef8fd;
+}
+.question-reference-document[open] > summary {
+  border-bottom: 1px solid #cfe2ee;
+}
+.question-reference-document .question-gallery-pdf {
+  border-radius: 0;
+}
+
+.quiz-case-context {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid #cfe2ee;
+  border-radius: 12px;
+  background: #f3f9fd;
+  color: #243b4a;
+  line-height: 1.55;
+}
+.quiz-case-context > strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #1d5b7d;
+}

@@ -1,0 +1,17 @@
+CNMI EQA & Competency v2.4.2 — อัปเดตจาก v2.4.1
+
+1. สำรองไฟล์เว็บไซต์เดิม
+2. อัปโหลดไฟล์ทั้งหมดในชุดนี้ทับ GitHub Pages
+3. Deploy Supabase Edge Function ชื่อ generate-competency ใหม่จากไฟล์:
+   supabase/functions/generate-competency/index.ts
+4. ตรวจว่า OPENAI_API_KEY เดิมยังอยู่ใน Edge Function Secrets
+5. รอ GitHub Pages Deploy สำเร็จ
+6. เปิดเว็บไซต์และกด Ctrl + F5 หนึ่งครั้ง
+7. ทดสอบ CAP JE-B 2026 โดยสร้างข้อสอบใหม่และเลือกแทนที่เฉพาะข้อสอบ AI ฉบับร่างเดิม
+8. ผลที่ควรได้คือ JE-14 จำนวน 4 ข้อ ข้อละ 4 ตัวเลือก พร้อมข้อมูล Case Study
+
+ไม่ต้อง Run SQL
+ต้อง Deploy Edge Function generate-competency ใหม่
+ไม่ต้องแก้ Google Apps Script
+
+รายละเอียด: docs/36_UPDATE_v2.4.2_PROVIDER_FORM_QUESTIONS.md
