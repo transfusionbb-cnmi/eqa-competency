@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.6.4
+/* CNMI EQA and Competency Management System v2.6.5
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -1085,7 +1085,7 @@
                 <span class="badge info">ออนไลน์</span>
               </div>
               <div class="role-switcher">
-                <label for="active-role-select">${isSystemAdmin() ? 'มุมมองจำลอง' : 'ใช้งานในบทบาท'}</label>
+                <label for="active-role-select">เลือกตำแหน่ง</label>
                 <select class="role-select" id="active-role-select" data-role-switch ${availableViewRoles().length <= 1 ? 'disabled' : ''}>
                   ${roleOptions()}
                 </select>
@@ -1103,8 +1103,7 @@
               <div style="min-width:0"><strong>${esc(title || 'ระบบ EQA และประเมินความสามารถ')}</strong><div class="small muted">${esc(cfg.ORGANIZATION_NAME || '')}</div></div>
             </div>
             <div class="topbar-user">
-              ${isSystemAdmin() ? '<span class="actual-role-badge">สิทธิ์จริง: ผู้ดูแลระบบ</span>' : ''}
-              <span class="active-role-badge">${isSystemAdmin() ? 'มุมมอง' : 'โหมด'}: ${esc(ROLE_LABELS[state.activeRole] || 'ไม่ระบุบทบาท')}</span>
+              <span class="active-role-badge">สิทธิ์: ${esc(ROLE_LABELS[state.activeRole] || 'ไม่ระบุตำแหน่ง')}</span>
               <span class="small topbar-username">${esc(state.profile?.username || '')}</span>
             </div>
           </header>
@@ -1185,7 +1184,7 @@
       state.activeRole = nextRole;
       localStorage.setItem(roleStorageKey(), nextRole);
       closeSidebar();
-      toast(`${isSystemAdmin() ? 'เปลี่ยนมุมมองจำลองเป็น' : 'เปลี่ยนโหมดเป็น'} ${ROLE_LABELS[nextRole] || 'บทบาทที่เลือก'} แล้ว`, 'success');
+      toast(`เปลี่ยนตำแหน่งเป็น ${ROLE_LABELS[nextRole] || 'ตำแหน่งที่เลือก'} แล้ว`, 'success');
       await route();
     }));
     document.getElementById('reset-admin-preview')?.addEventListener('click', async () => {
@@ -7206,7 +7205,7 @@
     const content=`<section class="page">
       <div class="page-header"><div><h1>คู่มือการใช้งาน</h1><p>รวมคำอธิบายและลำดับงานของระบบไว้ในหน้านี้</p></div></div>
       <div class="guide-list">
-        <details open><summary>เริ่มต้นใช้งานและเลือกบทบาท</summary><div class="guide-body"><p>เลือกบทบาทจากกล่องด้านล่างของแถบเมนู ระบบจะแสดงปุ่มตามบทบาทที่เลือก โดยไม่เปลี่ยนสิทธิ์จริงของบัญชี</p><p>หากมีหลายบทบาท ให้เลือกบทบาทให้ตรงกับงานที่กำลังทำ เช่น เจ้าหน้าที่ ผู้ทบทวน ผู้จัดการคุณภาพ รองผู้จัดการคุณภาพ แพทย์ หรือผู้ดูแลระบบ</p></div></details>
+        <details open><summary>เริ่มต้นใช้งานและเลือกตำแหน่ง</summary><div class="guide-body"><p>เลือกตำแหน่งจากกล่องด้านล่างของแถบเมนู ระบบจะแสดงเมนูและปุ่มตามตำแหน่งที่เลือก</p><p>หากมีหลายตำแหน่ง ให้เลือกให้ตรงกับงานที่กำลังทำ เช่น เจ้าหน้าที่ ผู้ทบทวน ผู้จัดการคุณภาพ รองผู้จัดการคุณภาพ แพทย์ หรือผู้ดูแลระบบ</p></div></details>
         <details><summary>ลำดับงานของรอบ EQA</summary><div class="guide-body"><ol><li>บันทึกข้อมูลการรับรอบและกำหนดผู้รับผิดชอบ</li><li>ผู้ปฏิบัติจริงบันทึกผลรายบุคคล</li><li>ระบบเทียบผลและสร้างสรุปผลห้องปฏิบัติการ</li><li>ผู้ทบทวนตรวจและส่งให้ผู้รับรองคุณภาพ</li><li>ผู้รับรองคุณภาพรับรอง และแพทย์รับทราบ</li></ol></div></details>
         <details><summary>เอกสารและภาพ</summary><div class="guide-body">
           <p>ไฟล์เก็บในพื้นที่ส่วนตัวของระบบ ไม่ได้เก็บใน GitHub ระบบใช้ <strong>ประเภทเอกสาร</strong> เป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่เท่านั้น</p>
