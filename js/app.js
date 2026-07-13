@@ -607,7 +607,9 @@
   function syncActiveRole() {
     const saved = localStorage.getItem(roleStorageKey());
     const available = availableViewRoles();
-    const fallback = isSystemAdmin() ? 'admin' : (ROLE_PRIORITY.find((role) => state.roles.includes(role)) || state.roles[0] || 'staff');
+    const fallback = isSystemAdmin()
+      ? 'admin'
+      : (state.roles.includes('staff') ? 'staff' : (ROLE_PRIORITY.find((role) => state.roles.includes(role)) || state.roles[0] || 'staff'));
     state.activeRole = saved && available.includes(saved) ? saved : fallback;
     localStorage.setItem(roleStorageKey(), state.activeRole);
   }
@@ -935,7 +937,6 @@
               <span class="small topbar-username">${esc(state.profile?.username || '')}</span>
             </div>
           </header>
-          ${isAdminPreview() ? `<div class="admin-preview-banner"><strong>มุมมอง: ${esc(ROLE_LABELS[state.activeRole] || '')}</strong><button class="btn btn-outline btn-sm" id="reset-admin-preview">กลับสู่ผู้ดูแลระบบ</button></div>` : ''}
           ${content}
         </main>
       </div>`;
@@ -5443,8 +5444,10 @@
 
   async function renderMyCompetency() {
     if (!isCompetencyParticipant()) {
-      const content=`<section class="page"><div class="page-header"><div><h1>การประเมินของฉัน</h1></div></div><div class="notice">แพทย์ผู้รับรองและบัญชีที่ไม่มีบทบาทเจ้าหน้าที่ไม่ต้องทำแบบทดสอบบุคลากร</div></section>`;
-      appEl.innerHTML=shell(content,'การประเมินของฉัน');bindShell();return;
+      const content = `<section class="page my-competency-page"><div class="page-header"><div><h1>การประเมินของฉัน</h1></div></div><div class="notice">บัญชีนี้ไม่มีรายการประเมินสำหรับเจ้าหน้าที่</div></section>`;
+      appEl.innerHTML = shell(content, 'การประเมินของฉัน');
+      bindShell();
+      return;
     }
     const [{ data: assignments, error }, { data: practitionerRows, error: practitionerError }] = await Promise.all([
       state.supabase.from('ec_competency_assignments').select('*, ec_eqa_rounds(*)').eq('user_id', state.user.id).neq('status', 'cancelled').order('created_at', { ascending: false }),
@@ -5453,17 +5456,42 @@
     if (error || practitionerError) return renderError(error || practitionerError);
     const practitionerRoundIds = new Set((practitionerRows || []).map((row) => row.round_id));
     const visibleAssignments = (assignments || []).filter((assignment) => !practitionerRoundIds.has(assignment.round_id));
-    const content=`<section class="page"><div class="page-header"><div><h1>การประเมินของฉัน</h1><p>คำตอบถูกเก็บแยก และหลังส่งแล้วจะแก้ไขไม่ได้</p></div></div><div class="notice info">หากคุณเป็นผู้ปฏิบัติจริงของรอบนั้น ระบบจะใช้ผลรายบุคคลในหัวข้อ 4 เป็นการประเมิน และจะไม่แสดงหัวข้อ 10 ซ้ำ</div><div style="height:12px"></div><div class="card">${visibleAssignments.length?`<div class="table-wrap"><table><thead><tr><th>รอบ</th><th>ประเภท</th><th>ปิดรับคำตอบ</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${visibleAssignments.map(a=>{
+    const cards = visibleAssignments.map((a) => {
       const closeAt = a.ec_eqa_rounds?.competency_close_at;
       const expired = closeAt && new Date(closeAt).getTime() < Date.now() && ['not_started','in_progress'].includes(a.status);
-      return `<tr><td><strong>${esc(a.ec_eqa_rounds?.provider)} ${esc(a.ec_eqa_rounds?.round_code)}</strong></td><td>${esc(a.assignment_type === 'quiz' && generatedResultSchema(a.ec_eqa_rounds) ? 'ประเมินจากภาพผลดิบ / Case Study' : labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${closeAt ? fmtDate(closeAt, true) : '-'}${expired ? '<br><span class="badge danger">ปิดแล้ว</span>' : ''}</td><td>${assignmentBadge(a.status)}</td><td>${a.score??'-'}</td><td><button class="btn btn-primary btn-sm" data-open-assignment="${a.id}" ${expired ? 'disabled' : ''}>เปิด</button></td></tr>`;
-    }).join('')}</tbody></table></div>`:empty('ยังไม่มีรายการประเมิน')}</div></section>`;
-    appEl.innerHTML=shell(content,'การประเมินของฉัน');bindShell();document.querySelectorAll('[data-open-assignment]:not([disabled])').forEach(b=>b.addEventListener('click',()=>navigate(`assignment/${b.dataset.openAssignment}`)));
+      const typeText = a.assignment_type === 'quiz' && generatedResultSchema(a.ec_eqa_rounds)
+        ? 'ประเมินจากภาพผลดิบ / Case Study'
+        : labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type);
+      return `<article class="my-competency-card">
+        <div class="my-competency-card-head">
+          <div><h2>${esc(a.ec_eqa_rounds?.provider || '')} ${esc(a.ec_eqa_rounds?.round_code || '')}</h2><div class="my-competency-type">${esc(typeText)}</div></div>
+          ${assignmentBadge(a.status)}
+        </div>
+        <div class="my-competency-meta">
+          <div><span>ปิดรับคำตอบ</span><strong>${closeAt ? fmtDate(closeAt, true) : '-'}</strong></div>
+          <div><span>คะแนน</span><strong>${a.score ?? '-'}</strong></div>
+        </div>
+        ${expired ? '<div class="notice danger small">ปิดรับคำตอบแล้ว</div>' : ''}
+        <button class="btn btn-primary my-competency-open" data-open-assignment="${a.id}" ${expired ? 'disabled' : ''}>${a.status === 'in_progress' ? 'ทำต่อ' : a.status === 'not_started' ? 'เริ่มทำ' : 'เปิดดูผล'}</button>
+      </article>`;
+    }).join('');
+    const content = `<section class="page my-competency-page">
+      <div class="page-header"><div><h1>การประเมินของฉัน</h1></div></div>
+      ${visibleAssignments.length ? `<div class="my-competency-list">${cards}</div>` : empty('ยังไม่มีรายการประเมิน')}
+    </section>`;
+    appEl.innerHTML = shell(content, 'การประเมินของฉัน');
+    bindShell();
+    document.querySelectorAll('[data-open-assignment]:not([disabled])').forEach((button) => button.addEventListener('click', () => navigate(`assignment/${button.dataset.openAssignment}`)));
   }
 
   async function renderAssignment(id) {
-    if (!isCompetencyParticipant()) return navigate('dashboard');
-    const { data: assignment, error } = await state.supabase.from('ec_competency_assignments').select('*,ec_eqa_rounds(*)').eq('id', id).single();
+    const assignedStaff = hasAssignedRole('staff') && !hasAssignedRole('physician');
+    if (!assignedStaff) return navigate('dashboard');
+    if (state.activeRole !== 'staff') {
+      state.activeRole = 'staff';
+      localStorage.setItem(roleStorageKey(), 'staff');
+    }
+    const { data: assignment, error } = await state.supabase.from('ec_competency_assignments').select('*,ec_eqa_rounds(*)').eq('id', id).eq('user_id', state.user.id).single();
     if (error) return renderError(error);
     state.currentRound = assignment.ec_eqa_rounds;
     await loadRoundInstructionExtractions(assignment.round_id);
@@ -6334,6 +6362,10 @@
     if(state.profile?.must_change_password){await renderForcePassword();return;}
     const parts=currentRoute().split('/');
     const requestedRoute = parts[0] || 'dashboard';
+    if ((requestedRoute === 'my-competency' || requestedRoute === 'assignment') && hasAssignedRole('staff') && !hasAssignedRole('physician') && state.activeRole !== 'staff') {
+      state.activeRole = 'staff';
+      localStorage.setItem(roleStorageKey(), 'staff');
+    }
     if (!canViewRoute(requestedRoute)) {
       if (requestedRoute !== 'dashboard') { navigate('dashboard'); return; }
     }

@@ -2163,3 +2163,33 @@ tr:last-child td { border-bottom: 0; }
   .table-wrap > table[data-mobile-enhanced="1"] tbody td,
   .table-wrap > table[data-mobile-enhanced="1"] tbody th { grid-template-columns: 78px minmax(0, 1fr); }
 }
+
+/* v2.5.7 — clean role preview and mobile-first My Competency */
+.admin-preview-banner { display: none !important; }
+.my-competency-list { display: grid; gap: 14px; }
+.my-competency-card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(32, 79, 111, .06);
+}
+.my-competency-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.my-competency-card-head h2 { margin: 0; font-size: 20px; line-height: 1.25; overflow-wrap: anywhere; }
+.my-competency-type { margin-top: 5px; color: var(--muted); line-height: 1.45; overflow-wrap: anywhere; }
+.my-competency-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 15px 0; }
+.my-competency-meta > div { min-width: 0; padding: 11px 12px; border-radius: 12px; background: #f4f8fb; }
+.my-competency-meta span { display: block; color: var(--muted); font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+.my-competency-meta strong { display: block; overflow-wrap: anywhere; }
+.my-competency-open { width: 100%; }
+@media (min-width: 760px) {
+  .my-competency-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .my-competency-page { padding-top: 12px; }
+  .my-competency-card { padding: 14px; border-radius: 15px; }
+  .my-competency-card-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  .my-competency-card-head h2 { font-size: 18px; }
+  .my-competency-meta { grid-template-columns: 1fr; gap: 7px; margin: 12px 0; }
+}
