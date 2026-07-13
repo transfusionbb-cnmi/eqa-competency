@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.6.3
+/* CNMI EQA and Competency Management System v2.6.4
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -2051,18 +2051,31 @@
     return [...new Map([...explicit, ...sharedPanels].map((document) => [document.id, document])).values()];
   }
 
-  function providerSpecimenEvidenceHtml(documents, imageMap, specimenIds, fieldCategories = [], displayLabel = '') {
-    const rows = competencyEvidenceRelevantDocuments(documents, specimenIds, fieldCategories)
+  function providerSpecimenEvidenceHtml(documents, imageMap, specimenIds, fieldCategories = [], displayLabel = '', options = {}) {
+    const primaryIds = (Array.isArray(specimenIds) ? specimenIds : [specimenIds]).filter(Boolean);
+    let relevant = competencyEvidenceRelevantDocuments(documents, primaryIds, fieldCategories);
+    if (options?.donorOnly) {
+      relevant = relevant.filter((document) => ['Crossmatch', 'Antigen typing'].includes(competencyEvidenceTest(document)));
+    }
+    const linkedCrossmatchIds = (Array.isArray(options?.linkedCrossmatchIds) ? options.linkedCrossmatchIds : []).filter(Boolean);
+    const linkedCrossmatchDocuments = linkedCrossmatchIds.length ? (documents || []).filter((document) => {
+      if (competencyEvidenceTest(document) !== 'Crossmatch') return false;
+      return linkedCrossmatchIds.some((specimenId) => competencyEvidenceMatchesSpecimen(document, specimenId));
+    }) : [];
+    relevant = [...new Map([...relevant, ...linkedCrossmatchDocuments].map((document) => [document.id, document])).values()];
+    const rows = relevant
       .map((document) => imageMap?.get(document.id))
       .filter(Boolean)
       .sort((a, b) => competencyEvidenceTest(a).localeCompare(competencyEvidenceTest(b), 'en'));
-    const label = displayLabel || (Array.isArray(specimenIds) ? specimenIds[0] : specimenIds);
+    const label = displayLabel || primaryIds[0];
     if (!rows.length) {
       return `<div class="provider-evidence-empty"><strong>No raw-result image is linked to ${esc(providerCapSpecimenLabel(label))}</strong><span>Admin: upload the file using the specimen ID in the filename and set visibility to “บุคลากรทุกคน”.</span></div>`;
     }
     const cards = rows.map((document) => {
       const title = document.title || document.file_name || 'Raw result';
-      const test = competencyEvidenceTest(document);
+      let test = competencyEvidenceTest(document);
+      const isLinkedCrossmatch = test === 'Crossmatch' && linkedCrossmatchIds.some((specimenId) => competencyEvidenceMatchesSpecimen(document, specimenId));
+      if (isLinkedCrossmatch && options?.crossmatchLabel) test = options.crossmatchLabel;
       const isPdf = document.mime_type === 'application/pdf';
       const thumb = isPdf
         ? `<div class="provider-evidence-pdf-thumb"><span>PDF</span></div>`
@@ -3032,7 +3045,9 @@
     // the correct provider-supplied donor group without asking staff to re-enter it.
     const normalizedDonor = providerCanonicalSpecimenId(donorId);
     const roundCode = String(state.currentRound?.round_code || '').toUpperCase();
-    if (!abo && !rh && normalizedDonor === 'J06R' && /J\/?JE-A|J-A/.test(roundCode)) { abo = 'O'; rh = 'Positive'; }
+    // CNMI workflow does not display a provider-supplied ABO/Rh for Donor J-06R.
+    // Keep J-06R as a donor/reference specimen without inventing a blood group.
+    if (normalizedDonor === 'J06R' && /J\/?JE-A|J-A/.test(roundCode)) { abo = ''; rh = ''; }
     if (!abo && !rh && normalizedDonor === 'J13R' && /J\/?JE-B|J-B/.test(roundCode)) { abo = 'A'; rh = 'Negative'; }
     const knownGroup = [abo ? `Group ${abo}` : '', rh ? `Rh ${rh}` : ''].filter(Boolean).join(', ');
     return { isDonor, donorId, sourceIds, abo, rh, knownGroup };
@@ -3072,7 +3087,38 @@
         });
       });
     }
+    // Some older JA/JB schemas contain only the first donor relationship even
+    // though the provider form contains five crossmatch rows. Complete the matrix
+    // deterministically from the round and donor ID without requiring regeneration.
+    const normalizedDonor = providerCanonicalSpecimenId(donorMeta?.donorId);
+    const roundCode = String(state.currentRound?.round_code || '').toUpperCase();
+    if (group?.scope === 'J' && normalizedDonor === 'J06R' && /J\/?JE-A|J-A/.test(roundCode)) {
+      for (let number = 1; number <= 5; number += 1) linked.push(`J-${String(number).padStart(2, '0')}S`);
+    }
+    if (group?.scope === 'J' && normalizedDonor === 'J13R' && /J\/?JE-B|J-B/.test(roundCode)) {
+      for (let number = 8; number <= 12; number += 1) linked.push(`J-${String(number).padStart(2, '0')}S`);
+    }
     return [...new Set(linked)].sort((a, b) => providerSpecimenOrder(a) - providerSpecimenOrder(b) || a.localeCompare(b, 'en'));
+  }
+
+  function providerLinkedCrossmatchDonorIds(group, specimenIds) {
+    const ids = (Array.isArray(specimenIds) ? specimenIds : [specimenIds]).map((value) => String(value || '').trim()).filter(Boolean);
+    const linked = [];
+    (group?.programs || []).forEach((program) => {
+      if (!providerProgramIsCrossmatch(program)) return;
+      (program.relationships || []).forEach((relationship) => {
+        const from = String(relationship?.from_specimen || '').trim();
+        const to = String(relationship?.to_specimen || '').trim();
+        const currentIsFrom = ids.some((id) => providerSpecimenIdMatches(from, id));
+        const currentIsTo = ids.some((id) => providerSpecimenIdMatches(to, id));
+        if (!currentIsFrom && !currentIsTo) return;
+        const other = currentIsFrom ? to : from;
+        if (/(?:JE|J)[-_ ]?\d{1,2}R\b/i.test(other)) linked.push(other.replace(/[_ ]+/g, '-').toUpperCase());
+      });
+    });
+    const roundCode = String(state.currentRound?.round_code || '').toUpperCase();
+    if (group?.scope === 'JE' && ids.some((id) => /^JE-?0?7[RS]?$/i.test(id)) && /J\/?JE-A|J-A/.test(roundCode)) linked.push('J-06R');
+    return [...new Set(linked)];
   }
 
   function providerCrossmatchFieldRole(field, program) {
@@ -3174,8 +3220,12 @@
 
   function providerDonorSummaryHtml(meta) {
     if (!meta?.isDonor) return '';
-    const groupText = meta.knownGroup || 'กลุ่มเลือดระบุในแบบฟอร์มผู้ให้บริการ';
-    return `<section class="provider-donor-summary"><div><span class="eyebrow">DONOR INFORMATION FROM PROVIDER FORM</span><h4>${esc(providerCapSpecimenLabel(meta.donorId))}</h4></div><div class="provider-donor-blood-group"><strong>${esc(groupText)}</strong><span>เป็นข้อมูลอ้างอิงจากแบบฟอร์ม CAP ไม่ต้องกรอก ABO/Rh ซ้ำ</span></div></section>`;
+    const hasKnownGroup = Boolean(meta.knownGroup);
+    const groupText = hasKnownGroup ? meta.knownGroup : 'ไม่แสดงหมู่เลือดของ Donor';
+    const note = hasKnownGroup
+      ? 'เป็นข้อมูลอ้างอิงจากแบบฟอร์ม CAP ไม่ต้องกรอก ABO/Rh ซ้ำ'
+      : 'ใช้เป็น Donor สำหรับ Crossmatch และ Antigen typing โดยไม่สร้างช่อง ABO/Rh ซ้ำ';
+    return `<section class="provider-donor-summary"><div><span class="eyebrow">DONOR INFORMATION FROM PROVIDER FORM</span><h4>${esc(providerCapSpecimenLabel(meta.donorId))}</h4></div><div class="provider-donor-blood-group"><strong>${esc(groupText)}</strong><span>${esc(note)}</span></div></section>`;
   }
 
   function providerSpecimenCards(group, schema, specimens, antigenTyping, methodsByProgram, prefix, disabled, formOptions = {}) {
@@ -3278,11 +3328,24 @@
       const categoryKeysWithRows = [...categorized.entries()].filter(([, rows]) => rows.length).map(([key]) => key);
       if (donorMeta.isDonor && linkedCrossmatchSpecimens.length) categoryKeysWithRows.push('crossmatch');
       const evidenceDocuments = evidenceContext?.documents || [];
-      const evidenceSpecimenIds = donorMeta.isDonor
-        ? [...new Set([...sourceIds, ...linkedCrossmatchSpecimens])]
-        : sourceIds;
+      const linkedCrossmatchDonorIds = !donorMeta.isDonor && categoryKeysWithRows.includes('crossmatch')
+        ? providerLinkedCrossmatchDonorIds(group, sourceIds)
+        : [];
+      const serumId = sourceIds.find((id) => /S\b/i.test(String(id))) || (String(specimen.id || '').replace(/R\/?/i, 'S'));
+      const linkedDonorId = linkedCrossmatchDonorIds[0] || '';
       const specimenEvidence = evidenceContext?.showEvidence
-        ? providerSpecimenEvidenceHtml(evidenceDocuments, evidenceContext.imageMap || new Map(), evidenceSpecimenIds, categoryKeysWithRows, donorMeta.isDonor ? donorMeta.donorId : specimen.label)
+        ? providerSpecimenEvidenceHtml(
+            evidenceDocuments,
+            evidenceContext.imageMap || new Map(),
+            sourceIds,
+            categoryKeysWithRows,
+            donorMeta.isDonor ? donorMeta.donorId : specimen.label,
+            {
+              donorOnly: donorMeta.isDonor,
+              linkedCrossmatchIds: linkedCrossmatchDonorIds,
+              crossmatchLabel: linkedDonorId ? `Crossmatch — ${providerCapSpecimenLabel(serumId)} × Donor ${providerCapSpecimenLabel(linkedDonorId)}` : '',
+            }
+          )
         : '';
       const categoryCards = PROVIDER_FIELD_GROUPS.map(([categoryKey, categoryLabel]) => {
         const rows = categorized.get(categoryKey) || [];
