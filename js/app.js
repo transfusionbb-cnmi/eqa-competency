@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.6.0
+/* CNMI EQA and Competency Management System v2.6.1
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -2477,7 +2477,10 @@
 
   function providerIsAboGroupResultField(field, context = {}) {
     const upper = providerFieldText(field, context).toUpperCase();
-    return /\bABO\s+GROUP\b/.test(upper)
+    // CAP blank forms may label the same answer as either “ABO Group” or
+    // “ABO primary group”. Treat both as one result field so the UI does not
+    // inject a second synthetic ABO question beside the provider question.
+    return /\bABO(?:\s+PRIMARY)?\s+GROUP\b/.test(upper)
       && !/SUBGROUP|METHOD|MANUFACTURER|EXCEPTION|GROUP\s*\/\s*RH/.test(upper);
   }
 
@@ -2793,6 +2796,12 @@
       if (inferred === group.scope && !map.has(id)) map.set(id, id);
     });
     let rows = [...map.entries()].map(([id, label]) => ({ id, label, sourceIds: [id] }));
+    // In CAP J/JE-A 2026, J-06R is the donor / antigen-typing specimen from
+    // Part J. It may be referenced by JE-07 crossmatch, but it must not become
+    // a separate answer tab inside Part JE.
+    if (legacyJa && group.scope === 'JE') {
+      rows = rows.filter((row) => !/^J-?0?6R?\b/i.test(String(row.id || '')));
+    }
     // JA 2026 uses JE-07S (serum) and JE-07R (red cells) as two physical
     // components of the same challenge. Show one JE-07 tab and one result form.
     if (legacyJa && group.scope === 'JE') {
@@ -2859,9 +2868,37 @@
           const category = providerFieldCategory(program, field);
           const context = { program, category };
           const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(storageSpecimenId)}" data-provider-field="${esc(fieldKey)}"`;
-          categorized.get(category).push({ program, field, context, html: generatedFieldControl(field, values[fieldKey], attrs, disabled, context) });
+          // Preserve a draft that was previously saved in the temporary
+          // __cap_abo_group field when the official provider field is
+          // “ABO primary group”.
+          const storedValue = providerIsAboGroupResultField(field, context)
+            ? (values[fieldKey] || providerStoredAboGroup(values))
+            : values[fieldKey];
+          categorized.get(category).push({ program, field, context, html: generatedFieldControl(field, storedValue, attrs, disabled, context) });
         });
       });
+      // J-06R in the JA 2026 survey is an antigen-typing donor specimen.
+      // Do not show ABO/Rh, screening, antibody-ID or crossmatch answer blocks
+      // that were incorrectly attached by the generated schema.
+      const legacyJaJ06 = isLegacyCapJJeARound(state.currentRound)
+        && sourceIds.some((id) => /^J-?0?6R?$/i.test(String(id || '')));
+      if (legacyJaJ06) {
+        [...categorized.keys()].forEach((key) => {
+          if (!['antigen', 'other'].includes(key)) categorized.set(key, []);
+        });
+      }
+
+      // When both a generic/synthetic “ABO Group” and the provider's
+      // “ABO primary group” exist, keep one official question only.
+      const originalAboRows = categorized.get('abo_rh') || [];
+      const aboGroupRows = originalAboRows.filter((row) => providerIsAboGroupResultField(row.field, row.context));
+      if (aboGroupRows.length > 1) {
+        const preferredAboRow = aboGroupRows.find((row) => /ABO\s+PRIMARY\s+GROUP/i.test(providerFieldText(row.field, row.context)) && !row.context?.synthetic)
+          || aboGroupRows.find((row) => !row.context?.synthetic)
+          || aboGroupRows[0];
+        categorized.set('abo_rh', originalAboRows.filter((row) => !providerIsAboGroupResultField(row.field, row.context) || row === preferredAboRow));
+      }
+
       const aboRows = categorized.get('abo_rh') || [];
       const hasAboGroup = aboRows.some((row) => providerIsAboGroupResultField(row.field, row.context));
       const hasAboReportingContext = aboRows.some((row) => {
@@ -2892,8 +2929,11 @@
         });
       });
       const categoryKeysWithRows = [...categorized.entries()].filter(([, rows]) => rows.length).map(([key]) => key);
+      const evidenceDocuments = legacyJaJ06
+        ? (evidenceContext?.documents || []).filter((document) => competencyEvidenceTest(document) === 'Antigen typing')
+        : (evidenceContext?.documents || []);
       const specimenEvidence = evidenceContext?.showEvidence
-        ? providerSpecimenEvidenceHtml(evidenceContext.documents || [], evidenceContext.imageMap || new Map(), sourceIds, categoryKeysWithRows, specimen.label)
+        ? providerSpecimenEvidenceHtml(evidenceDocuments, evidenceContext.imageMap || new Map(), sourceIds, categoryKeysWithRows, specimen.label)
         : '';
       const categoryCards = PROVIDER_FIELD_GROUPS.map(([categoryKey, categoryLabel]) => {
         const rows = categorized.get(categoryKey) || [];

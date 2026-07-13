@@ -1,6 +1,6 @@
-/* CNMI EQA service worker v2.6.0 */
+/* CNMI EQA service worker v2.6.1 */
 const CACHE_PREFIX = 'cnmi-eqa-';
-const CACHE_NAME = `${CACHE_PREFIX}v2.6.0`;
+const CACHE_NAME = `${CACHE_PREFIX}v2.6.1`;
 const APP_SHELL = [
   './',
   './index.html',
