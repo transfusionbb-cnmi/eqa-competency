@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.6.5
+/* CNMI EQA and Competency Management System v2.6.6
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -3044,9 +3044,10 @@
     // the correct provider-supplied donor group without asking staff to re-enter it.
     const normalizedDonor = providerCanonicalSpecimenId(donorId);
     const roundCode = String(state.currentRound?.round_code || '').toUpperCase();
-    // CNMI workflow does not display a provider-supplied ABO/Rh for Donor J-06R.
-    // Keep J-06R as a donor/reference specimen without inventing a blood group.
-    if (normalizedDonor === 'J06R' && /J\/?JE-A|J-A/.test(roundCode)) { abo = ''; rh = ''; }
+    // CAP J-A 2026 page 4 explicitly identifies Donor J-06R as
+    // Blood Group O, Rh Positive. Keep a deterministic fallback for legacy
+    // generated schemas that omitted the provider-supplied donor group.
+    if (!abo && !rh && normalizedDonor === 'J06R' && /J\/?JE-A|J-A/.test(roundCode)) { abo = 'O'; rh = 'Positive'; }
     if (!abo && !rh && normalizedDonor === 'J13R' && /J\/?JE-B|J-B/.test(roundCode)) { abo = 'A'; rh = 'Negative'; }
     const knownGroup = [abo ? `Group ${abo}` : '', rh ? `Rh ${rh}` : ''].filter(Boolean).join(', ');
     return { isDonor, donorId, sourceIds, abo, rh, knownGroup };
