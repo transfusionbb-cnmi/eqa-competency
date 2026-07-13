@@ -2327,3 +2327,55 @@ tr:last-child td { border-bottom: 0; }
   .work-evidence-item .table-actions { width: 100%; }
   .work-evidence-item .btn { flex: 1; }
 }
+
+/* v2.6.3 — donor-centred crossmatch and antigen typing */
+.provider-donor-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border: 1px solid #b9dff3;
+  border-radius: 15px;
+  background: #eef8fe;
+}
+.provider-donor-summary h4 { margin: 3px 0 0; color: #174f70; font-size: 1.08rem; }
+.provider-donor-summary .eyebrow { color: #4a7894; font-size: .7rem; font-weight: 800; letter-spacing: .05em; }
+.provider-donor-blood-group { display: grid; gap: 3px; text-align: right; }
+.provider-donor-blood-group strong { color: #0e5d87; font-size: 1.04rem; }
+.provider-donor-blood-group span { color: var(--muted); font-size: .8rem; }
+.provider-donor-crossmatch { margin-bottom: 12px; }
+.provider-donor-section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.provider-donor-section-head h4 { margin: 0 0 4px; }
+.provider-donor-section-head p { margin: 0; color: var(--muted); font-size: .84rem; }
+.provider-crossmatch-specimen-list { display: grid; gap: 12px; }
+.provider-crossmatch-specimen-card {
+  border: 1px solid #d7e7f1;
+  border-radius: 13px;
+  background: #fff;
+  overflow: hidden;
+}
+.provider-crossmatch-specimen-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5eef4;
+  background: #f3f9fd;
+  color: #245f82;
+}
+.provider-crossmatch-specimen-title span { color: var(--muted); font-size: .82rem; }
+.provider-crossmatch-specimen-card .cap-form-grid { padding: 12px; }
+@media (max-width: 760px) {
+  .provider-donor-summary,
+  .provider-donor-section-head { flex-direction: column; align-items: stretch; }
+  .provider-donor-blood-group { text-align: left; }
+  .provider-crossmatch-specimen-title { align-items: flex-start; flex-direction: column; }
+}
