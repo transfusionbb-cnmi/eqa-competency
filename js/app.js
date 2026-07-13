@@ -1642,16 +1642,21 @@
       .replace(/[_]+/g, '-')
       .replace(/\s+/g, ' ');
     const match = source.match(/\b(JE|J|ELU|TRC|AABT)[- ]?(\d{1,2})(R|S)?\b/i);
-    if (!match) return document?.category === 'antibody_panel' ? 'Panel / Antigram' : 'ภาพผลดิบอื่น';
+    if (!match) return isAntigramEvidenceDocument(document) ? 'Panel / Antigram' : 'ภาพผลดิบอื่น';
     const prefix = String(match[1] || '').toUpperCase();
     const number = String(match[2] || '').padStart(2, '0');
     const suffix = String(match[3] || '').toUpperCase();
     return `${prefix}-${number}${suffix}`;
   }
 
+  function isAntigramEvidenceDocument(document) {
+    const source = `${document?.title || ''} ${document?.file_name || ''}`.toLowerCase();
+    return document?.category === 'antibody_panel' || /antigram|antigen profile|panel cell profile/.test(source);
+  }
+
   function competencyEvidenceTest(document) {
     const source = `${document?.title || ''} ${document?.file_name || ''}`.toLowerCase();
-    if (document?.category === 'antibody_panel' || /antigram|antigen profile/.test(source)) return 'Panel / Antigram';
+    if (isAntigramEvidenceDocument(document)) return 'Panel / Antigram';
     if (/agtyping|antigen typing|ag typing/.test(source)) return 'Antigen typing';
     if (/x-?match|crossmatch/.test(source)) return 'Crossmatch';
     if (/abid|antibody identification/.test(source)) return 'Antibody Identification';
@@ -1701,24 +1706,26 @@
     return normalizeCompetencySpecimen(parsed?.specimen) === target;
   }
 
-  function competencyEvidenceRelevantDocuments(documents, specimenId, fieldCategories = []) {
-    const explicit = (documents || []).filter((document) => competencyEvidenceMatchesSpecimen(document, specimenId));
+  function competencyEvidenceRelevantDocuments(documents, specimenIds, fieldCategories = []) {
+    const targets = (Array.isArray(specimenIds) ? specimenIds : [specimenIds]).filter(Boolean);
+    const explicit = (documents || []).filter((document) => targets.some((specimenId) => competencyEvidenceMatchesSpecimen(document, specimenId)));
     const categories = new Set((fieldCategories || []).map((value) => String(value || '').toLowerCase()));
     const needsPanel = categories.has('antibody_id');
     const sharedPanels = needsPanel ? (documents || []).filter((document) => {
-      if (document?.category !== 'antibody_panel') return false;
+      if (!isAntigramEvidenceDocument(document)) return false;
       return !normalizeCompetencySpecimen(competencyEvidenceSpecimen(document));
     }) : [];
     return [...new Map([...explicit, ...sharedPanels].map((document) => [document.id, document])).values()];
   }
 
-  function providerSpecimenEvidenceHtml(documents, imageMap, specimenId, fieldCategories = []) {
-    const rows = competencyEvidenceRelevantDocuments(documents, specimenId, fieldCategories)
+  function providerSpecimenEvidenceHtml(documents, imageMap, specimenIds, fieldCategories = [], displayLabel = '') {
+    const rows = competencyEvidenceRelevantDocuments(documents, specimenIds, fieldCategories)
       .map((document) => imageMap?.get(document.id))
       .filter(Boolean)
       .sort((a, b) => competencyEvidenceTest(a).localeCompare(competencyEvidenceTest(b), 'en'));
+    const label = displayLabel || (Array.isArray(specimenIds) ? specimenIds[0] : specimenIds);
     if (!rows.length) {
-      return `<div class="provider-evidence-empty"><strong>No raw-result image is linked to ${esc(providerCapSpecimenLabel(specimenId))}</strong><span>Admin: upload the file using the specimen ID in the filename and set visibility to “บุคลากรทุกคน”.</span></div>`;
+      return `<div class="provider-evidence-empty"><strong>No raw-result image is linked to ${esc(providerCapSpecimenLabel(label))}</strong><span>Admin: upload the file using the specimen ID in the filename and set visibility to “บุคลากรทุกคน”.</span></div>`;
     }
     const cards = rows.map((document) => {
       const title = document.title || document.file_name || 'Raw result';
@@ -1729,7 +1736,7 @@
         : `<img src="${esc(document.url)}" loading="lazy" alt="${esc(title)}">`;
       return `<button type="button" class="provider-evidence-thumb" data-evidence-url="${esc(document.url)}" data-evidence-title="${esc(title)}" data-evidence-mime="${esc(document.mime_type || '')}">${thumb}<span><strong>${esc(test)}</strong><small>${esc(title)}</small></span></button>`;
     }).join('');
-    return `<section class="provider-specimen-evidence"><div class="provider-specimen-evidence-head"><div><span class="eyebrow">RAW RESULTS FOR COMPETENCY</span><h4>Images used to answer — ${esc(providerCapSpecimenLabel(specimenId))}</h4></div><span class="badge info">${rows.length} files</span></div><div class="provider-evidence-thumb-grid">${cards}</div></section>`;
+    return `<section class="provider-specimen-evidence"><div class="provider-specimen-evidence-head"><div><span class="eyebrow">RAW RESULTS FOR COMPETENCY</span><h4>Images used to answer — ${esc(providerCapSpecimenLabel(label))}</h4></div><span class="badge info">${rows.length} files</span></div><div class="provider-evidence-thumb-grid">${cards}</div></section>`;
   }
 
   function openEvidenceLightbox(url, title, mimeType) {
@@ -2528,17 +2535,23 @@
 
   function providerGroupSpecimens(group, schema) {
     const map = new Map();
+    const legacyJa = isLegacyCapJJeARound(state.currentRound);
     group.programs.forEach((program) => {
       (program.specimens || []).forEach((item) => {
         const id = String(item?.id || item?.label || '').trim();
         if (id && !map.has(id)) map.set(id, String(item?.label || id));
       });
-      (program.relationships || []).forEach((relationship) => {
-        [relationship?.from_specimen, relationship?.to_specimen].forEach((raw) => {
-          const id = String(raw || '').trim();
-          if (id && !map.has(id)) map.set(id, id);
+      // For the legacy JA round, relationship-only donor IDs are displayed as a
+      // relationship chip, not as a separate answer tab. Other rounds keep the
+      // existing behaviour because their provider schemas may require it.
+      if (!legacyJa) {
+        (program.relationships || []).forEach((relationship) => {
+          [relationship?.from_specimen, relationship?.to_specimen].forEach((raw) => {
+            const id = String(raw || '').trim();
+            if (id && !map.has(id)) map.set(id, id);
+          });
         });
-      });
+      }
     });
     (schema?.antigen_sections || []).forEach((section) => {
       const id = String(section?.specimen_id || '').trim();
@@ -2546,22 +2559,35 @@
       const inferred = providerProgramScope({ key: id, specimens: [{ id }] });
       if (inferred === group.scope && !map.has(id)) map.set(id, id);
     });
-    return [...map.entries()]
-      .map(([id, label]) => ({ id, label }))
-      .sort((a, b) => providerSpecimenOrder(a.id) - providerSpecimenOrder(b.id) || a.id.localeCompare(b.id, 'en'));
+    let rows = [...map.entries()].map(([id, label]) => ({ id, label, sourceIds: [id] }));
+    // JA 2026 uses JE-07S (serum) and JE-07R (red cells) as two physical
+    // components of the same challenge. Show one JE-07 tab and one result form.
+    if (legacyJa && group.scope === 'JE') {
+      const paired = rows.filter((row) => /^JE-?0?7[RS]?\b/i.test(String(row.id || '')));
+      if (paired.length) {
+        rows = rows.filter((row) => !paired.includes(row));
+        const sourceRank = (value) => /S\b/i.test(String(value)) ? 0 : /R\b/i.test(String(value)) ? 1 : 2;
+        const sourceIds = [...new Set(paired.flatMap((row) => row.sourceIds || [row.id]))]
+          .sort((a, b) => sourceRank(a) - sourceRank(b) || a.localeCompare(b, 'en'));
+        rows.push({ id: 'JE-07', label: 'JE-07', sourceIds });
+      }
+    }
+    return rows.sort((a, b) => providerSpecimenOrder(a.id) - providerSpecimenOrder(b.id) || a.id.localeCompare(b.id, 'en'));
   }
 
-  function providerRelationshipHtml(programs, specimenId) {
+  function providerRelationshipHtml(programs, specimenIds) {
+    const ids = new Set((Array.isArray(specimenIds) ? specimenIds : [specimenIds]).map((value) => String(value || '').trim()).filter(Boolean));
     const relationships = programs.flatMap((program) => program.relationships || []).filter((relationship) => {
       const from = String(relationship?.from_specimen || '').trim();
       const to = String(relationship?.to_specimen || '').trim();
-      return from === specimenId || to === specimenId;
+      return ids.has(from) || ids.has(to);
     });
     if (!relationships.length) return '';
     const labels = [...new Set(relationships.map((relationship) => {
       const from = String(relationship?.from_specimen || '').trim();
       const to = String(relationship?.to_specimen || '').trim();
-      const other = from === specimenId ? to : from;
+      const other = ids.has(from) ? to : from;
+      if (ids.has(other)) return '';
       const type = String(relationship?.type || '').toLowerCase();
       if (/crossmatch|compatib/.test(type) || /crossmatch|compatib/i.test(String(relationship?.note || ''))) return `Crossmatch กับ ${other || 'Donor'}`;
       return other ? `เกี่ยวข้องกับ ${other}` : '';
@@ -2575,13 +2601,21 @@
     return specimens.map((specimen, specimenIndex) => {
       const categorized = new Map(PROVIDER_FIELD_GROUPS.map(([key]) => [key, []]));
       const relevantPrograms = [];
-      const specimenValues = (state.currentResultPayload?.specimens || {})[specimen.id] || {};
+      const sourceIds = Array.isArray(specimen.sourceIds) && specimen.sourceIds.length ? specimen.sourceIds : [specimen.id];
+      const storedById = state.currentResultPayload?.specimens || {};
+      const preferredSourceId = sourceIds.find((id) => /S\b/i.test(String(id))) || sourceIds[0] || specimen.id;
+      const primarySpecimenValues = sourceIds
+        .map((id) => storedById[id] || {})
+        .sort((a, b) => Object.values(b).filter((value) => value != null && String(value).trim()).length - Object.values(a).filter((value) => value != null && String(value).trim()).length)[0] || {};
       group.programs.forEach((program) => {
-        const hasSpecimen = (program.specimens || []).some((item) => String(item?.id || item?.label || '') === specimen.id);
-        const hasRelationship = (program.relationships || []).some((relationship) => [relationship?.from_specimen, relationship?.to_specimen].map(String).includes(specimen.id));
+        const programSpecimenIds = (program.specimens || []).map((item) => String(item?.id || item?.label || '')).filter(Boolean);
+        const matchingSourceIds = sourceIds.filter((id) => programSpecimenIds.includes(id));
+        const hasSpecimen = matchingSourceIds.length > 0;
+        const hasRelationship = (program.relationships || []).some((relationship) => [relationship?.from_specimen, relationship?.to_specimen].map(String).some((id) => sourceIds.includes(id)));
         if (hasSpecimen || hasRelationship) relevantPrograms.push(program);
         if (!hasSpecimen) return;
-        const values = specimenValues;
+        const storageSpecimenId = matchingSourceIds.find((id) => /S\b/i.test(String(id))) || matchingSourceIds[0] || preferredSourceId;
+        const values = storedById[storageSpecimenId] || primarySpecimenValues;
         (program.specimen_fields || []).forEach((field) => {
           // The CAP Kit Instruction worksheet contains 1=NT, 2=POS, 3=NEG reaction rows.
           // Those rows are for the laboratory worksheet only and are not CAP Result Form
@@ -2591,7 +2625,7 @@
           const fieldKey = String(field?.key || '');
           const category = providerFieldCategory(program, field);
           const context = { program, category };
-          const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimen.id)}" data-provider-field="${esc(fieldKey)}"`;
+          const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(storageSpecimenId)}" data-provider-field="${esc(fieldKey)}"`;
           categorized.get(category).push({ program, field, context, html: generatedFieldControl(field, values[fieldKey], attrs, disabled, context) });
         });
       });
@@ -2605,27 +2639,28 @@
       if (!hasAboGroup && hasAboReportingContext && !isDonorSpecimen) {
         const field = providerSyntheticAboGroupField();
         const context = { program: relevantPrograms[0] || group.programs[0], category: 'abo_rh', synthetic: true };
-        const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(specimen.id)}" data-provider-field="${esc(field.key)}"`;
+        const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="specimen" data-provider-item="${esc(preferredSourceId)}" data-provider-field="${esc(field.key)}"`;
         categorized.get('abo_rh').unshift({
           program: context.program,
           field,
           context,
-          html: generatedFieldControl(field, providerStoredAboGroup(specimenValues), attrs, disabled, context)
+          html: generatedFieldControl(field, providerStoredAboGroup(primarySpecimenValues), attrs, disabled, context)
         });
       }
 
-      (schema?.antigen_sections || []).filter((section) => String(section?.specimen_id || '') === specimen.id).forEach((section) => {
-        const values = antigenTyping[specimen.id] || {};
+      (schema?.antigen_sections || []).filter((section) => sourceIds.includes(String(section?.specimen_id || ''))).forEach((section) => {
+        const antigenSpecimenId = String(section?.specimen_id || specimen.id);
+        const values = antigenTyping[antigenSpecimenId] || {};
         (section.fields || []).forEach((field) => {
           const fieldKey = String(field?.key || '');
           const context = { program: section, category: 'antigen' };
-          const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="antigen" data-provider-item="${esc(specimen.id)}" data-provider-field="${esc(fieldKey)}"`;
+          const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="antigen" data-provider-item="${esc(antigenSpecimenId)}" data-provider-field="${esc(fieldKey)}"`;
           categorized.get('antigen').push({ program: section, field, context, html: generatedFieldControl(field, values[fieldKey], attrs, disabled, context) });
         });
       });
       const categoryKeysWithRows = [...categorized.entries()].filter(([, rows]) => rows.length).map(([key]) => key);
       const specimenEvidence = evidenceContext?.showEvidence
-        ? providerSpecimenEvidenceHtml(evidenceContext.documents || [], evidenceContext.imageMap || new Map(), specimen.id, categoryKeysWithRows)
+        ? providerSpecimenEvidenceHtml(evidenceContext.documents || [], evidenceContext.imageMap || new Map(), sourceIds, categoryKeysWithRows, specimen.label)
         : '';
       const categoryCards = PROVIDER_FIELD_GROUPS.map(([categoryKey, categoryLabel]) => {
         const rows = categorized.get(categoryKey) || [];
@@ -2646,7 +2681,7 @@
       }).join('')}</div></details>` : '';
       return `<section class="provider-specimen-panel" data-provider-specimen-panel="${esc(specimen.id)}" ${specimenIndex ? 'hidden' : ''}>
         <div class="provider-specimen-heading"><div><span class="eyebrow">CAP result entry</span><h3>${esc(providerCapSpecimenLabel(specimen.label))}</h3></div><span class="badge info">1 specimen at a time</span></div>
-        ${providerRelationshipHtml(group.programs, specimen.id)}
+        ${providerRelationshipHtml(group.programs, sourceIds)}
         ${specimenEvidence}
         <div class="provider-test-card-grid">${categoryCards || '<div class="notice warning">No result fields were found for this specimen.</div>'}</div>
         ${methods}
