@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.5.5
+/* CNMI EQA and Competency Management System v2.5.9
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -23,6 +23,7 @@
 
   const SIDEBAR_COLLAPSED_KEY = 'cnmi-eqa-sidebar-collapsed';
   const AI_EXTRACTION_SCHEMA_VERSION = 'v2.5.1';
+  const REPORT_ARCHIVE_ENABLED = false; // ปิดระบบ PDF รุ่นเดิมชั่วคราวจนกว่าจะออกแบบเอกสารคุณภาพใหม่
 
   function isAiExtractionCurrent(doc) {
     const version = String(doc?.ai_extraction?.schema_version || '');
@@ -63,24 +64,27 @@
     staff: 'เจ้าหน้าที่',
     reviewer: 'ผู้ทบทวนผล',
     qm: 'ผู้จัดการคุณภาพ',
+    deputy_qm: 'รองผู้จัดการคุณภาพ',
     physician: 'แพทย์ผู้รับรอง',
     admin: 'ผู้ดูแลระบบ',
     viewer: 'ผู้ตรวจติดตาม'
   };
   const ROLE_HELP = {
     staff: 'รับ EQA เข้าระบบ ปฏิบัติงานตามที่ได้รับมอบหมาย และทำการประเมินความสามารถ',
-    reviewer: 'ตรวจเทียบผลรายบุคคล ตรวจสรุปผลห้องปฏิบัติการที่ระบบสร้าง และส่งให้ผู้จัดการคุณภาพรับรอง',
+    reviewer: 'ตรวจเทียบผลรายบุคคล ตรวจสรุปผลห้องปฏิบัติการที่ระบบสร้าง และส่งให้ผู้รับรองคุณภาพ',
     qm: 'บริหารรอบ EQA และอนุมัติด้านคุณภาพหลังผู้ทบทวนตรวจแล้ว',
-    physician: 'รับทราบสรุปผลห้องปฏิบัติการหลังผู้จัดการคุณภาพรับรอง ไม่ต้องทำแบบทดสอบบุคลากร',
+    deputy_qm: 'รับรองด้านคุณภาพแทนผู้จัดการคุณภาพเมื่อได้รับมอบหมายในรอบนั้น',
+    physician: 'รับทราบสรุปผลห้องปฏิบัติการหลังผู้รับรองคุณภาพอนุมัติ ไม่ต้องทำแบบทดสอบบุคลากร',
     admin: 'จัดการผู้ใช้งาน สิทธิ์ และการตั้งค่าระบบ',
     viewer: 'อ่านรายงานและประวัติการใช้งานโดยไม่แก้ไขข้อมูล'
   };
-  const ROLE_PRIORITY = ['admin', 'qm', 'reviewer', 'physician', 'viewer', 'staff'];
-  const ADMIN_PREVIEW_ROLES = ['admin', 'staff', 'reviewer', 'qm', 'physician', 'viewer'];
+  const ROLE_PRIORITY = ['admin', 'qm', 'deputy_qm', 'reviewer', 'physician', 'viewer', 'staff'];
+  const ADMIN_PREVIEW_ROLES = ['admin', 'staff', 'reviewer', 'qm', 'deputy_qm', 'physician', 'viewer'];
   const SIGNING_ROLE_LABELS = {
     staff: 'นักเทคนิคการแพทย์ / เจ้าหน้าที่ผู้ปฏิบัติ',
     reviewer: 'ผู้ทบทวนผล',
     qm: 'ผู้จัดการคุณภาพ',
+    deputy_qm: 'รองผู้จัดการคุณภาพ',
     physician: 'แพทย์ผู้รับทราบ',
     admin: 'ผู้ดูแลระบบ',
     viewer: 'ผู้ตรวจติดตาม'
@@ -90,8 +94,8 @@
     in_progress: 'กำลังดำเนินการ',
     awaiting_review: 'ระบบสรุปแล้ว รอผู้ทบทวน',
     returned_for_revision: 'ส่งกลับแก้ไข',
-    awaiting_qm_approval: 'รอผู้จัดการคุณภาพอนุมัติ',
-    qm_approved: 'ผู้จัดการคุณภาพอนุมัติแล้ว',
+    awaiting_qm_approval: 'รอผู้รับรองคุณภาพอนุมัติ',
+    qm_approved: 'ผู้รับรองคุณภาพอนุมัติแล้ว',
     awaiting_physician_approval: 'รอแพทย์รับทราบ',
     physician_approved: 'แพทย์รับทราบแล้ว',
     submitted_to_provider: 'ส่งผลแล้ว',
@@ -110,8 +114,8 @@
     awaiting_practitioner_confirmation: 'รอผู้ปฏิบัติทั้งสองคนยืนยัน',
     awaiting_reviewer: 'รอผู้ทบทวนตรวจสอบ',
     returned_by_reviewer: 'ผู้ทบทวนส่งกลับแก้ไข',
-    awaiting_qm_certification: 'รอผู้จัดการคุณภาพรับรอง',
-    returned_by_qm: 'ผู้จัดการคุณภาพส่งกลับแก้ไข',
+    awaiting_qm_certification: 'รอผู้รับรองคุณภาพ',
+    returned_by_qm: 'ผู้รับรองคุณภาพส่งกลับแก้ไข',
     qm_certified: 'รับรองข้อมูลแล้ว เปิดการประเมินได้'
   };
   const HISTORICAL_CONFIRM_LABELS = {
@@ -156,6 +160,7 @@
   const ASSIGNMENT_ROLE_LABELS = {
     practitioner: 'ผู้ปฏิบัติจริง',
     reviewer: 'ผู้ทบทวนผล',
+    quality_approver: 'ผู้รับรองคุณภาพ',
     physician: 'แพทย์ผู้รับทราบ'
   };
   const RESULT_STATUS_LABELS = {
@@ -165,8 +170,8 @@
     resubmitted: 'ส่งใหม่แล้ว',
     awaiting_practitioner_confirmations: 'กำลังจัดทำสรุปผลห้องปฏิบัติการ',
     practitioners_confirmed: 'ระบบสรุปผลแล้ว รอผู้ทบทวน',
-    awaiting_qm_review: 'ผู้ทบทวนผ่านแล้ว รอผู้จัดการคุณภาพ',
-    qm_approved: 'ผู้จัดการคุณภาพรับรองแล้ว รอแพทย์รับทราบ',
+    awaiting_qm_review: 'ผู้ทบทวนผ่านแล้ว รอผู้รับรองคุณภาพ',
+    qm_approved: 'ผู้รับรองคุณภาพรับรองแล้ว รอแพทย์รับทราบ',
     awaiting_physician_approval: 'รอแพทย์รับทราบ',
     physician_approved: 'แพทย์รับทราบแล้ว',
     locked: 'ล็อกข้อมูลแล้ว'
@@ -174,12 +179,12 @@
   const APPROVAL_STAGE_LABELS = {
     practitioner_confirm: 'ผู้ปฏิบัติทั้งสองคนยืนยันผลกลาง',
     reviewer_review: 'ผู้ทบทวนตรวจผลของผู้ปฏิบัติและผลกลาง',
-    qm_review: 'ผู้จัดการคุณภาพตรวจและอนุมัติ',
+    qm_review: 'ผู้รับรองคุณภาพตรวจและอนุมัติ',
     physician_approval: 'แพทย์รับทราบสรุปผลห้องปฏิบัติการ',
     closure_acknowledgement: 'แพทย์รับทราบการปิดรอบ',
     historical_practitioner_confirm: 'ผู้ปฏิบัติยืนยันข้อมูลย้อนหลัง',
     historical_reviewer_review: 'ผู้ทบทวนตรวจข้อมูลย้อนหลัง',
-    historical_qm_certification: 'ผู้จัดการคุณภาพรับรองข้อมูลย้อนหลัง'
+    historical_qm_certification: 'ผู้รับรองคุณภาพรับรองข้อมูลย้อนหลัง'
   };
   const DECISION_LABELS = {
     approved: 'อนุมัติ',
@@ -596,6 +601,56 @@
     return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
   }
 
+  function fmtHistoricalEvent(row) {
+    if (!row?.actual_action_date) return '-';
+    const dateText = fmtDate(row.actual_action_date);
+    if (row.actual_time_known === false) return `${dateText} · ไม่ทราบเวลา`;
+    const timeText = row.actual_action_time ? String(row.actual_action_time).slice(0, 5) : '';
+    return timeText ? `${dateText} · ${timeText} น.` : dateText;
+  }
+
+  function historicalActionFields(prefix, label, assignment = null) {
+    const dateValue = assignment?.actual_action_date ? String(assignment.actual_action_date).slice(0, 10) : '';
+    const timeValue = assignment?.actual_action_time ? String(assignment.actual_action_time).slice(0, 5) : '';
+    const unknown = Boolean(dateValue && assignment?.actual_time_known === false);
+    return `<section class="historical-action-card" data-historical-action="${esc(prefix)}">
+      <div class="historical-action-card-head"><strong>${esc(label)}</strong><span class="small muted">ตามหลักฐานเดิม (ไม่แทน Audit log)</span></div>
+      <div class="historical-action-grid">
+        <div class="field"><label>วันที่เกิดเหตุการณ์จริง</label><input class="input" type="date" name="${esc(prefix)}_date" value="${esc(dateValue)}"></div>
+        <div class="field"><label>เวลา</label><input class="input" type="time" name="${esc(prefix)}_time" value="${esc(timeValue)}" ${unknown ? 'disabled' : ''}></div>
+      </div>
+      <label class="historical-unknown-time"><input type="checkbox" name="${esc(prefix)}_time_unknown" ${unknown ? 'checked' : ''}><span>หลักฐานระบุเฉพาะวันที่ ไม่ทราบเวลาที่แน่นอน</span></label>
+      <div class="field"><label>หมายเหตุ/แหล่งหลักฐาน (ถ้ามี)</label><input class="input" name="${esc(prefix)}_note" value="${esc(assignment?.actual_action_note || '')}" placeholder="เช่น ลายมือชื่อในแบบฟอร์มเดิม หน้า 2"></div>
+    </section>`;
+  }
+
+  function readHistoricalActionMeta(form, prefix) {
+    const fd = new FormData(form);
+    const date = String(fd.get(`${prefix}_date`) || '');
+    const timeKnown = fd.get(`${prefix}_time_unknown`) !== 'on';
+    return {
+      date: date || null,
+      time: date && timeKnown ? (String(fd.get(`${prefix}_time`) || '') || null) : null,
+      time_known: timeKnown,
+      note: String(fd.get(`${prefix}_note`) || '').trim() || null
+    };
+  }
+
+  function bindHistoricalTimeControls(root = document) {
+    root.querySelectorAll('[data-historical-action]').forEach((card) => {
+      const prefix = card.dataset.historicalAction;
+      const checkbox = card.querySelector(`input[name="${CSS.escape(prefix)}_time_unknown"]`);
+      const timeInput = card.querySelector(`input[name="${CSS.escape(prefix)}_time"]`);
+      if (!checkbox || !timeInput) return;
+      const sync = () => {
+        timeInput.disabled = checkbox.checked;
+        if (checkbox.checked) timeInput.value = '';
+      };
+      checkbox.addEventListener('change', sync);
+      sync();
+    });
+  }
+
   function roleStorageKey() {
     return `cnmi_eqa_active_role_${state.user?.id || 'anonymous'}`;
   }
@@ -618,8 +673,9 @@
   // hasRole ใช้สำหรับ “มุมมองที่กำลังจำลอง” เท่านั้น ผู้ดูแลระบบยังคงสิทธิ์จริงระดับ admin ผ่าน isSystemAdmin()
   function hasRole(...roles) { return roles.includes(state.activeRole); }
   function canManage() { return hasRole('admin', 'qm'); }
+  function canQualityApprove() { return hasRole('qm', 'deputy_qm'); }
   function canDeleteRound() { return hasRole('admin'); }
-  function canReview() { return hasRole('admin', 'qm', 'reviewer'); }
+  function canReview() { return hasRole('admin', 'qm', 'deputy_qm', 'reviewer'); }
   function isPhysician() { return hasRole('physician'); }
   function canReceiveEqa() { return hasRole('staff', 'qm', 'admin'); }
   function canImportHistoricalEqa() { return hasRole('admin', 'qm'); }
@@ -633,6 +689,7 @@
       staff: ['dashboard','my-competency','rounds','round','assignment','help'],
       reviewer: ['dashboard','rounds','round','assignment','reports','help'],
       qm: ['dashboard','rounds','round','assignment','reports','help'],
+      deputy_qm: ['dashboard','rounds','round','assignment','reports','help'],
       physician: ['dashboard','rounds','round','reports','help'],
       viewer: ['dashboard','rounds','round','reports','audit','help']
     };
@@ -645,7 +702,7 @@
   function personHasRole(person, role) { return Array.isArray(person?.roles) && person.roles.includes(role); }
   function normalizedRoles(roles) {
     const result = [...new Set((roles || []).filter(Boolean))];
-    if ((result.includes('reviewer') || result.includes('qm')) && !result.includes('staff')) result.unshift('staff');
+    if ((result.includes('reviewer') || result.includes('qm') || result.includes('deputy_qm')) && !result.includes('staff')) result.unshift('staff');
     return result;
   }
 
@@ -666,8 +723,8 @@
       const locked = lockedRoles.includes(role);
       const checked = currentRoles.includes(role);
       const dependencyNote = role === 'staff'
-        ? ' · จำเป็นสำหรับผู้ทบทวนและผู้จัดการคุณภาพ แต่แพทย์ไม่จำเป็นต้องมีบทบาทนี้'
-        : (role === 'reviewer' || role === 'qm') ? ' · ระบบจะเพิ่มบทบาทเจ้าหน้าที่ให้อัตโนมัติ' : '';
+        ? ' · จำเป็นสำหรับผู้ทบทวน ผู้จัดการคุณภาพ และรองผู้จัดการคุณภาพ แต่แพทย์ไม่จำเป็นต้องมีบทบาทนี้'
+        : (role === 'reviewer' || role === 'qm' || role === 'deputy_qm') ? ' · ระบบจะเพิ่มบทบาทเจ้าหน้าที่ให้อัตโนมัติ' : '';
       const lockedNote = locked ? ' · ล็อกไว้สำหรับบัญชีที่กำลังใช้งาน' : '';
       return `
         <label class="role-choice">
@@ -681,13 +738,15 @@
     const staff = form.querySelector('input[name="roles"][value="staff"]');
     const reviewer = form.querySelector('input[name="roles"][value="reviewer"]');
     const qm = form.querySelector('input[name="roles"][value="qm"]');
+    const deputyQm = form.querySelector('input[name="roles"][value="deputy_qm"]');
     const sync = () => {
-      const needsStaff = Boolean(reviewer?.checked || qm?.checked);
+      const needsStaff = Boolean(reviewer?.checked || qm?.checked || deputyQm?.checked);
       if (needsStaff && staff) staff.checked = true;
       if (staff) staff.disabled = needsStaff;
     };
     reviewer?.addEventListener('change', sync);
     qm?.addEventListener('change', sync);
+    deputyQm?.addEventListener('change', sync);
     sync();
   }
 
@@ -702,7 +761,7 @@
 
   function assignmentBadge(status) {
     const map = {
-      not_started: 'ยังไม่เริ่ม', in_progress: 'กำลังทำ', submitted: 'รอผู้ทบทวน', under_review: 'ผู้ทบทวนผ่านแล้ว รอผู้จัดการคุณภาพ',
+      not_started: 'ยังไม่เริ่ม', in_progress: 'กำลังทำ', submitted: 'รอผู้ทบทวน', under_review: 'ผู้ทบทวนผ่านแล้ว รอผู้รับรองคุณภาพ',
       passed: 'ผ่าน', needs_reflection: 'ต้องทบทวน', reflection_submitted: 'ส่งแบบทบทวนแล้ว',
       passed_after_review: 'ผ่านหลังทบทวน', cancelled: 'ยกเลิก'
     };
@@ -746,6 +805,7 @@
   }
 
   async function archiveReportToDrive(options, silent = false) {
+    if (!REPORT_ARCHIVE_ENABLED) return null;
     try {
       const result = await invokeAutomation({ action: 'archive_report', ...options });
       if (!silent) toast('สร้าง PDF และเก็บใน Google Drive แล้ว', 'success');
@@ -895,15 +955,15 @@
           </div>
           <div class="nav-section">งานของฉัน</div>
           ${canViewRoute('dashboard') ? navItem('dashboard', '⌂', 'ภาพรวม', route) : ''}
-          ${canViewRoute('my-competency') && isCompetencyParticipant() ? navItem('my-competency', '✓', 'การประเมินของฉัน', route) : ''}
+          ${canViewRoute('my-competency') && isCompetencyParticipant() ? navItem('my-competency', '✓', 'งานของฉัน', route) : ''}
           ${canViewRoute('rounds') ? '<div class="nav-section">งาน EQA</div>' : ''}
           ${canViewRoute('rounds') ? navItem('rounds', '▦', 'รอบ EQA', route) : ''}
           ${canViewRoute('rounds') ? roundSubmenu(route) : ''}
-          ${canViewRoute('reports') ? navItem('reports', '▤', 'รายงาน / ทะเบียน', route) : ''}
+          ${canViewRoute('reports') ? navItem('reports', '▤', 'รายงาน (กำลังปรับปรุง)', route) : ''}
           ${(canViewRoute('users') || canViewRoute('audit') || canViewRoute('automation') || canViewRoute('settings')) ? '<div class="nav-section">การจัดการ</div>' : ''}
           ${canViewRoute('users') ? navItem('users', '♙', 'ผู้ใช้งานและสิทธิ์', route) : ''}
           ${canViewRoute('audit') ? navItem('audit', '◷', 'ประวัติการใช้งาน', route) : ''}
-          ${canViewRoute('automation') ? navItem('automation', '◉', 'แจ้งเตือน / Google Drive', route) : ''}
+          ${canViewRoute('automation') ? navItem('automation', '◉', 'แจ้งเตือน', route) : ''}
           ${canViewRoute('settings') ? navItem('settings', '⚙', 'ตั้งค่าระบบ', route) : ''}
           <div class="nav-section">ช่วยเหลือ</div>
           ${canViewRoute('help') ? navItem('help', '?', 'คู่มือการใช้งาน', route) : ''}
@@ -1246,28 +1306,34 @@
     if (!canImportHistoricalEqa()) return toast('กรุณาเลือกโหมดผู้ดูแลระบบหรือผู้จัดการคุณภาพ', 'warning');
     let directory;
     try { directory = await loadDirectory(); } catch (error) { return toast(friendlyError(error), 'danger'); }
+
     const [{ data: currentAssignments }, resultCount] = round?.id
       ? await Promise.all([
           state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true),
           state.supabase.from('ec_individual_results').select('id', { count: 'exact', head: true }).eq('round_id', round.id)
         ])
       : [{ data: [] }, { count: 0 }];
+
     const assigned = currentAssignments || [];
     const practitionersLocked = Boolean(resultCount.count);
-    const findAssigned = (role, slot = null) => assigned.find((a) => a.assignment_role === role && (slot ? a.practitioner_slot === slot : true))?.user_id || '';
+    const findAssignment = (role, slot = null) => assigned.find((a) => a.assignment_role === role && (slot ? a.practitioner_slot === slot : true)) || null;
+    const findAssigned = (role, slot = null) => findAssignment(role, slot)?.user_id || '';
     const practitioners = directory.filter((person) => personHasRole(person, 'staff') && !personHasRole(person, 'physician'));
     const reviewers = directory.filter((person) => personHasRole(person, 'reviewer'));
+    const qualityApprovers = directory.filter((person) => personHasRole(person, 'qm') || personHasRole(person, 'deputy_qm'));
+    const physicians = directory.filter((person) => personHasRole(person, 'physician'));
     const people = directory.filter((person) => person.active !== false && personHasRole(person, 'staff') && !personHasRole(person, 'physician'));
     const options = (rows, selected, blank = 'กรุณาเลือก') => `<option value="">${blank}</option>${rows.map((person) => `<option value="${person.id}" ${person.id === selected ? 'selected' : ''}>${esc(person.full_name)}${person.position_title ? ` — ${esc(person.position_title)}` : ''}</option>`).join('')}`;
     const defaultYear = round?.survey_year || new Date().getFullYear();
     const convertingExistingRound = Boolean(round?.id && !isHistoricalRound(round));
+
     showModal(convertingExistingRound ? 'เปลี่ยนรอบนี้เป็นข้อมูลย้อนหลัง' : (round ? 'แก้ไขข้อมูลรอบที่ดำเนินการแล้ว' : 'นำเข้ารอบ EQA ที่ดำเนินการแล้ว'), `
       <form id="historical-round-form" class="form-grid cols-2">
-        <div class="notice" style="grid-column:1/-1"><strong>${convertingExistingRound ? 'กำลังเปลี่ยนรอบที่มีอยู่ให้เป็นข้อมูลย้อนหลัง' : 'ใช้สำหรับ EQA ที่ห้องปฏิบัติการตรวจและส่งผลไปแล้ว'}</strong><br><span class="small">ผู้ดูแลระบบหรือผู้จัดการคุณภาพจะกรอกข้อมูลจากหลักฐานเดิมแทนผู้ปฏิบัติ โดยระบบแยกผู้ปฏิบัติจริงออกจากผู้บันทึกข้อมูลเข้าระบบอย่างชัดเจน${convertingExistingRound ? ' เอกสารที่อัปโหลดไว้ในรอบนี้จะยังอยู่เหมือนเดิม' : ''}</span></div>
+        <div class="notice" style="grid-column:1/-1"><strong>${convertingExistingRound ? 'กำลังเปลี่ยนรอบที่มีอยู่ให้เป็นข้อมูลย้อนหลัง' : 'ใช้สำหรับ EQA ที่ห้องปฏิบัติการตรวจและส่งผลไปแล้ว'}</strong><br><span class="small">กรอกตามหลักฐานเดิม ระบบเก็บ “วันเวลาเหตุการณ์จริง” แยกจากวันเวลาที่นำข้อมูลเข้าระบบ เพื่อรักษา Audit trail${convertingExistingRound ? ' เอกสารที่อัปโหลดไว้จะยังอยู่เหมือนเดิม' : ''}</span></div>
         <div class="field"><label>ผู้ให้บริการ</label><input class="input" name="provider" required value="${esc(round?.provider || 'CAP')}"></div>
         <div class="field"><label>ชื่อโปรแกรม</label><input class="input" name="program_name" required value="${esc(round?.program_name || 'Comprehensive Transfusion Medicine')}"></div>
         <div class="field"><label>รหัสโปรแกรม</label><input class="input" name="program_code" value="${esc(round?.program_code || 'J')}"></div>
-        <div class="field"><label>ชื่อรอบ</label><input class="input" name="round_code" required value="${esc(round?.round_code || '')}" placeholder="เช่น J-A 2026"></div>
+        <div class="field"><label>ชื่อรอบ</label><input class="input" name="round_code" required value="${esc(round?.round_code || '')}" placeholder="เช่น J/JE-A 2026"></div>
         <div class="field"><label>เลขชุดตัวอย่าง</label><input class="input" name="kit_number" value="${esc(round?.kit_number || '')}"></div>
         <div class="field"><label>ปี ค.ศ.</label><input class="input" type="number" name="survey_year" min="2000" max="2200" required value="${esc(defaultYear)}"></div>
         <div class="field"><label>วันและเวลาที่รับจริง</label><input class="input" type="datetime-local" name="received_at" value="${fmtDateTimeInput(round?.received_at)}"></div>
@@ -1278,14 +1344,28 @@
         <div class="field"><label>เจ้าหน้าที่ผู้ส่งผลจริง</label><select class="select" name="actual_submitted_by">${options(people, round?.actual_submitted_by || '', 'ไม่ทราบหรือไม่มีหลักฐาน')}</select></div>
         <div class="field"><label>เลขอ้างอิงการส่งผล</label><input class="input" name="actual_provider_reference" value="${esc(round?.actual_provider_reference || '')}"></div>
         <div class="field"><label>ระยะปัจจุบันของรอบ</label><select class="select" name="status"><option value="submitted_to_provider" ${round?.status === 'submitted_to_provider' ? 'selected' : ''}>ส่งผลให้ผู้ให้บริการแล้ว</option><option value="official_result_received" ${round?.status === 'official_result_received' ? 'selected' : ''}>ได้รับผลประเมินกลับแล้ว</option></select></div>
+
         <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 1</label><select class="select" name="p1" required ${practitionersLocked ? 'disabled' : ''}>${options(practitioners, findAssigned('practitioner', 1))}</select>${practitionersLocked ? '<div class="help">ล็อกแล้ว เพราะมีการกรอกผลย้อนหลัง</div>' : ''}</div>
         <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 2</label><select class="select" name="p2" required ${practitionersLocked ? 'disabled' : ''}>${options(practitioners, findAssigned('practitioner', 2))}</select>${practitionersLocked ? '<div class="help">ล็อกแล้ว เพราะมีการกรอกผลย้อนหลัง</div>' : ''}</div>
-        <div class="field" style="grid-column:1/-1"><label>ผู้ทบทวนข้อมูลย้อนหลัง</label><select class="select" name="reviewer" required>${options(reviewers, findAssigned('reviewer'))}</select><div class="help">ผู้ทบทวนต้องเป็นคนละคนกับผู้ปฏิบัติทั้งสองคน</div></div>
+        <div class="field"><label>ผู้ทบทวนผล</label><select class="select" name="reviewer" required>${options(reviewers, findAssigned('reviewer'))}</select><div class="help">ต้องไม่ใช่ผู้ปฏิบัติจริงของรอบนี้</div></div>
+        <div class="field"><label>ผู้รับรองคุณภาพ</label><select class="select" name="quality_approver" required>${options(qualityApprovers, findAssigned('quality_approver'))}</select><div class="help">เลือกผู้จัดการคุณภาพหรือรองผู้จัดการคุณภาพ และต้องไม่ซ้ำผู้ปฏิบัติหรือผู้ทบทวน</div></div>
+        <div class="field" style="grid-column:1/-1"><label>แพทย์ผู้รับทราบ</label><select class="select" name="physician">${options(physicians, findAssigned('physician'), 'ยังไม่ระบุ')}</select></div>
+
+        <div class="historical-action-section" style="grid-column:1/-1">
+          <h3>วันเวลาเหตุการณ์จริงตามเอกสารเดิม</h3>
+          <p class="small muted">เว้นว่างได้หากขั้นตอนนั้นยังไม่เกิดขึ้น กรณีเอกสารมีเฉพาะวันที่ให้เลือก “ไม่ทราบเวลาที่แน่นอน”</p>
+          ${historicalActionFields('reviewer_action', 'ผู้ทบทวนตรวจผลจริง', findAssignment('reviewer'))}
+          ${historicalActionFields('quality_action', 'ผู้รับรองคุณภาพรับรองจริง', findAssignment('quality_approver'))}
+          ${historicalActionFields('physician_action', 'แพทย์รับทราบจริง', findAssignment('physician'))}
+        </div>
+
         <div class="field"><label>เลขเอกสาร</label><input class="input" name="document_number" value="${esc(round?.document_number || '')}"></div>
-        <div class="field"><label>ผู้บันทึกข้อมูลเข้าระบบ</label><input class="input" value="${esc(state.profile.full_name)}" disabled><div class="help">ระบบบันทึกชื่อและวันเวลาปัจจุบันอัตโนมัติ ไม่ใช้แทนชื่อผู้ปฏิบัติจริง</div></div>
+        <div class="field"><label>ผู้บันทึกข้อมูลเข้าระบบ</label><input class="input" value="${esc(state.profile.full_name)}" disabled><div class="help">ระบบบันทึกชื่อและเวลาปัจจุบันอัตโนมัติ ไม่ใช้แทนชื่อผู้ปฏิบัติจริง</div></div>
         <div class="field" style="grid-column:1/-1"><label>แหล่งข้อมูล/หลักฐานที่ใช้กรอกย้อนหลัง</label><textarea class="textarea" name="historical_source_note" required placeholder="เช่น แบบบันทึกผลเดิม สำเนาผลที่ส่ง CAP และภาพหน้าจอหลักฐานการส่ง">${esc(round?.historical_source_note || '')}</textarea></div>
         <div class="field" style="grid-column:1/-1"><label>หมายเหตุเพิ่มเติม</label><textarea class="textarea" name="notes">${esc(round?.notes || '')}</textarea></div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-historical-round">${convertingExistingRound ? 'เปลี่ยนเป็นข้อมูลย้อนหลังและไปกรอกผล' : 'บันทึกและไปกรอกผลย้อนหลัง'}</button>`, true);
+
+    bindHistoricalTimeControls(document.getElementById('historical-round-form'));
 
     document.getElementById('save-historical-round').addEventListener('click', async () => {
       const form = document.getElementById('historical-round-form');
@@ -1294,8 +1374,12 @@
       const p1 = String(fd.get('p1') || findAssigned('practitioner', 1) || '');
       const p2 = String(fd.get('p2') || findAssigned('practitioner', 2) || '');
       const reviewer = String(fd.get('reviewer') || '');
+      const qualityApprover = String(fd.get('quality_approver') || '');
+      const physician = String(fd.get('physician') || '') || null;
       if (p1 === p2) return toast('ผู้ปฏิบัติจริงทั้งสองคนต้องเป็นคนละคน', 'warning');
       if ([p1, p2].includes(reviewer)) return toast('ผู้ทบทวนต้องเป็นคนละคนกับผู้ปฏิบัติจริง', 'warning');
+      if ([p1, p2, reviewer].includes(qualityApprover)) return toast('ผู้รับรองคุณภาพต้องเป็นคนละคนกับผู้ปฏิบัติจริงและผู้ทบทวน', 'warning');
+
       const payload = {
         provider: String(fd.get('provider') || '').trim(),
         program_name: String(fd.get('program_name') || '').trim(),
@@ -1315,6 +1399,13 @@
         historical_source_note: String(fd.get('historical_source_note') || '').trim(),
         notes: String(fd.get('notes') || '').trim() || null
       };
+
+      const actionMeta = {
+        reviewer: readHistoricalActionMeta(form, 'reviewer_action'),
+        quality_approver: readHistoricalActionMeta(form, 'quality_action'),
+        physician: readHistoricalActionMeta(form, 'physician_action')
+      };
+
       setBusy(true);
       const { data, error } = await state.supabase.rpc('ec_save_historical_round', {
         p_round_id: round?.id || null,
@@ -1323,11 +1414,27 @@
         p_practitioner_2: p2,
         p_reviewer: reviewer
       });
+      if (error) {
+        setBusy(false);
+        return toast(friendlyError(error), 'danger');
+      }
+
+      const savedRoundId = typeof data === 'string' ? data : (data?.id || round?.id);
+      const { error: assignmentError } = await state.supabase.rpc('ec_set_round_assignments_v259', {
+        p_round_id: savedRoundId,
+        p_practitioner_1: p1,
+        p_practitioner_2: p2,
+        p_reviewer: reviewer,
+        p_quality_approver: qualityApprover,
+        p_physician: physician,
+        p_action_meta: actionMeta
+      });
       setBusy(false);
-      if (error) return toast(friendlyError(error), 'danger');
+      if (assignmentError) return toast(friendlyError(assignmentError), 'danger');
+
       closeModal();
-      toast('บันทึกรอบย้อนหลังแล้ว ขั้นต่อไปกรอกผลแทนผู้ปฏิบัติทั้งสองคนจากหลักฐานเดิม', 'success', 6500);
-      navigate(`round/${data}/individual`);
+      toast('บันทึกรอบย้อนหลังแล้ว ขั้นต่อไปกรอกผลจากหลักฐานเดิมของผู้ปฏิบัติทั้งสองคน', 'success', 6500);
+      navigate(`round/${savedRoundId}/individual`);
     });
   }
 
@@ -1529,7 +1636,7 @@
           <div class="notice">1) ผู้ดูแลระบบหรือผู้จัดการคุณภาพกรอกผลแทนผู้ปฏิบัติจริงทั้ง 2 คนจากเอกสารเดิม ระบบจะแสดงคำว่า “กรอกแทนผู้ปฏิบัติ” ชัดเจน</div>
           <div style="height:10px"></div><div class="notice">2) กรอกผลกลางที่ห้องส่งจริง หากไม่มีผลรายบุคคลแยก ให้ระบุว่าไม่มีหลักฐาน ห้ามคาดเดาคำตอบย้อนหลัง</div>
           <div style="height:10px"></div><div class="notice">3) ผู้ปฏิบัติทั้ง 2 คนตรวจข้อมูลของตนและกดยืนยัน หรือแจ้งว่าข้อมูลไม่ตรง</div>
-          <div style="height:10px"></div><div class="notice">4) ผู้ทบทวนตรวจสอบ → ผู้จัดการคุณภาพรับรองและเปิดการประเมินความสามารถ</div>
+          <div style="height:10px"></div><div class="notice">4) ผู้ทบทวนตรวจสอบ → ผู้รับรองคุณภาพรับรองและเปิดการประเมินความสามารถ</div>
           <div style="height:10px"></div><div class="notice">5) ผู้ปฏิบัติจริงใช้แบบประเมินการปฏิบัติงาน ส่วนเจ้าหน้าที่คนอื่นทำแบบทดสอบ แพทย์ไม่ถูกนำมาทำการประเมิน</div>
           <div style="height:16px"></div><button class="btn btn-primary" data-go-historical-step="individual">ไปกรอก/ยืนยันผลย้อนหลัง</button>
         </div>
@@ -1548,7 +1655,7 @@
       <div class="card"><h2>ขั้นตอนของรอบนี้</h2>
         <div class="notice">1) ผู้ปฏิบัติจริง 2 คนบันทึกผลแยกกัน และจะยังไม่เห็นคำตอบของอีกคนจนกว่าทั้งคู่ส่งผล</div>
         <div style="height:10px"></div><div class="notice">2) เมื่อผู้ปฏิบัติทั้งสองคนส่งผลครบ ระบบจะเทียบและสร้างสรุปผลห้องปฏิบัติการให้อัตโนมัติ ค่าที่ตรงกันจะถูกเติมให้ทันที ส่วนค่าที่ต่างกันจะรอผู้ทบทวนตัดสิน</div>
-        <div style="height:10px"></div><div class="notice">3) ผู้ทบทวนตรวจและกดส่ง → ผู้จัดการคุณภาพรับรอง → แพทย์รับทราบ โดยผู้ปฏิบัติไม่ต้องมานั่งทำผลกลางซ้ำ</div>
+        <div style="height:10px"></div><div class="notice">3) ผู้ทบทวนตรวจและกดส่ง → ผู้รับรองคุณภาพรับรอง → แพทย์รับทราบ โดยผู้ปฏิบัติไม่ต้องมานั่งทำผลกลางซ้ำ</div>
         <div style="height:10px"></div><div class="notice">4) แพทย์ไม่ต้องทำแบบทดสอบบุคลากร ส่วนเจ้าหน้าที่คนอื่นทำการประเมินหลังห้องส่งผลแล้วและก่อนเปิดเฉลย</div>
         ${round.notes ? `<div style="height:14px"></div><h3>หมายเหตุ</h3><p>${esc(round.notes)}</p>` : ''}
       </div>
@@ -1834,14 +1941,15 @@
     ]);
     if (error) throw error;
     const name = (id) => directory.find((person) => person.id === id)?.full_name || id;
-    const canChange = canManage() && (!isHistoricalRound(round) || !resultCount.count);
+    const canChange = canManage();
+    const historicalColumn = isHistoricalRound(round) ? '<th>วันเวลาเหตุการณ์จริง</th>' : '';
     return `<div class="card">
-      <div class="card-header"><div><h2>ผู้รับผิดชอบ</h2><div class="small muted">ผู้ปฏิบัติจริง 2 คนต้องมีบทบาทเจ้าหน้าที่ ผู้ทบทวนต้องมีบทบาทผู้ทบทวน ส่วนผู้จัดการคุณภาพต้องรับรองทุกรอบตามหน้าที่ แม้เป็นหนึ่งในผู้ปฏิบัติจริง</div></div>${canChange ? `<button class="btn btn-primary" id="manage-assignments">กำหนดผู้รับผิดชอบ</button>` : ''}</div>
-      <div class="notice info">บุคคลเดียวกันมีหลายบทบาทได้ แต่ต้องเลือก “ใช้งานในบทบาท” ให้ตรงกับงานที่กำลังทำ เช่น กรอกผลในบทบาทเจ้าหน้าที่ และรับรองในบทบาทผู้จัดการคุณภาพ ระบบจะแสดงบทบาทที่ใช้ลงนามในประวัติการอนุมัติ</div><div style="height:12px"></div>
-      ${isHistoricalRound(round) && resultCount.count ? `<div class="notice warning">มีการกรอกผลย้อนหลังแล้ว ระบบจึงล็อกชื่อผู้ปฏิบัติจริงเพื่อไม่ให้หลักฐานเปลี่ยนบุคคล หากเลือกผิดให้แก้ก่อนกรอกผลย้อนหลัง</div><div style="height:12px"></div>` : ''}
-      ${(assignments || []).length ? `<div class="table-wrap"><table><thead><tr><th>บทบาท</th><th>ชื่อ</th><th>ลำดับผู้ปฏิบัติ</th><th>วันที่มอบหมาย</th></tr></thead><tbody>
-        ${(assignments || []).map((assignment) => `<tr><td>${esc(labelFrom(ASSIGNMENT_ROLE_LABELS, assignment.assignment_role))}</td><td>${esc(name(assignment.user_id))}</td><td>${assignment.practitioner_slot || '-'}</td><td>${fmtDate(assignment.assigned_at, true)}</td></tr>`).join('')}
-      </tbody></table></div>` : empty('ยังไม่ได้มอบหมายผู้ปฏิบัติ ผู้ทบทวนผล หรือแพทย์')}
+      <div class="card-header"><div><h2>ผู้รับผิดชอบ</h2><div class="small muted">ผู้ปฏิบัติจริง 2 คน ผู้ทบทวน และผู้รับรองคุณภาพต้องเป็นคนละคนในรอบเดียวกัน ผู้รับรองคุณภาพเลือกได้ทั้งผู้จัดการคุณภาพหรือรองผู้จัดการคุณภาพ</div></div>${canChange ? `<button class="btn btn-primary" id="manage-assignments">กำหนดผู้รับผิดชอบ</button>` : ''}</div>
+      <div class="notice info">บุคคลเดียวกันมีหลายบทบาทในระบบได้ และสามารถทำหน้าที่คนละบทบาทในคนละรอบ แต่ระบบจะไม่ให้ทำหน้าที่ที่ขัดกันภายในรอบเดียวกัน</div><div style="height:12px"></div>
+      ${isHistoricalRound(round) && resultCount.count ? `<div class="notice warning">มีการกรอกผลย้อนหลังแล้ว ระบบล็อกชื่อผู้ปฏิบัติจริงไว้ แต่ยังแก้ผู้ทบทวน ผู้รับรองคุณภาพ แพทย์ และวันเวลาเหตุการณ์จริงได้</div><div style="height:12px"></div>` : ''}
+      ${(assignments || []).length ? `<div class="table-wrap"><table><thead><tr><th>บทบาท</th><th>ชื่อ</th><th>ลำดับ</th>${historicalColumn}<th>บันทึกในระบบเมื่อ</th></tr></thead><tbody>
+        ${(assignments || []).map((assignment) => `<tr><td>${esc(labelFrom(ASSIGNMENT_ROLE_LABELS, assignment.assignment_role))}</td><td>${esc(name(assignment.user_id))}</td><td>${assignment.practitioner_slot || '-'}</td>${isHistoricalRound(round) ? `<td>${esc(fmtHistoricalEvent(assignment))}${assignment.actual_action_note ? `<br><span class="small muted">${esc(assignment.actual_action_note)}</span>` : ''}</td>` : ''}<td>${fmtDate(assignment.assigned_at, true)}</td></tr>`).join('')}
+      </tbody></table></div>` : empty('ยังไม่ได้กำหนดผู้ปฏิบัติ ผู้ทบทวน ผู้รับรองคุณภาพ หรือแพทย์')}
     </div>`;
   }
 
@@ -3274,7 +3382,7 @@
         ${row ? `<div class="grid cols-2">
           <div><strong>วิธีบันทึก</strong><p><span class="badge info">กรอกแทนผู้ปฏิบัติ</span></p></div>
           <div><strong>ผู้กรอกข้อมูลแทน</strong><p>${esc(enteredBy)}<br><span class="small muted">${fmtDate(row.entered_at, true)}</span></p></div>
-          <div><strong>วันที่ปฏิบัติจริง</strong><p>${fmtDate(row.performed_at || row.submitted_at, true)}</p></div>
+          <div><strong>วันที่ปฏิบัติจริง</strong><p>${row.performed_date ? `${fmtDate(row.performed_date)}${row.performed_time_known === false ? ' · ไม่ทราบเวลา' : row.performed_time ? ` · ${String(row.performed_time).slice(0,5)} น.` : ''}` : fmtDate(row.performed_at || row.submitted_at, true)}</p></div>
           <div><strong>หลักฐานผลรายบุคคล</strong><p>${row.no_individual_evidence ? '<span class="badge warning">ไม่มีหลักฐานผลรายบุคคลแยก</span>' : '<span class="badge success">มีหลักฐานเดิมสำหรับกรอกผล</span>'}</p></div>
         </div>
         <p><strong>ที่มาของข้อมูล:</strong> ${esc(row.evidence_note || '-')}</p>
@@ -3303,39 +3411,66 @@
     ]);
     const person = directory.find((item) => item.id === userId);
     const noEvidence = Boolean(existing?.no_individual_evidence);
+    const fallbackDateTime = existing?.performed_at || round.actual_submitted_at || round.received_at;
+    const fallbackDate = fallbackDateTime ? fmtDateInput(fallbackDateTime) : '';
+    const fallbackTime = fallbackDateTime ? fmtDateTimeInput(fallbackDateTime).slice(11, 16) : '';
+    const performedDate = existing?.performed_date ? String(existing.performed_date).slice(0, 10) : fallbackDate;
+    const performedTime = existing?.performed_time ? String(existing.performed_time).slice(0, 5) : fallbackTime;
+    const timeUnknown = existing?.performed_time_known === false;
+
     showModal(`กรอกผลย้อนหลังแทน — ${person?.full_name || ''}`, `
       <form id="historical-individual-form" class="form-grid">
-        <div class="notice"><strong>ผู้ปฏิบัติจริง:</strong> ${esc(person?.full_name || userId)}<br><strong>ผู้กรอกแทน:</strong> ${esc(state.profile.full_name)}<br><span class="small">ระบบเก็บชื่อผู้กรอกแทนและเวลาปัจจุบันอัตโนมัติ</span></div>
-        <div class="field"><label>วันที่และเวลาที่ปฏิบัติจริง</label><input class="input" type="datetime-local" name="performed_at" required value="${fmtDateTimeInput(existing?.performed_at || round.actual_submitted_at || round.received_at)}"></div>
+        <div class="notice"><strong>ผู้ปฏิบัติจริง:</strong> ${esc(person?.full_name || userId)}<br><strong>ผู้กรอกข้อมูลย้อนหลัง:</strong> ${esc(state.profile.full_name)}<br><span class="small">วันเวลาเกิดเหตุการณ์จริงจะเก็บแยกจากวันเวลาที่นำข้อมูลเข้าระบบ</span></div>
+        <section class="historical-action-card" data-historical-action="performed">
+          <div class="historical-action-card-head"><strong>วันที่ปฏิบัติจริงตามหลักฐานเดิม</strong></div>
+          <div class="historical-action-grid">
+            <div class="field"><label>วันที่ปฏิบัติจริง</label><input class="input" type="date" name="performed_date" required value="${esc(performedDate)}"></div>
+            <div class="field"><label>เวลา</label><input class="input" type="time" name="performed_time" value="${esc(performedTime)}" ${timeUnknown ? 'disabled' : ''}></div>
+          </div>
+          <label class="historical-unknown-time"><input type="checkbox" name="performed_time_unknown" ${timeUnknown ? 'checked' : ''}><span>หลักฐานระบุเฉพาะวันที่ ไม่ทราบเวลาที่แน่นอน</span></label>
+        </section>
         <label style="display:flex;gap:9px;align-items:flex-start"><input type="checkbox" id="no-individual-evidence" name="no_evidence" ${noEvidence ? 'checked' : ''}><span><strong>ไม่มีหลักฐานผลรายบุคคลแยก</strong><br><span class="small muted">เลือกข้อนี้เมื่อมีเพียงผลกลางที่ห้องส่ง ห้ามคาดเดาหรือสร้างผลรายบุคคลย้อนหลัง</span></span></label>
         <div class="field"><label>แหล่งข้อมูล/หลักฐาน</label><textarea class="textarea" name="evidence_note" required placeholder="เช่น แบบบันทึกผลเดิม ลงชื่อผู้ปฏิบัติ 2 คน หน้า...">${esc(existing?.evidence_note || '')}</textarea></div>
         <div id="historical-individual-result-fields">${resultForm(existing?.result_payload, 'historicalIndividual', noEvidence)}</div>
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-historical-individual">บันทึกข้อมูลที่กรอกแทน</button>`, true);
+
     bindCapWorkupControls(document.getElementById('historical-individual-form'));
+    bindHistoricalTimeControls(document.getElementById('historical-individual-form'));
+
     const checkbox = document.getElementById('no-individual-evidence');
     const toggle = () => {
       document.querySelectorAll('#historical-individual-result-fields input, #historical-individual-result-fields textarea, #historical-individual-result-fields select').forEach((field) => { field.disabled = checkbox.checked; });
       document.querySelectorAll('#historical-individual-result-fields [data-add-workup-panel], #historical-individual-result-fields [data-add-workup-extra], #historical-individual-result-fields [data-remove-workup-row]').forEach((button) => { button.disabled = checkbox.checked; });
     };
-    checkbox.addEventListener('change', toggle); toggle();
+    checkbox.addEventListener('change', toggle);
+    toggle();
+
     document.getElementById('save-historical-individual').addEventListener('click', async () => {
       const form = document.getElementById('historical-individual-form');
       if (!form.reportValidity()) return;
       const fd = new FormData(form);
+      const timeKnown = fd.get('performed_time_unknown') !== 'on';
+      const performedTimeValue = String(fd.get('performed_time') || '');
+      if (timeKnown && !performedTimeValue) return toast('กรุณาระบุเวลา หรือเลือกไม่ทราบเวลาที่แน่นอน', 'warning');
       const payload = checkbox.checked ? defaultResultPayload() : collectResultPayload(form, 'historicalIndividual');
       if (!payload) return toast('กรุณาสร้างแบบกรอกจากฟอร์มเปล่าของรอบนี้ก่อนบันทึกผล', 'warning');
+
       setBusy(true);
-      const { error } = await state.supabase.rpc('ec_record_historical_individual_result', {
+      const { error } = await state.supabase.rpc('ec_record_historical_individual_result_v259', {
         p_round_id: round.id,
         p_user_id: userId,
         p_result_payload: payload,
-        p_performed_at: new Date(String(fd.get('performed_at'))).toISOString(),
+        p_performed_date: String(fd.get('performed_date') || ''),
+        p_performed_time: timeKnown ? performedTimeValue : null,
+        p_time_known: timeKnown,
         p_evidence_note: String(fd.get('evidence_note') || '').trim(),
         p_no_individual_evidence: checkbox.checked
       });
       setBusy(false);
       if (error) return toast(friendlyError(error), 'danger');
-      closeModal(); toast('บันทึกข้อมูลย้อนหลังแทนผู้ปฏิบัติแล้ว', 'success'); route();
+      closeModal();
+      toast('บันทึกข้อมูลย้อนหลังแทนผู้ปฏิบัติแล้ว', 'success');
+      route();
     });
   }
 
@@ -3442,7 +3577,7 @@
     return `<div class="notice ${unresolved ? 'warning' : 'success'}">
       <strong>ระบบเทียบผลให้อัตโนมัติแล้ว</strong><br>
       ค่าที่ตรงกัน ${matched} รายการ · ค่าที่ต่างกัน ${different} รายการ · ขาดข้อมูลหนึ่งคน ${missing} รายการ
-      ${unresolved ? `<br><strong>ผู้ทบทวนต้องตรวจและเลือกผลสรุปอีก ${unresolved} รายการก่อนส่งให้ผู้จัดการคุณภาพ</strong>` : '<br>ค่าที่ต่างกันได้รับการตรวจครบแล้ว'}
+      ${unresolved ? `<br><strong>ผู้ทบทวนต้องตรวจและเลือกผลสรุปอีก ${unresolved} รายการก่อนส่งให้ผู้รับรองคุณภาพ</strong>` : '<br>ค่าที่ต่างกันได้รับการตรวจครบแล้ว'}
     </div>${rows ? `<div style="height:12px"></div><div class="table-wrap"><table><thead><tr><th>ตัวอย่าง</th><th>รายการ</th><th>ผู้ปฏิบัติคนที่ 1</th><th>ผู้ปฏิบัติคนที่ 2</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}`;
   }
 
@@ -3489,13 +3624,15 @@
     ]);
     const name = (id) => directory.find((person) => person.id === id)?.full_name || id;
     const reviewer = (assignments || []).find((assignment) => assignment.assignment_role === 'reviewer');
+    const qualityApprover = (assignments || []).find((assignment) => assignment.assignment_role === 'quality_approver');
     const isAssignedReviewer = reviewer?.user_id === state.user.id;
+    const isAssignedQualityApprover = qualityApprover?.user_id === state.user.id;
     const reviewerCanAct = hasRole('reviewer') && isAssignedReviewer && round.historical_review_status === 'awaiting_reviewer';
-    const qmCanAct = hasRole('qm') && round.historical_review_status === 'awaiting_qm_certification';
+    const qmCanAct = canQualityApprove() && isAssignedQualityApprover && round.historical_review_status === 'awaiting_qm_certification';
     const stages = [
       ['historical_practitioner_confirm','ผู้ปฏิบัติจริงตรวจและยืนยันข้อมูลของตน'],
       ['historical_reviewer_review','ผู้ทบทวนตรวจข้อมูลและหลักฐานย้อนหลัง'],
-      ['historical_qm_certification','ผู้จัดการคุณภาพรับรองและเปิดการประเมิน']
+      ['historical_qm_certification','ผู้รับรองคุณภาพรับรองและเปิดการประเมิน']
     ];
     return `<div class="grid cols-2">
       <div class="card"><h2>ลำดับการตรวจข้อมูลย้อนหลัง</h2><div class="timeline">${stages.map(([stage,label]) => {
@@ -3504,10 +3641,11 @@
       }).join('')}</div></div>
       <div class="card"><h2>ดำเนินการตามลำดับ</h2>
         <div class="notice">สถานะปัจจุบัน: <strong>${esc(labelFrom(HISTORICAL_REVIEW_LABELS, round.historical_review_status))}</strong></div>
-        ${reviewerCanAct ? `<div class="form-grid"><div class="field"><label>ข้อคิดเห็นของผู้ทบทวน</label><textarea class="textarea" id="historical-reviewer-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="historical-reviewer-approve">ตรวจผ่านและส่งให้ผู้จัดการคุณภาพ</button><button class="btn btn-warning" id="historical-reviewer-return">ส่งกลับให้แก้ข้อมูลย้อนหลัง</button></div></div>` : ''}
-        ${qmCanAct ? `<div class="form-grid"><div class="notice success">ผู้ทบทวนตรวจผ่านแล้ว ผู้จัดการคุณภาพสามารถรับรองและเปิดการประเมินความสามารถได้</div><div class="field"><label>หมายเหตุผู้จัดการคุณภาพ</label><textarea class="textarea" id="historical-qm-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="historical-qm-approve">รับรองข้อมูลและเปิดการประเมิน</button><button class="btn btn-warning" id="historical-qm-return">ส่งกลับแก้ไข</button></div></div>` : ''}
+        ${reviewerCanAct ? `<div class="form-grid"><div class="field"><label>ข้อคิดเห็นของผู้ทบทวน</label><textarea class="textarea" id="historical-reviewer-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="historical-reviewer-approve">ตรวจผ่านและส่งให้ผู้รับรองคุณภาพ</button><button class="btn btn-warning" id="historical-reviewer-return">ส่งกลับให้แก้ข้อมูลย้อนหลัง</button></div></div>` : ''}
+        ${qmCanAct ? `<div class="form-grid"><div class="notice success">ผู้ทบทวนตรวจผ่านแล้ว ผู้รับรองคุณภาพสามารถรับรองและเปิดการประเมินความสามารถได้</div><div class="field"><label>หมายเหตุผู้รับรองคุณภาพ</label><textarea class="textarea" id="historical-qm-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="historical-qm-approve">รับรองข้อมูลและเปิดการประเมิน</button><button class="btn btn-warning" id="historical-qm-return">ส่งกลับแก้ไข</button></div></div>` : ''}
         ${round.historical_review_status === 'qm_certified' ? `<div class="notice success"><strong>รับรองข้อมูลย้อนหลังแล้ว</strong><br>สามารถไปหัวข้อ 10 เพื่อสร้างรายการประเมิน ผู้ปฏิบัติจริง 2 คนจะได้แบบประเมินการปฏิบัติงาน ส่วนเจ้าหน้าที่คนอื่นจะได้แบบทดสอบ</div><div class="modal-footer"><button class="btn btn-primary" data-go-historical-step="competency">ไปเปิดการประเมินความสามารถ</button></div>` : ''}
         ${hasRole('reviewer') && reviewer && !isAssignedReviewer ? `<div class="notice warning">รอบนี้มอบหมายผู้ทบทวนเป็น ${esc(name(reviewer.user_id))} คุณเปิดดูได้แต่กดตรวจผ่านไม่ได้</div>` : ''}
+        ${canQualityApprove() && qualityApprover && !isAssignedQualityApprover ? `<div class="notice warning">รอบนี้มอบหมายผู้รับรองคุณภาพเป็น ${esc(name(qualityApprover.user_id))} คุณเปิดดูได้แต่รับรองแทนไม่ได้</div>` : ''}
       </div>
     </div>`;
   }
@@ -3528,15 +3666,14 @@
     const reviewerCanEdit = Boolean(consensus && hasRole('reviewer') && isAssignedReviewer && ['practitioners_confirmed','returned'].includes(consensus.status));
     const canSeeComparison = pairComplete && (practitioner || canReview() || hasRole('physician','viewer'));
     const sentForward = consensus && ['awaiting_qm_review','qm_approved','awaiting_physician_approval','physician_approved','submitted','locked'].includes(consensus.status);
-    return `<div class="card"><div class="card-header"><div><h2>สรุปผลห้องปฏิบัติการ</h2><div class="small muted">เมื่อผู้ปฏิบัติทั้งสองคนส่งผลครบ ระบบจะเทียบผลและเติมค่าที่ตรงกันให้อัตโนมัติ ผู้ทบทวนตรวจเฉพาะค่าที่ต่างกันแล้วส่งให้ผู้จัดการคุณภาพ</div></div>${consensus ? `<span class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, consensus.status))} · ฉบับที่ ${consensus.version}</span>` : ''}</div>
+    return `<div class="card"><div class="card-header"><div><h2>สรุปผลห้องปฏิบัติการ</h2><div class="small muted">เมื่อผู้ปฏิบัติทั้งสองคนส่งผลครบ ระบบจะเทียบผลและเติมค่าที่ตรงกันให้อัตโนมัติ ผู้ทบทวนตรวจเฉพาะค่าที่ต่างกันแล้วส่งให้ผู้รับรองคุณภาพ</div></div>${consensus ? `<span class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, consensus.status))} · ฉบับที่ ${consensus.version}</span>` : ''}</div>
       ${!pairComplete ? `<div class="notice warning">ยังสร้างสรุปไม่ได้ ต้องรอผู้ปฏิบัติจริงทั้ง 2 คนกด “ยืนยันและส่งผล” ให้ครบก่อน</div>` : ''}
       ${pairComplete && !consensus ? `<div class="notice warning">ผู้ปฏิบัติส่งครบแล้ว ระบบกำลังสร้างสรุปผลห้องปฏิบัติการ กรุณารีเฟรชหน้านี้อีกครั้ง</div>` : ''}
       ${canSeeComparison ? `<h3>เปรียบเทียบผลของผู้ปฏิบัติ</h3>${resultComparison((individualRows || []).filter((row) => submittedIds.has(row.user_id)), consensus)}<div style="height:18px"></div>` : ''}
       ${consensus && canSeeComparison ? `${autoLabSummaryPanel(consensus)}<div style="height:18px"></div><h3>สรุปผลที่ใช้ส่งต่อ</h3><form id="consensus-form">${resultForm(consensus.result_payload, 'consensus', !reviewerCanEdit)}</form>
         ${reviewerCanEdit ? `<div class="field"><label>หมายเหตุผู้ทบทวน</label><textarea class="textarea" id="reviewer-summary-note" placeholder="ระบุเหตุผลเมื่อเลือกผลสรุปต่างจากผู้ปฏิบัติ หรือหมายเหตุเพิ่มเติม">${esc(consensus.reviewer_note || '')}</textarea></div>` : consensus.reviewer_note ? `<div class="notice"><strong>หมายเหตุผู้ทบทวน:</strong> ${esc(consensus.reviewer_note)}</div>` : ''}
         <div class="modal-footer">
-          ${reviewerCanEdit ? `<button class="btn btn-secondary" id="save-reviewer-summary">บันทึกร่างสรุป</button><button class="btn btn-primary" id="finalize-reviewer-summary">ตรวจเสร็จและส่งให้ผู้จัดการคุณภาพ</button>` : ''}
-          ${canReview() ? `<button class="btn btn-outline" id="print-consensus">พิมพ์สรุปผล</button>` : ''}
+          ${reviewerCanEdit ? `<button class="btn btn-secondary" id="save-reviewer-summary">บันทึกร่างสรุป</button><button class="btn btn-primary" id="finalize-reviewer-summary">ตรวจเสร็จและส่งให้ผู้รับรองคุณภาพ</button>` : ''}
           ${sentForward ? `<button class="btn btn-outline" id="go-approval-from-summary">ดูขั้นตรวจ/รับรอง</button>` : ''}
         </div>` : pairComplete ? `<div class="notice">หน้านี้เปิดให้ผู้ปฏิบัติ ผู้ทบทวน ผู้จัดการคุณภาพ แพทย์ และผู้มีสิทธิ์ดูรายงานเท่านั้น</div>` : ''}
       ${hasRole('reviewer') && assignedReviewer && !isAssignedReviewer ? `<div class="notice warning">รอบนี้มอบหมายผู้ทบทวนเป็นบุคคลอื่น คุณเปิดดูได้แต่แก้หรือส่งสรุปไม่ได้</div>` : ''}
@@ -3552,9 +3689,11 @@
       state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true)
     ]);
     const assignedReviewer = (assignments || []).find((a) => a.assignment_role === 'reviewer');
+    const assignedQualityApprover = (assignments || []).find((a) => a.assignment_role === 'quality_approver');
     const isAssignedReviewer = Boolean(assignedReviewer && assignedReviewer.user_id === state.user.id);
+    const isAssignedQualityApprover = Boolean(assignedQualityApprover && assignedQualityApprover.user_id === state.user.id);
     const reviewerCanAct = consensus && hasRole('reviewer') && isAssignedReviewer && ['practitioners_confirmed','returned'].includes(consensus.status);
-    const qmCanAct = consensus && hasRole('qm') && ['awaiting_qm_review'].includes(consensus.status);
+    const qmCanAct = consensus && canQualityApprove() && isAssignedQualityApprover && ['awaiting_qm_review'].includes(consensus.status);
     const physicianCanAct = consensus && hasRole('physician') && ['qm_approved','awaiting_physician_approval'].includes(consensus.status);
     const stages = ['reviewer_review','qm_review','physician_approval'];
     return `<div class="grid cols-2">
@@ -3567,10 +3706,11 @@
       <div class="card"><h2>ดำเนินการตามลำดับ</h2>
         ${!consensus ? `<div class="notice warning">ยังไม่มีสรุปผลห้องปฏิบัติการ</div>` : ''}
         ${reviewerCanAct ? `<div class="form-grid"><div class="notice">ระบบสร้างสรุปจากผลผู้ปฏิบัติทั้งสองคนแล้ว ผู้ทบทวนต้องตรวจค่าที่ต่างกันในหัวข้อ 5 ก่อนส่งต่อ</div><div class="table-actions"><button class="btn btn-primary" id="go-reviewer-summary">ไปตรวจสรุปผลห้องแลป</button></div></div>` : ''}
-        ${qmCanAct ? `<div class="form-grid"><div class="notice">ผู้ทบทวนตรวจสรุปและส่งมาแล้ว ผู้จัดการคุณภาพจึงสามารถรับรองได้</div><div class="field"><label>หมายเหตุผู้จัดการคุณภาพ</label><textarea class="textarea" id="qm-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="qm-approve">ผู้จัดการคุณภาพรับรอง</button><button class="btn btn-warning" id="qm-return">ส่งกลับให้ผู้ทบทวนแก้สรุป</button></div></div>` : ''}
-        ${physicianCanAct ? `<div class="form-grid"><div class="notice">ผู้จัดการคุณภาพรับรองแล้ว แพทย์ตรวจดูและกดรับทราบ</div><div class="field"><label>หมายเหตุแพทย์</label><textarea class="textarea" id="physician-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="physician-acknowledge">แพทย์รับทราบ</button><button class="btn btn-warning" id="physician-return">ส่งกลับผู้จัดการคุณภาพ</button></div></div>` : ''}
+        ${qmCanAct ? `<div class="form-grid"><div class="notice">ผู้ทบทวนตรวจสรุปและส่งมาแล้ว ผู้รับรองคุณภาพที่ได้รับมอบหมายจึงสามารถรับรองได้</div><div class="field"><label>หมายเหตุผู้รับรองคุณภาพ</label><textarea class="textarea" id="qm-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="qm-approve">ผู้รับรองคุณภาพรับรอง</button><button class="btn btn-warning" id="qm-return">ส่งกลับให้ผู้ทบทวนแก้สรุป</button></div></div>` : ''}
+        ${physicianCanAct ? `<div class="form-grid"><div class="notice">ผู้รับรองคุณภาพรับรองแล้ว แพทย์ตรวจดูและกดรับทราบ</div><div class="field"><label>หมายเหตุแพทย์</label><textarea class="textarea" id="physician-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="physician-acknowledge">แพทย์รับทราบ</button><button class="btn btn-warning" id="physician-return">ส่งกลับผู้รับรองคุณภาพ</button></div></div>` : ''}
         ${consensus && !reviewerCanAct && !qmCanAct && !physicianCanAct ? `<div class="notice">สถานะปัจจุบัน: ${esc(labelFrom(RESULT_STATUS_LABELS, consensus.status, consensus.status))}<br>ระบบจะเปิดปุ่มให้เฉพาะผู้มีหน้าที่ในลำดับปัจจุบันเท่านั้น</div>` : ''}
         ${hasRole('reviewer') && assignedReviewer && !isAssignedReviewer ? `<div class="notice warning">รอบนี้มอบหมายผู้ทบทวนคนอื่น คุณเปิดดูได้แต่ไม่สามารถส่งสรุปได้</div>` : ''}
+        ${canQualityApprove() && assignedQualityApprover && !isAssignedQualityApprover ? `<div class="notice warning">รอบนี้มอบหมายผู้รับรองคุณภาพเป็นบุคคลอื่น คุณเปิดดูได้แต่ไม่สามารถรับรองได้</div>` : ''}
       </div>
     </div>`;
   }
@@ -3991,6 +4131,7 @@
       { data: documents, error: documentError },
       { data: keys, error: keyError },
       { data: generationRuns, error: runError },
+      { data: roundRoleAssignments, error: roundRoleError },
       directory
     ] = await Promise.all([
       state.supabase.from('ec_questions').select('*, ec_question_choices(*)').eq('round_id', round.id).order('question_order'),
@@ -3998,9 +4139,10 @@
       state.supabase.from('ec_round_documents').select('id,title,file_name,mime_type,visibility,category').eq('round_id', round.id).is('archived_at', null).order('created_at', { ascending: false }),
       state.supabase.from('ec_question_answer_keys').select('question_id,correct_choice_ids,answer_key_json,explanation'),
       state.supabase.from('ec_ai_generation_runs').select('*').eq('round_id', round.id).order('created_at', { ascending: false }).limit(5),
+      state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true),
       loadDirectory()
     ]);
-    if (questionError || assignmentError || documentError || keyError || runError) throw (questionError || assignmentError || documentError || keyError || runError);
+    if (questionError || assignmentError || documentError || keyError || runError || roundRoleError) throw (questionError || assignmentError || documentError || keyError || runError || roundRoleError);
 
     const adminImageMap = await loadSignedImageMap((questions || []).flatMap((question) => questionImageIds(question)));
     const name = (id) => directory.find((p) => p.id === id)?.full_name || id;
@@ -4020,6 +4162,8 @@
     const evidenceDocs = (documents || []).filter((doc) => ['raw_result_image','antibody_panel'].includes(doc.category));
     const hiddenEvidenceDocs = evidenceDocs.filter((doc) => doc.visibility !== 'staff');
     const latestRun = generationRuns?.[0] || null;
+    const assignedQualityApprover = (roundRoleAssignments || []).find((row) => row.assignment_role === 'quality_approver');
+    const isAssignedQualityApprover = Boolean(assignedQualityApprover && assignedQualityApprover.user_id === state.user.id);
     const canCreateCompetency = canManage();
     const closePassed = round.competency_close_at && new Date(round.competency_close_at).getTime() < Date.now();
     const windowText = round.competency_close_at
@@ -4034,12 +4178,9 @@
         if (canReviewQuiz || canReviewPractical) actions.push(`<button class="btn btn-primary btn-sm" data-review-competency="${assignment.id}" data-type="${assignment.assignment_type}">ตรวจประเมิน</button>`);
         if (assignment.status === 'reflection_submitted') actions.push(`<button class="btn btn-primary btn-sm" data-review-reflection="${assignment.id}">ตรวจแบบทบทวน</button>`);
       }
-      if (hasRole('qm') && assignment.status === 'under_review') {
+      if (canQualityApprove() && isAssignedQualityApprover && assignment.status === 'under_review') {
         actions.push(`<button class="btn btn-success btn-sm" data-qm-approve-competency="${assignment.id}">รับรองผล</button>`);
         actions.push(`<button class="btn btn-warning btn-sm" data-qm-return-competency="${assignment.id}">ส่งกลับผู้ทบทวน</button>`);
-      }
-      if (!['not_started','in_progress','cancelled'].includes(assignment.status) && canReview()) {
-        actions.push(`<button class="btn btn-outline btn-sm" data-archive-competency="${assignment.id}" data-archive-stage="${assignment.status}">เก็บ PDF ใน Drive</button>`);
       }
       if (hasRole('admin')) actions.unshift(`<button class="btn btn-outline btn-sm" data-preview-staff-assignment="${assignment.id}">ดูหน้าที่เจ้าหน้าที่เห็น</button>`);
       return actions.length ? actions.join('') : '<span class="small muted">รอตามลำดับงาน</span>';
@@ -4783,38 +4924,72 @@
 
   function bindAssignments(round) {
     document.getElementById('manage-assignments')?.addEventListener('click', async () => {
-      const [{ data: current }, directory] = await Promise.all([
-        state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true), loadDirectory()
+      const [{ data: current }, directory, resultCount] = await Promise.all([
+        state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true),
+        loadDirectory(),
+        isHistoricalRound(round)
+          ? state.supabase.from('ec_individual_results').select('id', { count: 'exact', head: true }).eq('round_id', round.id)
+          : Promise.resolve({ count: 0 })
       ]);
-      const find = (role, slot) => current?.find((a) => a.assignment_role === role && (slot ? a.practitioner_slot === slot : true))?.user_id || '';
+      const practitionersLocked = Boolean(resultCount.count);
+      const findAssignment = (role, slot = null) => current?.find((a) => a.assignment_role === role && (slot ? a.practitioner_slot === slot : true)) || null;
+      const find = (role, slot = null) => findAssignment(role, slot)?.user_id || '';
       const options = (people, selected, blankLabel = 'กรุณาเลือก') => `<option value="">${blankLabel}</option>${people.map((p) => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.full_name)}${p.position_title ? ` — ${esc(p.position_title)}` : ''}</option>`).join('')}`;
       const practitioners = directory.filter((p) => personHasRole(p, 'staff') && !personHasRole(p, 'physician'));
       const reviewers = directory.filter((p) => personHasRole(p, 'reviewer'));
+      const qualityApprovers = directory.filter((p) => personHasRole(p, 'qm') || personHasRole(p, 'deputy_qm'));
       const physicians = directory.filter((p) => personHasRole(p, 'physician'));
+
       showModal('กำหนดผู้รับผิดชอบ', `<form id="assignment-form" class="form-grid cols-2">
-        <div class="notice" style="grid-column:1/-1"><strong>ลำดับการทำงาน:</strong> ผู้ปฏิบัติ 2 คนส่งผล → ระบบสร้างสรุปอัตโนมัติ → ผู้ทบทวนตรวจ/ส่ง → ผู้จัดการคุณภาพรับรอง → แพทย์รับทราบ<br><span class="small">ผู้จัดการคุณภาพสามารถเป็นหนึ่งในผู้ปฏิบัติจริงได้ แต่ต้องสลับบทบาทให้ตรงกับการกระทำแต่ละขั้น ระบบจะบันทึกบทบาทที่ใช้ลงนามแยกกัน ผู้ทบทวนยังต้องเป็นคนละคนกับผู้ปฏิบัติทั้งสองคน</span></div>
-        <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 1</label><select class="select" name="p1" required>${options(practitioners, find('practitioner',1))}</select></div>
-        <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 2</label><select class="select" name="p2" required>${options(practitioners, find('practitioner',2))}</select></div>
+        <div class="notice" style="grid-column:1/-1"><strong>ลำดับการทำงาน:</strong> ผู้ปฏิบัติ 2 คน → ผู้ทบทวน → ผู้รับรองคุณภาพ → แพทย์รับทราบ<br><span class="small">คนหนึ่งมีหลาย Role ในระบบได้ แต่ภายในรอบเดียวกัน ผู้ปฏิบัติ ผู้ทบทวน และผู้รับรองคุณภาพต้องไม่ซ้ำกัน</span></div>
+        <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 1</label><select class="select" name="p1" required ${practitionersLocked ? 'disabled' : ''}>${options(practitioners, find('practitioner',1))}</select>${practitionersLocked ? '<div class="help">ล็อกแล้ว เพราะมีการบันทึกผลรายบุคคล</div>' : ''}</div>
+        <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 2</label><select class="select" name="p2" required ${practitionersLocked ? 'disabled' : ''}>${options(practitioners, find('practitioner',2))}</select>${practitionersLocked ? '<div class="help">ล็อกแล้ว เพราะมีการบันทึกผลรายบุคคล</div>' : ''}</div>
         <div class="field"><label>ผู้ทบทวนผล</label><select class="select" name="reviewer" required>${options(reviewers, find('reviewer'))}</select><div class="help">ต้องเป็นคนละคนกับผู้ปฏิบัติทั้งสองคน</div></div>
-        <div class="field"><label>แพทย์ผู้รับทราบที่คาดไว้</label><select class="select" name="physician">${options(physicians, find('physician'), 'ยังไม่ระบุ — แพทย์ผู้รับรองคนใดก็ได้สามารถรับทราบ')}</select><div class="help">แพทย์ไม่ต้องมีบทบาทเจ้าหน้าที่และไม่ถูกมอบหมายแบบทดสอบ</div></div>
-      </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-assignments">บันทึก</button>`);
+        <div class="field"><label>ผู้รับรองคุณภาพ</label><select class="select" name="quality_approver" required>${options(qualityApprovers, find('quality_approver'))}</select><div class="help">เลือกผู้จัดการคุณภาพหรือรองผู้จัดการคุณภาพ และต้องไม่ซ้ำผู้ปฏิบัติหรือผู้ทบทวน</div></div>
+        <div class="field" style="grid-column:1/-1"><label>แพทย์ผู้รับทราบที่คาดไว้</label><select class="select" name="physician">${options(physicians, find('physician'), 'ยังไม่ระบุ — แพทย์ผู้รับรองคนใดก็ได้สามารถรับทราบ')}</select></div>
+        ${isHistoricalRound(round) ? `<div class="historical-action-section" style="grid-column:1/-1"><h3>วันเวลาเหตุการณ์จริงตามหลักฐานเดิม</h3><p class="small muted">เว้นว่างได้หากขั้นตอนยังไม่เกิดขึ้น วันเวลาที่บันทึกในระบบยังเก็บอัตโนมัติตามจริง</p>
+          ${historicalActionFields('reviewer_action', 'ผู้ทบทวนตรวจผลจริง', findAssignment('reviewer'))}
+          ${historicalActionFields('quality_action', 'ผู้รับรองคุณภาพรับรองจริง', findAssignment('quality_approver'))}
+          ${historicalActionFields('physician_action', 'แพทย์รับทราบจริง', findAssignment('physician'))}
+        </div>` : ''}
+      </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-assignments">บันทึก</button>`, true);
+
+      bindHistoricalTimeControls(document.getElementById('assignment-form'));
+
       document.getElementById('save-assignments').addEventListener('click', async () => {
         const form = document.getElementById('assignment-form');
         if (!form.reportValidity()) return;
         const fd = new FormData(form);
-        const p1=String(fd.get('p1')||''), p2=String(fd.get('p2')||''), reviewer=String(fd.get('reviewer')||''), physician=String(fd.get('physician')||'');
+        const p1 = String(fd.get('p1') || find('practitioner',1) || '');
+        const p2 = String(fd.get('p2') || find('practitioner',2) || '');
+        const reviewer = String(fd.get('reviewer') || '');
+        const qualityApprover = String(fd.get('quality_approver') || '');
+        const physician = String(fd.get('physician') || '') || null;
         if (p1 === p2) return toast('ผู้ปฏิบัติคนที่ 1 และคนที่ 2 ต้องเป็นคนละคน', 'warning');
         if ([p1,p2].includes(reviewer)) return toast('ผู้ทบทวนต้องเป็นคนละคนกับผู้ปฏิบัติจริง', 'warning');
-        await state.supabase.from('ec_round_assignments').update({active:false}).eq('round_id', round.id).eq('active', true);
-        const rows=[
-          {round_id:round.id,user_id:p1,assignment_role:'practitioner',practitioner_slot:1,assigned_by:state.user.id},
-          {round_id:round.id,user_id:p2,assignment_role:'practitioner',practitioner_slot:2,assigned_by:state.user.id},
-          {round_id:round.id,user_id:reviewer,assignment_role:'reviewer',practitioner_slot:null,assigned_by:state.user.id}
-        ];
-        if(physician) rows.push({round_id:round.id,user_id:physician,assignment_role:'physician',practitioner_slot:null,assigned_by:state.user.id});
-        const {error}=await state.supabase.from('ec_round_assignments').insert(rows);
-        if(error)return toast(friendlyError(error), 'danger');
-        closeModal();toast('บันทึกผู้รับผิดชอบแล้ว','success');route();
+        if ([p1,p2,reviewer].includes(qualityApprover)) return toast('ผู้รับรองคุณภาพต้องเป็นคนละคนกับผู้ปฏิบัติจริงและผู้ทบทวน', 'warning');
+
+        const actionMeta = isHistoricalRound(round) ? {
+          reviewer: readHistoricalActionMeta(form, 'reviewer_action'),
+          quality_approver: readHistoricalActionMeta(form, 'quality_action'),
+          physician: readHistoricalActionMeta(form, 'physician_action')
+        } : {};
+
+        setBusy(true);
+        const { error } = await state.supabase.rpc('ec_set_round_assignments_v259', {
+          p_round_id: round.id,
+          p_practitioner_1: p1,
+          p_practitioner_2: p2,
+          p_reviewer: reviewer,
+          p_quality_approver: qualityApprover,
+          p_physician: physician,
+          p_action_meta: actionMeta
+        });
+        setBusy(false);
+        if (error) return toast(friendlyError(error), 'danger');
+        closeModal();
+        toast('บันทึกผู้รับผิดชอบแล้ว', 'success');
+        route();
       });
     });
   }
@@ -4853,7 +5028,7 @@
     });
 
     document.getElementById('finalize-reviewer-summary')?.addEventListener('click', async () => {
-      if (!confirm('ยืนยันว่าตรวจค่าที่ต่างกันครบแล้ว และส่งสรุปผลให้ผู้จัดการคุณภาพหรือไม่')) return;
+      if (!confirm('ยืนยันว่าตรวจค่าที่ต่างกันครบแล้ว และส่งสรุปผลให้ผู้รับรองคุณภาพหรือไม่')) return;
       setBusy(true);
       const payload = reviewerPayload();
       if (!payload) { setBusy(false); return toast('กรุณาสร้างแบบกรอกจากฟอร์มเปล่าของรอบนี้ก่อนบันทึกผล', 'warning'); }
@@ -4866,10 +5041,9 @@
       if (error) return toast(friendlyError(error), 'danger');
       const unresolved = Number(data?.unresolved_count || 0);
       if (unresolved > 0) return toast(`ยังมีรายการที่ต้องตรวจ ${unresolved} รายการ`, 'warning');
-      toast('ส่งสรุปผลให้ผู้จัดการคุณภาพแล้ว', 'success'); navigate(`round/${round.id}/approval`);
+      toast('ส่งสรุปผลให้ผู้รับรองคุณภาพแล้ว', 'success'); navigate(`round/${round.id}/approval`);
     });
 
-    document.getElementById('print-consensus')?.addEventListener('click', () => window.print());
     document.getElementById('go-approval-from-summary')?.addEventListener('click', () => navigate(`round/${round.id}/approval`));
   }
 
@@ -5277,8 +5451,8 @@
       ['documentation', 'การบันทึกข้อมูล'],
       ['problem_solving', 'การแก้ปัญหา']
     ];
-    const body = `<div class="notice">ผู้ทบทวนประเมินครบทุกหัวข้อ แล้วส่งต่อให้ผู้จัดการคุณภาพรับรอง</div><div style="height:12px"></div><form id="practical-review-form" class="form-grid">${fields.map(([key,label]) => `<div class="field"><label>${esc(label)}</label><select class="select" name="${key}" required><option value="">เลือกผล</option><option value="true" ${assessment?.[key]===true?'selected':''}>ผ่าน</option><option value="false" ${assessment?.[key]===false?'selected':''}>ต้องทบทวน</option></select></div>`).join('')}<div class="field"><label>ข้อคิดเห็นผู้ทบทวน</label><textarea class="textarea" name="note">${esc(assessment?.reviewer_note || '')}</textarea></div></form>`;
-    showModal(`ประเมินการปฏิบัติจริง — ${assignment.ec_profiles?.full_name || ''}`, body, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-practical-review">ผ่านการทบทวนและส่งให้ผู้จัดการคุณภาพ</button>`, true);
+    const body = `<div class="notice">ผู้ทบทวนประเมินครบทุกหัวข้อ แล้วส่งต่อให้ผู้รับรองคุณภาพรับรอง</div><div style="height:12px"></div><form id="practical-review-form" class="form-grid">${fields.map(([key,label]) => `<div class="field"><label>${esc(label)}</label><select class="select" name="${key}" required><option value="">เลือกผล</option><option value="true" ${assessment?.[key]===true?'selected':''}>ผ่าน</option><option value="false" ${assessment?.[key]===false?'selected':''}>ต้องทบทวน</option></select></div>`).join('')}<div class="field"><label>ข้อคิดเห็นผู้ทบทวน</label><textarea class="textarea" name="note">${esc(assessment?.reviewer_note || '')}</textarea></div></form>`;
+    showModal(`ประเมินการปฏิบัติจริง — ${assignment.ec_profiles?.full_name || ''}`, body, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-practical-review">ผ่านการทบทวนและส่งให้ผู้รับรองคุณภาพ</button>`, true);
     document.getElementById('save-practical-review').addEventListener('click', async () => {
       const form = document.getElementById('practical-review-form'); if (!form.reportValidity()) return;
       const fd = new FormData(form);
@@ -5286,7 +5460,7 @@
       const { error } = await state.supabase.rpc('ec_reviewer_review_practical', { p_assignment_id: assignmentId, p_assessment: payload, p_note: String(fd.get('note') || '') || null });
       if (error) return toast(friendlyError(error), 'danger');
       await archiveReportToDrive({ report_type: 'competency', assignment_id: assignmentId, stage: 'reviewed' }, true);
-      closeModal(); toast('ตรวจทานแล้ว ส่งให้ผู้จัดการคุณภาพเรียบร้อย', 'success'); route();
+      closeModal(); toast('ตรวจทานแล้ว ส่งให้ผู้รับรองคุณภาพเรียบร้อย', 'success'); route();
     });
   }
 
@@ -5330,7 +5504,7 @@
         <div style="height:12px"></div><div class="field"><label>ผลการตรวจแบบกรอกหลัก</label><select class="select" id="result-form-review-pass" required><option value="">เลือกผล</option><option value="true" ${formReviewValue==='true'?'selected':''}>ผ่าน — แปลผลเหมาะสม</option><option value="false" ${formReviewValue==='false'?'selected':''}>ต้องทบทวน — มีผลไม่ถูกต้อง/ไม่ครบ</option></select></div>
         ${supplementalRows ? `<div style="height:12px"></div><h3>คำถามเสริม</h3><div id="quiz-review-list" class="grid">${supplementalRows}</div>` : ''}
         <div class="field"><label>หมายเหตุรวมของผู้ทบทวน</label><textarea class="textarea" id="quiz-review-note">${esc(assignment.result_form_review_note || '')}</textarea></div>`;
-      showModal(`ตรวจการแปลผลจากภาพ — ${assignment.ec_profiles?.full_name || ''}`, body, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-quiz-review">ผ่านการทบทวนและส่งให้ผู้จัดการคุณภาพ</button>`, true);
+      showModal(`ตรวจการแปลผลจากภาพ — ${assignment.ec_profiles?.full_name || ''}`, body, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-quiz-review">ผ่านการทบทวนและส่งให้ผู้รับรองคุณภาพ</button>`, true);
       document.getElementById('save-quiz-review').addEventListener('click', async () => {
         const passValue = document.getElementById('result-form-review-pass').value;
         if (!passValue) return toast('กรุณาเลือกผลการตรวจแบบกรอกหลัก', 'warning');
@@ -5352,7 +5526,7 @@
         });
         if (formError) return toast(friendlyError(formError), 'danger');
         await archiveReportToDrive({ report_type: 'competency', assignment_id: assignmentId, stage: 'reviewed' }, true);
-        closeModal(); toast('ตรวจแบบผลแล้ว ส่งให้ผู้จัดการคุณภาพเรียบร้อย', 'success'); route();
+        closeModal(); toast('ตรวจแบบผลแล้ว ส่งให้ผู้รับรองคุณภาพเรียบร้อย', 'success'); route();
       });
       return;
     }
@@ -5383,7 +5557,7 @@
         </div>
       </div>`;
     }).join('');
-    showModal(`ตรวจแบบทดสอบ — ${assignment.ec_profiles?.full_name || ''}`, `<div class="notice">ผู้ทบทวนเป็นผู้ตรวจด่านแรก เมื่อบันทึกแล้วระบบจะส่งต่อให้ผู้จัดการคุณภาพรับรอง</div><div style="height:12px"></div><div id="quiz-review-list" class="grid">${rows || empty('ไม่พบคำตอบ')}</div><div class="field"><label>หมายเหตุรวมของผู้ทบทวน</label><textarea class="textarea" id="quiz-review-note"></textarea></div>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-quiz-review">ผ่านการทบทวนและส่งให้ผู้จัดการคุณภาพ</button>`, true);
+    showModal(`ตรวจแบบทดสอบ — ${assignment.ec_profiles?.full_name || ''}`, `<div class="notice">ผู้ทบทวนเป็นผู้ตรวจด่านแรก เมื่อบันทึกแล้วระบบจะส่งต่อให้ผู้รับรองคุณภาพรับรอง</div><div style="height:12px"></div><div id="quiz-review-list" class="grid">${rows || empty('ไม่พบคำตอบ')}</div><div class="field"><label>หมายเหตุรวมของผู้ทบทวน</label><textarea class="textarea" id="quiz-review-note"></textarea></div>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-quiz-review">ผ่านการทบทวนและส่งให้ผู้รับรองคุณภาพ</button>`, true);
     document.getElementById('save-quiz-review').addEventListener('click', async () => {
       const reviewRows = [...document.querySelectorAll('[data-answer-result]')].map((select) => ({
         answer_id: select.dataset.answerResult,
@@ -5394,7 +5568,7 @@
       const { error } = await state.supabase.rpc('ec_reviewer_review_quiz', { p_assignment_id: assignmentId, p_reviews: reviewRows, p_note: document.getElementById('quiz-review-note').value || null });
       if (error) return toast(friendlyError(error), 'danger');
       await archiveReportToDrive({ report_type: 'competency', assignment_id: assignmentId, stage: 'reviewed' }, true);
-      closeModal(); toast('ตรวจทานแล้ว ส่งให้ผู้จัดการคุณภาพเรียบร้อย', 'success'); route();
+      closeModal(); toast('ตรวจทานแล้ว ส่งให้ผู้รับรองคุณภาพเรียบร้อย', 'success'); route();
     });
   }
 
@@ -5462,11 +5636,11 @@
     }));
     document.querySelectorAll('[data-review-reflection]').forEach((button) => button.addEventListener('click', () => openReflectionReview(button.dataset.reviewReflection)));
     document.querySelectorAll('[data-qm-approve-competency]').forEach((button) => button.addEventListener('click', async () => {
-      const note = prompt('หมายเหตุผู้จัดการคุณภาพ (เว้นว่างได้)') || '';
+      const note = prompt('หมายเหตุผู้รับรองคุณภาพ (เว้นว่างได้)') || '';
       const { data, error } = await state.supabase.rpc('ec_qm_decide_competency', { p_assignment_id: button.dataset.qmApproveCompetency, p_decision: 'approved', p_note: note || null });
       if (error) return toast(friendlyError(error), 'danger');
       await archiveReportToDrive({ report_type: 'competency', assignment_id: button.dataset.qmApproveCompetency, stage: data?.status === 'passed' ? 'certified' : 'certified' }, true);
-      toast(data?.status === 'needs_reflection' ? 'รับรองผลแล้ว และส่งให้เจ้าหน้าที่ทำแบบทบทวน' : 'ผู้จัดการคุณภาพรับรองผลแล้ว', 'success'); route();
+      toast(data?.status === 'needs_reflection' ? 'รับรองผลแล้ว และส่งให้เจ้าหน้าที่ทำแบบทบทวน' : 'ผู้รับรองคุณภาพรับรองผลแล้ว', 'success'); route();
     }));
     document.querySelectorAll('[data-qm-return-competency]').forEach((button) => button.addEventListener('click', async () => {
       const note = prompt('กรุณาระบุเหตุผลที่ส่งกลับผู้ทบทวน');
@@ -5479,19 +5653,85 @@
 
   async function renderMyCompetency() {
     if (!isCompetencyParticipant()) {
-      const content = `<section class="page my-competency-page"><div class="page-header"><div><h1>การประเมินของฉัน</h1></div></div><div class="notice">บัญชีนี้ไม่มีรายการประเมินสำหรับเจ้าหน้าที่</div></section>`;
-      appEl.innerHTML = shell(content, 'การประเมินของฉัน');
+      const content = `<section class="page my-competency-page"><div class="page-header"><div><h1>งานของฉัน</h1></div></div><div class="notice">บัญชีนี้ไม่มีงานสำหรับบทบาทเจ้าหน้าที่</div></section>`;
+      appEl.innerHTML = shell(content, 'งานของฉัน');
       bindShell();
       return;
     }
-    const [{ data: assignments, error }, { data: practitionerRows, error: practitionerError }] = await Promise.all([
+
+    const [competencyRes, practitionerRes, individualRes, confirmationRes] = await Promise.all([
       state.supabase.from('ec_competency_assignments').select('*, ec_eqa_rounds(*)').eq('user_id', state.user.id).neq('status', 'cancelled').order('created_at', { ascending: false }),
-      state.supabase.from('ec_round_assignments').select('round_id').eq('user_id', state.user.id).eq('assignment_role', 'practitioner').eq('active', true)
+      state.supabase.from('ec_round_assignments').select('*, ec_eqa_rounds(*)').eq('user_id', state.user.id).eq('assignment_role', 'practitioner').eq('active', true).order('assigned_at', { ascending: false }),
+      state.supabase.from('ec_individual_results').select('*').eq('user_id', state.user.id),
+      state.supabase.from('ec_historical_result_confirmations').select('*').eq('user_id', state.user.id)
     ]);
-    if (error || practitionerError) return renderError(error || practitionerError);
-    const practitionerRoundIds = new Set((practitionerRows || []).map((row) => row.round_id));
-    const visibleAssignments = (assignments || []).filter((assignment) => !practitionerRoundIds.has(assignment.round_id));
-    const cards = visibleAssignments.map((a) => {
+    const firstError = competencyRes.error || practitionerRes.error || individualRes.error || confirmationRes.error;
+    if (firstError) return renderError(firstError);
+
+    const practitionerRows = practitionerRes.data || [];
+    const practitionerRoundIds = new Set(practitionerRows.map((row) => row.round_id));
+    const individualMap = new Map((individualRes.data || []).map((row) => [row.round_id, row]));
+    const confirmationMap = new Map((confirmationRes.data || []).map((row) => [row.round_id, row]));
+    const competencyAssignments = (competencyRes.data || []).filter((assignment) => !practitionerRoundIds.has(assignment.round_id));
+
+    const practicalCards = practitionerRows.map((assignment) => {
+      const round = assignment.ec_eqa_rounds || {};
+      const result = individualMap.get(assignment.round_id);
+      const confirmation = confirmationMap.get(assignment.round_id);
+      const historical = isHistoricalRound(round);
+      let badge = '<span class="badge info">รอเริ่ม</span>';
+      let actionLabel = 'กรอกผลการปฏิบัติจริง';
+      let disabled = false;
+      let detail = '';
+
+      if (historical) {
+        if (!result) {
+          badge = '<span class="badge warning">รอบันทึกข้อมูลเดิม</span>';
+          actionLabel = 'ยังเปิดไม่ได้';
+          disabled = true;
+          detail = '<div class="notice warning small">ผู้ดูแลระบบยังไม่ได้บันทึกข้อมูลจากหลักฐานเดิม</div>';
+        } else if (round.historical_review_status === 'awaiting_practitioner_confirmation' && !confirmation) {
+          badge = '<span class="badge warning">รอคุณยืนยัน</span>';
+          actionLabel = 'ตรวจและยืนยันข้อมูลย้อนหลัง';
+        } else if (confirmation?.decision === 'disputed') {
+          badge = '<span class="badge danger">แจ้งข้อมูลไม่ตรง</span>';
+          actionLabel = 'เปิดดูรายละเอียด';
+        } else if (confirmation?.decision === 'confirmed') {
+          badge = '<span class="badge success">ยืนยันแล้ว</span>';
+          actionLabel = 'เปิดดูข้อมูล';
+        } else {
+          badge = `<span class="badge info">${esc(labelFrom(RESULT_STATUS_LABELS, result.status))}</span>`;
+          actionLabel = 'เปิดดูข้อมูล';
+        }
+      } else if (!result) {
+        badge = '<span class="badge info">ยังไม่เริ่ม</span>';
+      } else if (result.status === 'draft' || result.status === 'returned') {
+        badge = `<span class="badge ${result.status === 'returned' ? 'warning' : 'info'}">${esc(labelFrom(RESULT_STATUS_LABELS, result.status))}</span>`;
+        actionLabel = 'ทำต่อ';
+      } else {
+        badge = `<span class="badge success">${esc(labelFrom(RESULT_STATUS_LABELS, result.status))}</span>`;
+        actionLabel = 'เปิดดูผลที่ส่ง';
+      }
+
+      const performedText = result?.performed_date
+        ? `${fmtDate(result.performed_date)}${result.performed_time_known === false ? ' · ไม่ทราบเวลา' : result.performed_time ? ` · ${String(result.performed_time).slice(0,5)} น.` : ''}`
+        : result?.performed_at ? fmtDate(result.performed_at, true) : '-';
+
+      return `<article class="my-competency-card my-work-practical-card">
+        <div class="my-competency-card-head">
+          <div><span class="my-work-kicker">หัวข้อ 4 · ผู้ปฏิบัติจริง คนที่ ${assignment.practitioner_slot || '-'}</span><h2>${esc(round.provider || '')} ${esc(round.round_code || '')}</h2><div class="my-competency-type">บันทึกผลจากการปฏิบัติจริง</div></div>
+          ${badge}
+        </div>
+        <div class="my-competency-meta">
+          <div><span>วันครบกำหนดรอบ</span><strong>${fmtDate(round.due_date)}</strong></div>
+          <div><span>วันที่ปฏิบัติจริง</span><strong>${performedText}</strong></div>
+        </div>
+        ${detail}
+        <button class="btn btn-primary my-competency-open" data-open-practitioner-round="${assignment.round_id}" ${disabled ? 'disabled' : ''}>${actionLabel}</button>
+      </article>`;
+    }).join('');
+
+    const competencyCards = competencyAssignments.map((a) => {
       const closeAt = a.ec_eqa_rounds?.competency_close_at;
       const expired = closeAt && new Date(closeAt).getTime() < Date.now() && ['not_started','in_progress'].includes(a.status);
       const typeText = a.assignment_type === 'quiz' && generatedResultSchema(a.ec_eqa_rounds)
@@ -5499,7 +5739,7 @@
         : labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type);
       return `<article class="my-competency-card">
         <div class="my-competency-card-head">
-          <div><h2>${esc(a.ec_eqa_rounds?.provider || '')} ${esc(a.ec_eqa_rounds?.round_code || '')}</h2><div class="my-competency-type">${esc(typeText)}</div></div>
+          <div><span class="my-work-kicker">หัวข้อ 10 · การประเมินความสามารถ</span><h2>${esc(a.ec_eqa_rounds?.provider || '')} ${esc(a.ec_eqa_rounds?.round_code || '')}</h2><div class="my-competency-type">${esc(typeText)}</div></div>
           ${assignmentBadge(a.status)}
         </div>
         <div class="my-competency-meta">
@@ -5510,12 +5750,17 @@
         <button class="btn btn-primary my-competency-open" data-open-assignment="${a.id}" ${expired ? 'disabled' : ''}>${a.status === 'in_progress' ? 'ทำต่อ' : a.status === 'not_started' ? 'เริ่มทำ' : 'เปิดดูผล'}</button>
       </article>`;
     }).join('');
+
+    const hasWork = practitionerRows.length || competencyAssignments.length;
     const content = `<section class="page my-competency-page">
-      <div class="page-header"><div><h1>การประเมินของฉัน</h1></div></div>
-      ${visibleAssignments.length ? `<div class="my-competency-list">${cards}</div>` : empty('ยังไม่มีรายการประเมิน')}
+      <div class="page-header"><div><h1>งานของฉัน</h1><p>รวมงานที่ต้องทำจากหัวข้อ 4 และหัวข้อ 10 ไว้หน้าเดียว</p></div></div>
+      ${practitionerRows.length ? `<section class="my-work-section"><div class="my-work-section-head"><h2>งานจากการปฏิบัติจริง</h2><span class="badge info">หัวข้อ 4</span></div><div class="my-competency-list">${practicalCards}</div></section>` : ''}
+      ${competencyAssignments.length ? `<section class="my-work-section"><div class="my-work-section-head"><h2>การประเมินความสามารถ</h2><span class="badge info">หัวข้อ 10</span></div><div class="my-competency-list">${competencyCards}</div></section>` : ''}
+      ${hasWork ? '' : empty('ยังไม่มีงานที่ได้รับมอบหมาย')}
     </section>`;
-    appEl.innerHTML = shell(content, 'การประเมินของฉัน');
+    appEl.innerHTML = shell(content, 'งานของฉัน');
     bindShell();
+    document.querySelectorAll('[data-open-practitioner-round]:not([disabled])').forEach((button) => button.addEventListener('click', () => navigate(`round/${button.dataset.openPractitionerRound}/individual`)));
     document.querySelectorAll('[data-open-assignment]:not([disabled])').forEach((button) => button.addEventListener('click', () => navigate(`assignment/${button.dataset.openAssignment}`)));
   }
 
@@ -5577,7 +5822,7 @@
           </div>
           ${reflectionEditable ? `<div class="modal-footer"><button class="btn btn-primary" id="submit-practical-reflection">ส่งแบบทบทวน</button></div>` : ''}
         </div>` : '';
-      const driveButton = !['not_started','in_progress'].includes(assignment.status) ? `<button class="btn btn-outline" id="archive-practical-competency">เก็บ PDF ใน Google Drive</button>` : '';
+      const driveButton = '';
       const content = `<section class="page"><div class="page-header"><div><h1>การประเมินจากการปฏิบัติจริง</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div><div class="card"><div class="card-header"><div><h2>การประเมินผู้ปฏิบัติจริง</h2><p class="muted">ผลเชื่อมจากการทำ EQA รายบุคคล วิธีตรวจ การแปลผล การบันทึก และการแก้ปัญหา</p></div>${assignmentBadge(assignment.status)}</div>${assignment.reviewer_note ? `<div class="notice info"><strong>หมายเหตุจากผู้ประเมิน:</strong> ${esc(assignment.reviewer_note)}</div><div style="height:12px"></div>` : ''}<button class="btn btn-primary" id="open-round-practical">เปิดรอบ EQA</button></div><div style="height:16px"></div>${reflectionHtml}</section>`;
       appEl.innerHTML = shell(content, 'การประเมินจากการปฏิบัติจริง');
       bindShell();
@@ -5665,7 +5910,7 @@
         : '';
 
       const completedLabel = resultPayloadHasData(assignment.result_payload) ? 'มีร่างที่บันทึกแล้ว' : 'ยังไม่ได้บันทึก';
-      const driveButton = !['not_started','in_progress'].includes(assignment.status) ? `<button class="btn btn-outline" id="archive-my-competency">เก็บ PDF ใน Google Drive</button>` : '';
+      const driveButton = '';
       const content = `<section class="page competency-result-page"><div class="page-header"><div><h1>ประเมิน EQA จากภาพผลดิบและ Case Study</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div>
         <div class="quiz-intro-card quiz-intro-compact"><div><span class="eyebrow">แบบประเมินรายบุคคล</span><h2>อ่านข้อมูล แล้วกรอกผลของตนเอง</h2></div><div class="quiz-progress-box"><strong>${esc(completedLabel)}</strong><span>สถานะ</span></div></div>
         <div class="card"><div class="card-header"><div><h2>กรอกผลจากภาพของแต่ละตัวอย่าง</h2><div class="small muted">เลือกตัวอย่างด้านบน ภาพผลดิบที่เกี่ยวข้องจะแสดงก่อนช่องตอบในหน้าเดียวกัน</div></div></div><form id="competency-result-form">${formHtml}</form></div>
@@ -5817,7 +6062,7 @@
           return `<div class="reflection-item" data-reflection-answer="${answer?.id || ''}"><h3>${item.question_order}. ${esc(item.prompt || '')} ${educational ? '<span class="badge info">Educational</span>' : ''}</h3><div class="grid cols-2"><div><span class="small muted">คำตอบของคุณ</span><div>${esc(item.user_answer || '-')}</div></div><div><span class="small muted">${educational ? 'คำตอบของผู้เข้าร่วมส่วนใหญ่' : 'เฉลย'}</span><div>${esc(referenceText)}</div></div></div><div class="form-grid" style="margin-top:12px"><div class="field"><label>${educational ? 'เหตุผลที่เลือกคำตอบต่างจากกลุ่มส่วนใหญ่' : 'สาเหตุที่ตอบไม่ถูก'}</label><textarea class="textarea" data-reflection-field="reason_for_error" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.reason_for_error || '')}</textarea></div><div class="field"><label>${educational ? 'ทบทวนแล้ว คำตอบของห้องเหมาะสมหรือควรแก้ไข เพราะเหตุใด' : 'ความเข้าใจที่ถูกต้องหลังทบทวน'}</label><textarea class="textarea" data-reflection-field="corrected_understanding" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.corrected_understanding || '')}</textarea></div><div class="field"><label>สิ่งที่จะตรวจสอบหรือปรับใช้กับงาน</label><textarea class="textarea" data-reflection-field="application_to_work" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.application_to_work || '')}</textarea></div>${reflection?.reviewer_note ? `<div class="notice warning"><strong>ข้อคิดเห็นผู้ทบทวน:</strong> ${esc(reflection.reviewer_note)}</div>` : ''}</div></div>`;
         }).join('')}${reflectionEditable && releasedReview ? `<div class="modal-footer"><button class="btn btn-primary" id="submit-reflection">ส่งแบบทบทวน</button></div>` : ''}</div>`
       : '';
-    const driveButton = !['not_started','in_progress'].includes(assignment.status) ? `<button class="btn btn-outline" id="archive-my-competency">เก็บ PDF ใน Google Drive</button>` : '';
+    const driveButton = '';
     const answeredCount = (questions || []).filter((question) => {
       const payload = answerMap.get(question.id)?.answer_payload || {};
       return Boolean(payload.choice_id || payload.text);
@@ -5877,9 +6122,6 @@
     updateQuizProgress();
 
     document.getElementById('back-my').onclick = () => navigate('my-competency');
-    document.getElementById('archive-my-competency')?.addEventListener('click', async () => {
-      await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: assignment.status });
-    });
     document.getElementById('submit-reflection')?.addEventListener('click', async () => {
       const items = [...document.querySelectorAll('[data-reflection-answer]')].map((card) => ({
         answer_id: card.dataset.reflectionAnswer,
@@ -5930,56 +6172,19 @@
     }
   }
   async function renderReports() {
-    const [{ data: rounds, error: roundError }, { data: archives, error: archiveError }] = await Promise.all([
-      state.supabase.from('ec_eqa_rounds').select('*').order('survey_year', { ascending: false }).order('due_date', { ascending: false }),
-      state.supabase.from('ec_report_archives').select('*').order('generated_at', { ascending: false }).limit(100)
-    ]);
-    if (roundError || archiveError) return renderError(roundError || archiveError);
-    const archiveRows = archives || [];
-    const roundArchiveMap = new Map();
-    archiveRows.filter((row) => row.report_type === 'round_summary' && row.round_id).forEach((row) => {
-      if (!roundArchiveMap.has(row.round_id)) roundArchiveMap.set(row.round_id, row);
-    });
-    const reportTypeLabel = { registry: 'ทะเบียน EQA', round_summary: 'สรุปรอบ EQA', competency: 'รายงาน Competency' };
-    const sourceLabel = { manual: 'สร้างด้วยตนเอง', automatic: 'ระบบสร้างอัตโนมัติ' };
-    const canArchiveAll = hasRole('admin','qm','reviewer','physician','viewer');
-    const content = `<section class="page">
-      <div class="page-header">
-        <div><h1>รายงาน / ทะเบียน EQA</h1><p>พิมพ์จากหน้าเว็บ หรือสร้าง PDF ที่มีทะเบียนและลิงก์เก็บใน Google Drive</p></div>
-        <div class="header-actions no-print">
-          ${canArchiveAll ? '<button class="btn btn-secondary" id="archive-registry">เก็บทะเบียนใน Google Drive</button>' : ''}
-          <button class="btn btn-primary" id="print-report">พิมพ์ / บันทึกเป็น PDF</button>
+    const content = `<section class="page report-redesign-page">
+      <div class="page-header"><div><h1>รายงาน / ทะเบียน EQA</h1></div></div>
+      <div class="card report-redesign-card">
+        <div class="report-redesign-icon" aria-hidden="true">▤</div>
+        <div>
+          <h2>อยู่ระหว่างปรับรูปแบบเอกสารคุณภาพใหม่</h2>
+          <p>ปิดระบบพิมพ์ PDF และทะเบียนไฟล์รุ่นเดิมชั่วคราว เพื่อออกแบบรายงานให้เป็นระเบียบและเหมาะกับการตรวจประเมิน</p>
+          <div class="notice success"><strong>ข้อมูลรอบ EQA ผลการปฏิบัติงาน การทบทวน การรับรอง และ Audit Log ยังจัดเก็บตามปกติ</strong><br>การปิดส่วนนี้ไม่ลบข้อมูลการทำงานของบุคลากร</div>
         </div>
-      </div>
-      <div class="print-only"><h1>ทะเบียน EQA ประจำปี</h1><p>${esc(cfg.ORGANIZATION_NAME)}</p></div>
-      <div class="card">
-        <div class="card-header"><div><h2>ทะเบียนรอบ EQA</h2><div class="small muted">ปุ่มเก็บ PDF จะสร้างไฟล์ฉบับใหม่ ไม่เขียนทับไฟล์เดิม</div></div></div>
-        <div class="table-wrap"><table><thead><tr><th>ปี</th><th>ผู้ให้บริการ / รอบ</th><th>ประเภทข้อมูล</th><th>โปรแกรม</th><th>วันครบกำหนด</th><th>สถานะ</th><th>เลขเอกสาร</th><th class="no-print">Google Drive</th></tr></thead><tbody>${(rounds || []).map((r) => {
-          const latest = roundArchiveMap.get(r.id);
-          return `<tr><td>${r.survey_year}</td><td><strong>${esc(r.provider)} ${esc(r.round_code)}</strong></td><td>${isHistoricalRound(r) ? 'ข้อมูลย้อนหลัง' : 'รอบใหม่'}</td><td>${esc(r.program_name)}</td><td>${fmtDate(r.due_date)}</td><td>${statusBadge(r.status)}${isHistoricalRound(r) ? `<br><span class="small muted">${esc(labelFrom(HISTORICAL_REVIEW_LABELS, r.historical_review_status))}</span>` : ''}</td><td>${esc(r.document_number || '-')} ฉบับแก้ไขที่ ${esc(r.document_revision || '1')}</td><td class="no-print"><div class="table-actions">${canArchiveAll ? `<button class="btn btn-outline btn-sm" data-archive-round="${r.id}" data-stage="${esc(r.status || 'current')}">เก็บ PDF รอบ</button>` : ''}${latest ? `<a class="btn btn-outline btn-sm" href="${esc(latest.drive_url)}" target="_blank" rel="noopener">เปิดไฟล์ล่าสุด</a>` : '<span class="small muted">ยังไม่มีไฟล์</span>'}</div></td></tr>`;
-        }).join('')}</tbody></table></div>
-        <div class="small muted" style="margin-top:12px">พิมพ์จากระบบวันที่ ${fmtDate(new Date(), true)}</div>
-      </div>
-      <div class="card no-print">
-        <div class="card-header"><div><h2>ไฟล์ที่เก็บใน Google Drive</h2><div class="small muted">แสดงสูงสุด 100 ไฟล์ล่าสุดตามสิทธิ์ของบัญชี</div></div><span class="badge info">${archiveRows.length} ไฟล์</span></div>
-        ${archiveRows.length ? `<div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>ประเภท</th><th>ชื่อไฟล์</th><th>ขั้นตอน / ฉบับ</th><th>แหล่งที่มา</th><th>เปิดไฟล์</th></tr></thead><tbody>${archiveRows.map((row) => `<tr><td>${fmtDate(row.generated_at, true)}</td><td>${esc(reportTypeLabel[row.report_type] || row.report_type)}</td><td><strong>${esc(row.file_name)}</strong><div class="small muted">${esc(row.drive_folder_path || '-')}</div></td><td>${esc(row.stage || '-')} · v${row.version || 1}</td><td>${esc(sourceLabel[row.source] || row.source || '-')}</td><td><a class="btn btn-outline btn-sm" href="${esc(row.drive_url)}" target="_blank" rel="noopener">เปิดใน Drive</a></td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่มีไฟล์ที่เก็บใน Google Drive')}
       </div>
     </section>`;
     appEl.innerHTML = shell(content, 'รายงาน');
     bindShell();
-    document.getElementById('print-report').onclick = () => window.print();
-    document.getElementById('archive-registry')?.addEventListener('click', async (event) => {
-      event.currentTarget.disabled = true;
-      const archive = await archiveReportToDrive({ report_type: 'registry', stage: `registry_${new Date().getFullYear()}` });
-      event.currentTarget.disabled = false;
-      if (archive) route();
-    });
-    document.querySelectorAll('[data-archive-round]').forEach((button) => button.addEventListener('click', async () => {
-      button.disabled = true;
-      const archive = await archiveReportToDrive({ report_type: 'round_summary', round_id: button.dataset.archiveRound, stage: button.dataset.stage || 'current' });
-      button.disabled = false;
-      if (archive) route();
-    }));
   }
 
   function parseDayList(value, fallback = []) {
@@ -5989,24 +6194,23 @@
 
   async function renderAutomation() {
     if (!hasRole('admin') && !canManage()) {
-      const content = `<section class="page"><div class="page-header"><div><h1>แจ้งเตือน / Google Drive</h1></div></div><div class="notice warning">หน้านี้ตั้งค่าได้เฉพาะโหมดผู้ดูแลระบบหรือผู้จัดการคุณภาพ กรุณาเปลี่ยนบทบาทจากเมนูด้านซ้าย</div></section>`;
-      appEl.innerHTML = shell(content, 'แจ้งเตือน / Google Drive'); bindShell(); return;
+      const content = `<section class="page"><div class="page-header"><div><h1>แจ้งเตือน</h1></div></div><div class="notice warning">หน้านี้ตั้งค่าได้เฉพาะโหมดผู้ดูแลระบบหรือผู้จัดการคุณภาพ กรุณาเปลี่ยนบทบาทจากเมนูด้านซ้าย</div></section>`;
+      appEl.innerHTML = shell(content, 'แจ้งเตือน'); bindShell(); return;
     }
-    const [{ data: settings, error: settingsError }, { data: logs, error: logError }, { data: archives, error: archiveError }] = await Promise.all([
+    const [{ data: settings, error: settingsError }, { data: logs, error: logError }] = await Promise.all([
       state.supabase.from('ec_notification_settings').select('*').eq('id', 1).single(),
-      state.supabase.from('ec_notification_logs').select('*').order('created_at', { ascending: false }).limit(50),
-      state.supabase.from('ec_report_archives').select('*').order('generated_at', { ascending: false }).limit(20)
+      state.supabase.from('ec_notification_logs').select('*').order('created_at', { ascending: false }).limit(50)
     ]);
-    if (settingsError || logError || archiveError) return renderError(settingsError || logError || archiveError);
+    if (settingsError || logError) return renderError(settingsError || logError);
     const categoryLabel = {
       eqa_due: 'EQA ใกล้ครบกำหนด', competency_due: 'Competency ใกล้ครบกำหนด', reflection_due: 'แบบทบทวนใกล้ครบกำหนด',
-      reviewer_pending: 'รอผู้ทบทวน', qm_pending: 'รอผู้จัดการคุณภาพ', reflection_review_pending: 'รอตรวจแบบทบทวน',
+      reviewer_pending: 'รอผู้ทบทวน', qm_pending: 'รอผู้รับรองคุณภาพ', reflection_review_pending: 'รอตรวจแบบทบทวน',
       daily_chat_summary: 'สรุปรายวัน', system_test: 'ทดสอบระบบ'
     };
     const channelLabel = { email: 'Email', google_chat: 'Google Chat' };
     const logBadge = (status) => `<span class="badge ${status === 'sent' ? 'success' : status === 'failed' ? 'danger' : status === 'skipped' ? '' : 'warning'}">${esc({ sent: 'ส่งสำเร็จ', failed: 'ส่งไม่สำเร็จ', pending: 'กำลังส่ง', skipped: 'ข้าม' }[status] || status || '-')}</span>`;
     const content = `<section class="page">
-      <div class="page-header"><div><h1>แจ้งเตือน / Google Drive</h1><p>ติดตาม EQA, Competency, Reflection, Reviewer และ QM พร้อมสำรองรายงาน PDF</p></div><div class="header-actions"><button class="btn btn-outline" id="automation-health">ตรวจการเชื่อมต่อ</button><button class="btn btn-secondary" id="automation-test">ส่งข้อความทดสอบ</button><button class="btn btn-primary" id="automation-run">ตรวจและส่งตอนนี้</button></div></div>
+      <div class="page-header"><div><h1>แจ้งเตือน</h1><p>ติดตาม EQA, Competency, Reflection, Reviewer และผู้รับรองคุณภาพ</p></div><div class="header-actions"><button class="btn btn-outline" id="automation-health">ตรวจการเชื่อมต่อ</button><button class="btn btn-secondary" id="automation-test">ส่งข้อความทดสอบ</button><button class="btn btn-primary" id="automation-run">ตรวจและส่งตอนนี้</button></div></div>
       <div id="automation-result"></div>
       <div class="grid cols-2 automation-grid">
         <div class="card">
@@ -6015,7 +6219,6 @@
             <label class="toggle-row"><input type="checkbox" name="enabled" ${settings.enabled ? 'checked' : ''}><span><strong>เปิดระบบแจ้งเตือน</strong><small>ปิดไว้ได้ชั่วคราวโดยไม่ลบ Trigger</small></span></label>
             <label class="toggle-row"><input type="checkbox" name="send_email" ${settings.send_email ? 'checked' : ''}><span><strong>ส่ง Email</strong><small>ส่งถึงผู้รับผิดชอบตามขั้นตอน</small></span></label>
             <label class="toggle-row"><input type="checkbox" name="send_google_chat" ${settings.send_google_chat ? 'checked' : ''}><span><strong>ส่ง Google Chat</strong><small>ส่งภาพรวมเข้าห้องหน่วยงาน</small></span></label>
-            <label class="toggle-row"><input type="checkbox" name="auto_archive" ${settings.auto_archive ? 'checked' : ''}><span><strong>เก็บ PDF อัตโนมัติใน Google Drive</strong><small>สร้างเมื่อสถานะสำคัญเปลี่ยนและไม่เขียนทับฉบับเดิม</small></span></label>
             <label class="toggle-row"><input type="checkbox" name="chat_include_person_names" ${settings.chat_include_person_names ? 'checked' : ''}><span><strong>แสดงชื่อบุคลากรใน Google Chat</strong><small>แนะนำให้ปิด เพื่อคงความเป็นส่วนตัวของผลประเมินรายบุคคล</small></span></label>
             <div class="field"><label>ลิงก์หน้าเว็บ</label><input class="input" name="app_url" type="url" value="${esc(settings.app_url || cfg.DEFAULT_DOMAIN || '')}" required></div>
             <div class="field"><label>เขตเวลา</label><input class="input" name="timezone" value="${esc(settings.timezone || 'Asia/Bangkok')}" required></div>
@@ -6042,12 +6245,8 @@
         <div class="card-header"><div><h2>ประวัติการแจ้งเตือนล่าสุด</h2><div class="small muted">ระบบป้องกันข้อความซ้ำด้วยรหัสการแจ้งเตือนแต่ละช่วง</div></div><span class="badge info">${(logs || []).length} รายการ</span></div>
         ${(logs || []).length ? `<div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>ประเภท</th><th>ช่องทาง</th><th>ผู้รับ</th><th>หัวข้อ</th><th>ผล</th></tr></thead><tbody>${logs.map((row) => `<tr><td>${fmtDate(row.created_at, true)}</td><td>${esc(categoryLabel[row.category] || row.category)}</td><td>${esc(channelLabel[row.channel] || row.channel)}</td><td>${esc(row.target || '-')}</td><td>${esc(row.subject || '-')} ${row.error_message ? `<div class="small danger-text">${esc(row.error_message)}</div>` : ''}</td><td>${logBadge(row.status)}</td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่มีประวัติการแจ้งเตือน')}
       </div>
-      <div class="card">
-        <div class="card-header"><div><h2>PDF ที่ระบบสำรองล่าสุด</h2><div class="small muted">เปิดดูไฟล์จริงจาก Google Drive ได้โดยตรง</div></div><a class="btn btn-outline btn-sm" href="#/reports">ดูทั้งหมด</a></div>
-        ${(archives || []).length ? `<div class="archive-list">${archives.map((row) => `<a class="archive-row" href="${esc(row.drive_url)}" target="_blank" rel="noopener"><span><strong>${esc(row.file_name)}</strong><small>${fmtDate(row.generated_at, true)} · ${esc(row.source === 'automatic' ? 'อัตโนมัติ' : 'สร้างด้วยตนเอง')}</small></span><span>เปิดไฟล์ ↗</span></a>`).join('')}</div>` : empty('ยังไม่มีไฟล์ PDF ในทะเบียน')}
-      </div>
     </section>`;
-    appEl.innerHTML = shell(content, 'แจ้งเตือน / Google Drive');
+    appEl.innerHTML = shell(content, 'แจ้งเตือน');
     bindShell();
     const showResult = (message, type = 'info') => {
       const box = document.getElementById('automation-result');
@@ -6061,7 +6260,7 @@
     };
     document.getElementById('automation-settings-form').addEventListener('submit', async (event) => {
       event.preventDefault(); const fd = new FormData(event.currentTarget);
-      await saveSettings({ enabled: fd.get('enabled') === 'on', send_email: fd.get('send_email') === 'on', send_google_chat: fd.get('send_google_chat') === 'on', auto_archive: fd.get('auto_archive') === 'on', chat_include_person_names: fd.get('chat_include_person_names') === 'on', app_url: String(fd.get('app_url') || '').trim().replace(/\/$/, ''), timezone: String(fd.get('timezone') || 'Asia/Bangkok').trim() }, 'บันทึกการตั้งค่าแล้ว');
+      await saveSettings({ enabled: fd.get('enabled') === 'on', send_email: fd.get('send_email') === 'on', send_google_chat: fd.get('send_google_chat') === 'on', auto_archive: false, chat_include_person_names: fd.get('chat_include_person_names') === 'on', app_url: String(fd.get('app_url') || '').trim().replace(/\/$/, ''), timezone: String(fd.get('timezone') || 'Asia/Bangkok').trim() }, 'บันทึกการตั้งค่าแล้ว');
     });
     document.getElementById('automation-days-form').addEventListener('submit', async (event) => {
       event.preventDefault(); const fd = new FormData(event.currentTarget);
@@ -6084,11 +6283,11 @@
       finally { event.currentTarget.disabled = false; }
     });
     document.getElementById('automation-run').addEventListener('click', async (event) => {
-      if (!confirm('ตรวจรายการค้าง ส่งการแจ้งเตือนที่ถึงกำหนด และสำรอง PDF ตอนนี้หรือไม่')) return;
+      if (!confirm('ตรวจรายการค้างและส่งการแจ้งเตือนที่ถึงกำหนดตอนนี้หรือไม่')) return;
       event.currentTarget.disabled = true;
       try {
         const result = await invokeAutomation({ action: 'run_now' });
-        showResult(`<strong>ตรวจรอบปัจจุบันเสร็จแล้ว</strong><br>รายการที่เข้าเงื่อนไข ${result.candidate_notifications || 0} · ส่งใหม่ ${result.sent_now || 0} · ข้ามข้อความซ้ำ ${result.skipped_duplicate || 0} · สร้าง PDF ${result.archives_created || 0}`, 'success');
+        showResult(`<strong>ตรวจรอบปัจจุบันเสร็จแล้ว</strong><br>รายการที่เข้าเงื่อนไข ${result.candidate_notifications || 0} · ส่งใหม่ ${result.sent_now || 0} · ข้ามข้อความซ้ำ ${result.skipped_duplicate || 0}`, 'success');
         setTimeout(() => route(), 1400);
       } catch (error) { showResult(`<strong>ตรวจรายการไม่สำเร็จ</strong><br>${esc(friendlyError(error))}`, 'danger'); }
       finally { event.currentTarget.disabled = false; }
@@ -6347,8 +6546,8 @@
     const content=`<section class="page">
       <div class="page-header"><div><h1>คู่มือการใช้งาน</h1><p>รวมคำอธิบายและลำดับงานของระบบไว้ในหน้านี้</p></div></div>
       <div class="guide-list">
-        <details open><summary>เริ่มต้นใช้งานและเลือกบทบาท</summary><div class="guide-body"><p>เลือกบทบาทจากกล่องด้านล่างของแถบเมนู ระบบจะแสดงปุ่มตามบทบาทที่เลือก โดยไม่เปลี่ยนสิทธิ์จริงของบัญชี</p><p>หากมีหลายบทบาท ให้เลือกบทบาทให้ตรงกับงานที่กำลังทำ เช่น เจ้าหน้าที่ ผู้ทบทวน ผู้จัดการคุณภาพ แพทย์ หรือผู้ดูแลระบบ</p></div></details>
-        <details><summary>ลำดับงานของรอบ EQA</summary><div class="guide-body"><ol><li>บันทึกข้อมูลการรับรอบและกำหนดผู้รับผิดชอบ</li><li>ผู้ปฏิบัติจริงบันทึกผลรายบุคคล</li><li>ระบบเทียบผลและสร้างสรุปผลห้องปฏิบัติการ</li><li>ผู้ทบทวนตรวจและส่งให้ผู้จัดการคุณภาพ</li><li>ผู้จัดการคุณภาพรับรอง และแพทย์รับทราบ</li></ol></div></details>
+        <details open><summary>เริ่มต้นใช้งานและเลือกบทบาท</summary><div class="guide-body"><p>เลือกบทบาทจากกล่องด้านล่างของแถบเมนู ระบบจะแสดงปุ่มตามบทบาทที่เลือก โดยไม่เปลี่ยนสิทธิ์จริงของบัญชี</p><p>หากมีหลายบทบาท ให้เลือกบทบาทให้ตรงกับงานที่กำลังทำ เช่น เจ้าหน้าที่ ผู้ทบทวน ผู้จัดการคุณภาพ รองผู้จัดการคุณภาพ แพทย์ หรือผู้ดูแลระบบ</p></div></details>
+        <details><summary>ลำดับงานของรอบ EQA</summary><div class="guide-body"><ol><li>บันทึกข้อมูลการรับรอบและกำหนดผู้รับผิดชอบ</li><li>ผู้ปฏิบัติจริงบันทึกผลรายบุคคล</li><li>ระบบเทียบผลและสร้างสรุปผลห้องปฏิบัติการ</li><li>ผู้ทบทวนตรวจและส่งให้ผู้รับรองคุณภาพ</li><li>ผู้รับรองคุณภาพรับรอง และแพทย์รับทราบ</li></ol></div></details>
         <details><summary>เอกสารและภาพ</summary><div class="guide-body">
           <p>ไฟล์เก็บในพื้นที่ส่วนตัวของระบบ ไม่ได้เก็บใน GitHub ระบบใช้ <strong>ประเภทเอกสาร</strong> เป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่เท่านั้น</p>
           <p><strong>เอกสารต้นฉบับจากผู้ให้บริการ</strong> ใช้สร้างรายการตัวอย่าง รายการทดสอบ ช่องกรอก หน่วย จำนวนทศนิยม และโครงสร้างฟอร์ม</p>
@@ -6376,12 +6575,12 @@
           <p><strong>หลักฐานการส่งผลกับแบบฟอร์มผลที่ส่งเป็นไฟล์เดียวกัน</strong> ให้อัปโหลดเพียงครั้งเดียวในประเภท “หลักฐาน/แบบฟอร์มผลที่ส่งผู้ให้บริการ” แล้วในหัวข้อ 7 เลือกไฟล์เดิมเพื่อผูกกับวันเวลา ผู้ส่ง และเลขอ้างอิง ระบบไม่สร้างไฟล์ซ้ำและไม่ใช้ไฟล์นี้เป็นเฉลย</p>
           <p>ชื่อไฟล์ไม่ตรงมาตรฐานยังอัปโหลดได้ แต่ระบบจะแจ้งเตือนและอาจต้องใช้ประเภทเอกสาร/เนื้อหาไฟล์ช่วยจับคู่เอง สำหรับ CAP ตัวเลือกผลแสดงเป็น <strong>เลข CAP │ คำตอบ</strong> และห้ามสร้างรหัสขึ้นเอง</p>
         </div></details>
-        <details><summary>ผลรายบุคคลและสรุปผลห้องปฏิบัติการ</summary><div class="guide-body"><p>ผู้ปฏิบัติแต่ละคนบันทึกผลของตนเองแยกกัน เมื่อส่งครบ ระบบจะเติมค่าที่ตรงกันในสรุปผลห้องให้อัตโนมัติ</p><p>ค่าที่ไม่ตรงกันจะถูกทำเครื่องหมายให้ผู้ทบทวนตรวจและเลือกผลที่ถูกต้องก่อนส่งให้ผู้จัดการคุณภาพ</p></div></details>
-        <details><summary>การตรวจ รับรอง และรับทราบ</summary><div class="guide-body"><p>ผู้ทบทวนตรวจผลห้องและหลักฐาน จากนั้นส่งให้ผู้จัดการคุณภาพรับรอง เมื่อรับรองแล้วแพทย์จึงกดรับทราบได้</p><p>ผู้จัดการคุณภาพต้องรับรองทุกรอบ แม้เป็นหนึ่งในผู้ปฏิบัติจริง โดยต้องสลับ “ใช้งานในบทบาท” ให้ตรงกับขั้นตอน เช่น กรอกผลในบทบาทเจ้าหน้าที่ และรับรองในบทบาทผู้จัดการคุณภาพ</p><p>ประวัติการอนุมัติจะแสดงชื่อพร้อมบทบาทที่ใช้ลงนามในแต่ละครั้ง ส่วนผู้ทบทวนยังต้องเป็นคนละคนกับผู้ปฏิบัติจริงทั้งสองคน</p><p>การส่งกลับต้องระบุเหตุผล เพื่อให้ผู้เกี่ยวข้องแก้ไขเฉพาะจุด</p></div></details>
+        <details><summary>ผลรายบุคคลและสรุปผลห้องปฏิบัติการ</summary><div class="guide-body"><p>ผู้ปฏิบัติแต่ละคนบันทึกผลของตนเองแยกกัน เมื่อส่งครบ ระบบจะเติมค่าที่ตรงกันในสรุปผลห้องให้อัตโนมัติ</p><p>ค่าที่ไม่ตรงกันจะถูกทำเครื่องหมายให้ผู้ทบทวนตรวจและเลือกผลที่ถูกต้องก่อนส่งให้ผู้รับรองคุณภาพ</p></div></details>
+        <details><summary>การตรวจ รับรอง และรับทราบ</summary><div class="guide-body"><p>ผู้ทบทวนตรวจผลห้องและหลักฐาน จากนั้นส่งให้ผู้รับรองคุณภาพรับรอง เมื่อรับรองแล้วแพทย์จึงกดรับทราบได้</p><p>แต่ละรอบต้องกำหนดผู้รับรองคุณภาพเป็นผู้จัดการคุณภาพหรือรองผู้จัดการคุณภาพ โดยต้องเป็นคนละคนกับผู้ปฏิบัติจริงทั้งสองคนและผู้ทบทวนผล</p><p>บุคคลเดียวกันมีหลายบทบาทในระบบได้และทำหน้าที่ต่างกันในคนละรอบ แต่ระบบจะป้องกันหน้าที่ที่ขัดกันภายในรอบเดียวกัน ประวัติการอนุมัติจะแสดงชื่อ บทบาท และวันเวลาที่บันทึกจริง</p><p>การส่งกลับต้องระบุเหตุผล เพื่อให้ผู้เกี่ยวข้องแก้ไขเฉพาะจุด</p></div></details>
         <details><summary>การสร้างจากเอกสารและรายงานผล</summary><div class="guide-body"><p><strong>ระบบอ่านไฟล์ทีละฉบับ</strong> และบันทึกสถานะ “รออ่าน / กำลังอ่าน / AI อ่านแล้ว / อ่านไม่สำเร็จ” ไว้ในตาราง หากเกิดรหัส 546 ให้กดสร้างใหม่ ระบบจะทำต่อเฉพาะไฟล์ที่เหลือ</p><p><strong>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</strong> อ่านฟอร์มเปล่า คู่มือ ภาพผลดิบ และ Antigram/Panel cell แล้วสร้างฉบับร่างให้ QM ตรวจ</p><p><strong>สร้างเฉลยและสรุปจาก Evaluation / Participant Summary</strong> ต้องมี Official Evaluation ก่อน ระบบใช้ Intended Response เป็นเฉลยของรายการ graded และใช้ Participant Summary เฉพาะ Educational Challenge</p><p>ระบบแยกสรุปเป็น 5 ส่วน: ผลของห้อง, ผลที่ควรเป็น, คะแนน/Grade, เปรียบเทียบผู้เข้าร่วม และหัวข้อทบทวน</p><p>Educational Challenge ไม่คิดเป็นคะแนนทางการ แต่ระบบต้องเทียบคำตอบของห้อง/บุคลากรกับ participant consensus: ถ้าสอดคล้องให้ระบุว่าเหมาะสม ถ้าเป็นคำตอบส่วนน้อยให้สถานะ “ต้องทบทวน/ชี้แจง” และบันทึกเหตุผลว่าทำไมจึงตอบต่าง หากไม่มี Participant Summary หรือ consensus ไม่ชัด ระบบจะไม่เดาและให้ QM ตรวจเอง</p><p><strong>สร้างย้อนหลังครบชุด</strong> ใช้กับรอบที่ได้รับผลแล้ว ระบบสร้างแบบกรอก คำแนะนำ ข้อสอบ เฉลย และสรุป พร้อมตั้งให้เห็นเฉลยหลังส่งคำตอบ</p><p>ข้อสอบทุกข้อยังเป็นฉบับร่างจนกว่า QM จะตรวจและกดเผยแพร่</p></div></details>
-        <details><summary>การแจ้งเตือน EQA และ Competency</summary><div class="guide-body"><p>ผู้ดูแลระบบหรือผู้จัดการคุณภาพตั้งค่าได้ที่เมนู <strong>แจ้งเตือน / Google Drive</strong> ระบบตรวจรายการ EQA ใกล้ครบกำหนด แบบทดสอบที่ยังไม่ส่ง แบบทบทวน ผู้ทบทวนที่ยังไม่ตรวจ และรายการรอผู้จัดการคุณภาพ</p><p>Email ส่งถึงผู้เกี่ยวข้องตามหน้าที่ ส่วน Google Chat ใช้แจ้งภาพรวมของหน่วยงาน โดยค่าเริ่มต้นไม่แสดงชื่อผู้รับการประเมินรายบุคคล</p><p>ปุ่ม <strong>ตรวจและส่งตอนนี้</strong> ใช้ทดสอบหรือตรวจรายการทันที ส่วน Trigger ใน Google Apps Script จะเรียกตรวจอัตโนมัติทุกวัน</p></div></details>
-        <details><summary>แบบทบทวนหลังตอบไม่ถูกหรือ Educational เป็นคำตอบส่วนน้อย</summary><div class="guide-body"><p>เมื่อผู้จัดการคุณภาพรับรองแล้วพบข้อที่ตอบไม่ถูก หรือ Educational Challenge ที่คำตอบต่างจากกลุ่มผู้เข้าร่วมส่วนใหญ่ ระบบจะเปลี่ยนสถานะเป็น <strong>ต้องทบทวน</strong> โดย Educational ไม่ถูกนับเป็นคะแนนทางการ</p><p>เจ้าหน้าที่บันทึกเหตุผลที่เลือกคำตอบเดิม ผลการทบทวนว่าคำตอบของห้องเหมาะสมหรือควรแก้ไข และสิ่งที่จะนำไปใช้กับงาน จากนั้นส่งให้ผู้ทบทวนรับรองหรือส่งกลับแก้ไข</p></div></details>
-        <details><summary>การเก็บ PDF ใน Google Drive</summary><div class="guide-body"><p>รายงานทะเบียน รอบ EQA และ Competency สามารถกดเก็บใน Google Drive ได้จากหน้า รายงาน / ทะเบียน หรือหน้าการประเมิน ระบบจะสร้างไฟล์ฉบับใหม่พร้อมเลขเวอร์ชัน และเก็บลิงก์ไว้ในระบบ</p><p>เมื่อเปิดการเก็บอัตโนมัติ ระบบจะสำรองไฟล์ในจุดสำคัญ เช่น ส่งคำตอบ ผู้ทบทวนตรวจ ผู้จัดการคุณภาพรับรอง ส่ง Reflection และปิดรอบ โดยไม่เขียนทับไฟล์เดิม</p></div></details>
+        <details><summary>การแจ้งเตือน EQA และ Competency</summary><div class="guide-body"><p>ผู้ดูแลระบบหรือผู้จัดการคุณภาพตั้งค่าได้ที่เมนู <strong>แจ้งเตือน</strong> ระบบตรวจรายการ EQA ใกล้ครบกำหนด แบบทดสอบที่ยังไม่ส่ง แบบทบทวน ผู้ทบทวนที่ยังไม่ตรวจ และรายการรอผู้รับรองคุณภาพ</p><p>Email ส่งถึงผู้เกี่ยวข้องตามหน้าที่ ส่วน Google Chat ใช้แจ้งภาพรวมของหน่วยงาน โดยค่าเริ่มต้นไม่แสดงชื่อผู้รับการประเมินรายบุคคล</p><p>ปุ่ม <strong>ตรวจและส่งตอนนี้</strong> ใช้ทดสอบหรือตรวจรายการทันที ส่วน Trigger ใน Google Apps Script จะเรียกตรวจอัตโนมัติทุกวัน</p></div></details>
+        <details><summary>แบบทบทวนหลังตอบไม่ถูกหรือ Educational เป็นคำตอบส่วนน้อย</summary><div class="guide-body"><p>เมื่อผู้รับรองคุณภาพรับรองแล้วพบข้อที่ตอบไม่ถูก หรือ Educational Challenge ที่คำตอบต่างจากกลุ่มผู้เข้าร่วมส่วนใหญ่ ระบบจะเปลี่ยนสถานะเป็น <strong>ต้องทบทวน</strong> โดย Educational ไม่ถูกนับเป็นคะแนนทางการ</p><p>เจ้าหน้าที่บันทึกเหตุผลที่เลือกคำตอบเดิม ผลการทบทวนว่าคำตอบของห้องเหมาะสมหรือควรแก้ไข และสิ่งที่จะนำไปใช้กับงาน จากนั้นส่งให้ผู้ทบทวนรับรองหรือส่งกลับแก้ไข</p></div></details>
+        <details><summary>รายงานและเอกสารคุณภาพ</summary><div class="guide-body"><p>ระบบ PDF รุ่นเดิมถูกปิดชั่วคราวระหว่างออกแบบรายงานใหม่ให้เหมาะกับ ISO 15189, HA และระบบควบคุมเอกสาร</p><p>ข้อมูลรอบ ผลตรวจ การรับรอง และ Audit log ยังถูกเก็บตามปกติ การลบทะเบียน PDF เดิมไม่กระทบข้อมูลเหล่านี้</p></div></details>
         <details><summary>การยืนยันตัวตนสองขั้นตอน</summary><div class="guide-body"><p>ผู้ใช้งานทุกคนเปิดใช้งานได้จากเมนู ตั้งค่าของฉัน โดยสแกน QR Code ด้วยแอปยืนยันตัวตน แล้วกรอกรหัส 6 หลักเพื่อยืนยัน</p><p>ควรเก็บบัญชีและโทรศัพท์ที่ใช้สร้างรหัสไว้กับเจ้าของบัญชีเท่านั้น</p></div></details>
         <details><summary>การลบข้อมูล</summary><div class="guide-body"><p>ปุ่มลบที่ระบุว่าเป็นการลบถาวรจะลบข้อมูลจริงและกู้คืนไม่ได้ ควรตรวจชื่อรอบ เอกสาร หรือคำถามก่อนยืนยันทุกครั้ง</p></div></details>
       </div>

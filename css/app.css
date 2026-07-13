@@ -2193,3 +2193,86 @@ tr:last-child td { border-bottom: 0; }
   .my-competency-card-head h2 { font-size: 18px; }
   .my-competency-meta { grid-template-columns: 1fr; gap: 7px; margin: 12px 0; }
 }
+
+/* v2.5.9 — work center, historical audit dates, deputy QM */
+.my-work-section { margin-bottom: 22px; }
+.my-work-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 12px;
+}
+.my-work-section-head h2 { margin: 0; font-size: 22px; }
+.my-work-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .02em;
+}
+.my-work-practical-card { border-left: 5px solid var(--primary); }
+.historical-action-section {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #f8fbfd;
+}
+.historical-action-section > h3 { margin: 0; }
+.historical-action-section > p { margin: -4px 0 2px; }
+.historical-action-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #dbe7ee;
+  border-radius: 14px;
+  background: #fff;
+}
+.historical-action-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.historical-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.historical-unknown-time {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.historical-unknown-time input { margin-top: 3px; }
+.report-redesign-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+  max-width: 900px;
+}
+.report-redesign-card h2 { margin-top: 0; }
+.report-redesign-icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 16px;
+  background: #e8f4fb;
+  color: var(--primary-dark);
+  font-size: 28px;
+  font-weight: 800;
+}
+@media (max-width: 620px) {
+  .my-work-section-head h2 { font-size: 19px; }
+  .historical-action-grid { grid-template-columns: 1fr; }
+  .historical-action-card-head { display: grid; }
+  .report-redesign-card { grid-template-columns: 1fr; }
+}
