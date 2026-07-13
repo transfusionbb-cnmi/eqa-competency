@@ -2276,3 +2276,54 @@ tr:last-child td { border-bottom: 0; }
   .historical-action-card-head { display: grid; }
   .report-redesign-card { grid-template-columns: 1fr; }
 }
+
+/* v2.6.2: optional individual work evidence */
+.work-evidence-panel {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px;
+  background: var(--surface, #fff);
+}
+.work-evidence-panel .card-header { margin-bottom: 12px; }
+.work-evidence-panel h3 { margin: 0; }
+.work-evidence-upload {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+.work-evidence-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+.work-evidence-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft, #f8fbfd);
+}
+.work-evidence-info {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+.work-evidence-info strong {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.work-evidence-info span {
+  color: var(--muted);
+  font-size: .82rem;
+}
+@media (max-width: 680px) {
+  .work-evidence-upload { grid-template-columns: 1fr; }
+  .work-evidence-upload .btn { width: 100%; }
+  .work-evidence-item { align-items: flex-start; flex-direction: column; }
+  .work-evidence-item .table-actions { width: 100%; }
+  .work-evidence-item .btn { flex: 1; }
+}

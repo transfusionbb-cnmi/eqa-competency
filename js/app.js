@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.6.1
+/* CNMI EQA and Competency Management System v2.6.2
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -256,7 +256,8 @@
     ec_notification_settings: 'ตั้งค่าการแจ้งเตือน',
     ec_notification_logs: 'ประวัติการแจ้งเตือน',
     ec_report_archives: 'ทะเบียนไฟล์ Google Drive',
-    ec_qm_delegations: 'การมอบหมายรองผู้จัดการคุณภาพ'
+    ec_qm_delegations: 'การมอบหมายรองผู้จัดการคุณภาพ',
+    ec_work_evidence: 'ไฟล์การปฏิบัติงานรายบุคคล'
   };
   const METHOD_LABELS = {
     abo: 'หมู่เลือด ABO',
@@ -653,6 +654,106 @@
       checkbox.addEventListener('change', sync);
       sync();
     });
+  }
+
+
+  function historicalDateTimePair(prefix, label, dateValue = '', timeValue = '', timeKnown = true, helpText = '') {
+    const unknown = Boolean(dateValue && timeKnown === false);
+    return `<section class="historical-action-card" data-historical-action="${esc(prefix)}">
+      <div class="historical-action-card-head"><strong>${esc(label)}</strong>${helpText ? `<span class="small muted">${esc(helpText)}</span>` : ''}</div>
+      <div class="historical-action-grid">
+        <div class="field"><label>วันที่</label><input class="input" type="date" name="${esc(prefix)}_date" required value="${esc(dateValue || '')}"></div>
+        <div class="field"><label>เวลา</label><input class="input" type="time" name="${esc(prefix)}_time" value="${esc(timeValue || '')}" ${unknown ? 'disabled' : ''}></div>
+      </div>
+      <label class="historical-unknown-time"><input type="checkbox" name="${esc(prefix)}_time_unknown" ${unknown ? 'checked' : ''}><span>หลักฐานระบุเฉพาะวันที่ ไม่ทราบเวลาที่แน่นอน</span></label>
+    </section>`;
+  }
+
+  const WORK_EVIDENCE_TYPES = new Set(['application/pdf','image/jpeg','image/png','image/webp']);
+
+  function workEvidencePanelHtml(panelId, rows = [], editable = false) {
+    const items = (rows || []).map((row) => `<div class="work-evidence-item">
+      <div class="work-evidence-info"><strong title="${esc(row.file_name || '')}">${esc(row.file_name || 'ไฟล์หลักฐาน')}</strong><span>${fmtDate(row.created_at, true)}${row.file_size ? ` · ${(Number(row.file_size) / 1024 / 1024).toFixed(2)} MB` : ''}</span></div>
+      <div class="table-actions"><button type="button" class="btn btn-outline btn-sm" data-open-work-evidence="${row.id}" data-path="${esc(row.storage_path)}">เปิดไฟล์</button>${editable ? `<button type="button" class="btn btn-danger btn-sm" data-delete-work-evidence="${row.id}">ลบ</button>` : ''}</div>
+    </div>`).join('');
+    return `<section class="work-evidence-panel" data-work-evidence-panel="${esc(panelId)}">
+      <div class="card-header"><div><h3>ไฟล์การปฏิบัติงาน (ถ้ามี)</h3><div class="small muted">อัปโหลดได้หลายไฟล์ ใช้ยืนยันผลการทดสอบของตนเอง ไม่บังคับ</div></div><span class="badge info">${rows.length} ไฟล์</span></div>
+      ${editable ? `<div class="work-evidence-upload"><input class="input" type="file" multiple accept="application/pdf,image/jpeg,image/png,image/webp" data-work-evidence-files><button type="button" class="btn btn-secondary" data-upload-work-evidence>อัปโหลดไฟล์</button></div><div class="help">รองรับ PDF, JPG, PNG, WebP ไฟล์ละไม่เกิน 20 MB</div>` : ''}
+      <div class="work-evidence-list">${items || '<div class="small muted">ยังไม่มีไฟล์การปฏิบัติงาน</div>'}</div>
+    </section>`;
+  }
+
+  async function loadWorkEvidence(filters = {}) {
+    let query = state.supabase.from('ec_work_evidence').select('*').is('archived_at', null).order('created_at', { ascending: false });
+    if (filters.roundId) query = query.eq('round_id', filters.roundId);
+    if (filters.userId) query = query.eq('user_id', filters.userId);
+    if (filters.contextType) query = query.eq('context_type', filters.contextType);
+    if (filters.assignmentId) query = query.eq('competency_assignment_id', filters.assignmentId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function uploadWorkEvidence({ roundId, contextType, assignmentId = null, files }) {
+    const fileList = Array.from(files || []);
+    if (!fileList.length) throw new Error('กรุณาเลือกไฟล์อย่างน้อย 1 ไฟล์');
+    for (const file of fileList) {
+      if (!WORK_EVIDENCE_TYPES.has(file.type)) throw new Error(`ไฟล์ ${file.name}: รองรับเฉพาะ PDF, JPG, PNG และ WebP`);
+      if (file.size > 20 * 1024 * 1024) throw new Error(`ไฟล์ ${file.name}: ขนาดเกิน 20 MB`);
+    }
+    for (const file of fileList) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]+/g, '_');
+      const path = `${roundId}/work-evidence/${contextType}/${state.user.id}/${crypto.randomUUID()}_${safeName}`;
+      const upload = await state.supabase.storage.from(cfg.PRIVATE_BUCKET).upload(path, file, { upsert: false, contentType: file.type });
+      if (upload.error) throw upload.error;
+      const { error: insertError } = await state.supabase.from('ec_work_evidence').insert({
+        round_id: roundId,
+        user_id: state.user.id,
+        context_type: contextType,
+        competency_assignment_id: assignmentId,
+        file_name: file.name,
+        storage_path: path,
+        mime_type: file.type,
+        file_size: file.size,
+        uploaded_by: state.user.id
+      });
+      if (insertError) {
+        await state.supabase.storage.from(cfg.PRIVATE_BUCKET).remove([path]);
+        throw insertError;
+      }
+    }
+  }
+
+  function bindWorkEvidencePanel(panelId, config) {
+    const panel = document.querySelector(`[data-work-evidence-panel="${CSS.escape(panelId)}"]`);
+    if (!panel) return;
+    panel.querySelector('[data-upload-work-evidence]')?.addEventListener('click', async () => {
+      const input = panel.querySelector('[data-work-evidence-files]');
+      try {
+        setBusy(true);
+        await uploadWorkEvidence({ ...config, files: input?.files });
+        toast('อัปโหลดไฟล์การปฏิบัติงานแล้ว', 'success');
+        route();
+      } catch (error) {
+        toast(friendlyError(error), 'danger');
+      } finally {
+        setBusy(false);
+      }
+    });
+    panel.querySelectorAll('[data-open-work-evidence]').forEach((button) => button.addEventListener('click', async () => {
+      const { data, error } = await state.supabase.storage.from(cfg.PRIVATE_BUCKET).createSignedUrl(button.dataset.path, 300);
+      if (error) return toast(friendlyError(error), 'danger');
+      window.open(data.signedUrl, '_blank', 'noopener');
+    }));
+    panel.querySelectorAll('[data-delete-work-evidence]').forEach((button) => button.addEventListener('click', async () => {
+      if (!confirm('ลบไฟล์การปฏิบัติงานนี้หรือไม่')) return;
+      const { data, error } = await state.supabase.rpc('ec_delete_work_evidence_v262', { p_evidence_id: button.dataset.deleteWorkEvidence });
+      if (error) return toast(friendlyError(error), 'danger');
+      const path = data?.storage_path;
+      const storageDelete = path ? await state.supabase.storage.from(cfg.PRIVATE_BUCKET).remove([path]) : { error: null };
+      toast(storageDelete.error ? 'ลบรายการแล้ว แต่ลบไฟล์จริงไม่สำเร็จ กรุณาแจ้งผู้ดูแลระบบ' : 'ลบไฟล์แล้ว', storageDelete.error ? 'warning' : 'success');
+      route();
+    }));
   }
 
   function roleStorageKey() {
@@ -3527,11 +3628,12 @@
   }
 
   async function roundHistoricalIndividual(round) {
-    const [{ data: rows, error }, { data: assignments }, { data: confirmations }, { data: consensus }, directory] = await Promise.all([
+    const [{ data: rows, error }, { data: assignments }, { data: confirmations }, { data: consensus }, { data: evidenceRows }, directory] = await Promise.all([
       state.supabase.from('ec_individual_results').select('*').eq('round_id', round.id).order('updated_at'),
       state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('assignment_role', 'practitioner').eq('active', true).order('practitioner_slot'),
       state.supabase.from('ec_historical_result_confirmations').select('*').eq('round_id', round.id),
       state.supabase.from('ec_consensus_results').select('id,status').eq('round_id', round.id).maybeSingle(),
+      state.supabase.from('ec_work_evidence').select('*').eq('round_id', round.id).eq('context_type', 'practical').is('archived_at', null).order('created_at', { ascending: false }),
       loadDirectory()
     ]);
     if (error) throw error;
@@ -3541,109 +3643,128 @@
       const confirmation = row ? (confirmations || []).find((item) => item.individual_result_id === row.id && item.user_id === assignment.user_id) : null;
       const enteredBy = row?.entered_by ? name(row.entered_by) : '-';
       const isOwn = assignment.user_id === state.user.id;
-      const mayConfirm = isOwn && hasRole('staff') && row && consensus && round.historical_review_status === 'awaiting_practitioner_confirmation';
+      const canEnter = isOwn || canImportHistoricalEqa();
+      const mayConfirm = isOwn && hasRole('staff') && row && row.entry_mode === 'entered_on_behalf' && consensus && round.historical_review_status === 'awaiting_practitioner_confirmation';
+      const userEvidence = (evidenceRows || []).filter((item) => item.user_id === assignment.user_id);
+      const entryLabel = row?.entry_mode === 'self' ? 'ผู้ปฏิบัติกรอกเอง' : 'กรอกแทนจากหลักฐานเดิม';
+      const panelId = `historical-practical-${assignment.user_id}`;
       return `<div class="card" style="box-shadow:none;border:1px solid var(--line)">
-        <div class="card-header"><div><h3>ผู้ปฏิบัติจริง คนที่ ${assignment.practitioner_slot}: ${esc(name(assignment.user_id))}</h3><div class="small muted">ข้อมูลนี้ต้องอ้างอิงหลักฐานเดิม ไม่ใช่การให้ผู้ปฏิบัติทำผลใหม่</div></div>${historicalConfirmationBadge(confirmation)}</div>
+        <div class="card-header"><div><h3>ผู้ปฏิบัติจริง คนที่ ${assignment.practitioner_slot}: ${esc(name(assignment.user_id))}</h3><div class="small muted">กรอกตามผลและหลักฐานเดิมของรอบที่ผ่านมา ห้ามทำการทดสอบใหม่เพื่อแทนข้อมูลเดิม</div></div>${historicalConfirmationBadge(confirmation)}</div>
         ${row ? `<div class="grid cols-2">
-          <div><strong>วิธีบันทึก</strong><p><span class="badge info">กรอกแทนผู้ปฏิบัติ</span></p></div>
-          <div><strong>ผู้กรอกข้อมูลแทน</strong><p>${esc(enteredBy)}<br><span class="small muted">${fmtDate(row.entered_at, true)}</span></p></div>
-          <div><strong>วันที่ปฏิบัติจริง</strong><p>${row.performed_date ? `${fmtDate(row.performed_date)}${row.performed_time_known === false ? ' · ไม่ทราบเวลา' : row.performed_time ? ` · ${String(row.performed_time).slice(0,5)} น.` : ''}` : fmtDate(row.performed_at || row.submitted_at, true)}</p></div>
-          <div><strong>หลักฐานผลรายบุคคล</strong><p>${row.no_individual_evidence ? '<span class="badge warning">ไม่มีหลักฐานผลรายบุคคลแยก</span>' : '<span class="badge success">มีหลักฐานเดิมสำหรับกรอกผล</span>'}</p></div>
+          <div><strong>วิธีบันทึก</strong><p><span class="badge info">${esc(entryLabel)}</span></p></div>
+          <div><strong>ผู้บันทึกเข้าระบบ</strong><p>${esc(enteredBy)}<br><span class="small muted">${fmtDate(row.entered_at, true)}</span></p></div>
+          <div><strong>วันที่ปฏิบัติจริง</strong><p>${row.performed_date ? `${fmtDate(row.performed_date)}${row.performed_time_known === false ? ' · ไม่ทราบเวลา' : row.performed_time ? ` · ${String(row.performed_time).slice(0,5)} น.` : ''}` : '-'}</p></div>
+          <div><strong>วันที่ส่งให้แพทย์</strong><p>${row.sent_to_physician_date ? `${fmtDate(row.sent_to_physician_date)}${row.sent_to_physician_time_known === false ? ' · ไม่ทราบเวลา' : row.sent_to_physician_time ? ` · ${String(row.sent_to_physician_time).slice(0,5)} น.` : ''}` : '-'}</p></div>
         </div>
-        <p><strong>ที่มาของข้อมูล:</strong> ${esc(row.evidence_note || '-')}</p>
-        ${row.no_individual_evidence ? `<div class="notice warning">ไม่ได้สร้างคำตอบย้อนหลังแทนบุคลากร ระบบเก็บเฉพาะว่าบุคคลนี้เป็นผู้ร่วมปฏิบัติจริง</div>` : `<button class="btn btn-outline btn-sm" data-view-individual="${row.id}">ดูผลที่กรอกแทน</button>`}
-        ` : `<div class="notice warning">ยังไม่ได้กรอกข้อมูลย้อนหลังแทนผู้ปฏิบัติคนนี้</div>`}
+        <p><strong>แหล่งข้อมูล/หมายเหตุ:</strong> ${esc(row.evidence_note || '-')}</p>
+        ${row.no_individual_evidence ? `<div class="notice warning">ไม่มีหลักฐานผลรายบุคคลแยก ระบบเก็บเฉพาะข้อมูลว่าบุคคลนี้เป็นผู้ร่วมปฏิบัติจริง</div>` : `<button class="btn btn-outline btn-sm" data-view-individual="${row.id}">ดูผลที่บันทึก</button>`}
+        ` : `<div class="notice warning">ยังไม่ได้บันทึกข้อมูลย้อนหลังของผู้ปฏิบัติคนนี้</div>`}
         <div class="table-actions" style="margin-top:12px">
-          ${canImportHistoricalEqa() ? `<button class="btn btn-primary btn-sm" data-enter-historical-individual="${assignment.user_id}">${row ? 'แก้ไขข้อมูลที่กรอกแทน' : 'กรอกผลย้อนหลังแทนผู้ปฏิบัติ'}</button>` : ''}
+          ${canEnter ? `<button class="btn btn-primary btn-sm" data-enter-historical-individual="${assignment.user_id}">${row ? (isOwn ? 'แก้ไขข้อมูลย้อนหลังของฉัน' : 'แก้ไขข้อมูลที่กรอกแทน') : (isOwn ? 'กรอกผลย้อนหลังของฉัน' : 'กรอกผลย้อนหลังแทนผู้ปฏิบัติ')}</button>` : ''}
           ${mayConfirm ? `<button class="btn btn-success btn-sm" data-confirm-historical-result>ยืนยันว่าข้อมูลตรงกับหลักฐานเดิม</button><button class="btn btn-warning btn-sm" data-dispute-historical-result>แจ้งว่าข้อมูลไม่ตรง</button>` : ''}
         </div>
-        ${confirmation?.note ? `<div class="notice ${confirmation.decision === 'confirmed' ? 'success' : 'warning'}" style="margin-top:12px">หมายเหตุจากผู้ปฏิบัติ: ${esc(confirmation.note)}</div>` : ''}
+        <div style="height:12px"></div>${workEvidencePanelHtml(panelId, userEvidence, isOwn)}
+        ${confirmation?.note ? `<div class="notice ${confirmation.decision === 'confirmed' ? 'success' : 'warning'}" style="margin-top:12px">หมายเหตุ: ${esc(confirmation.note)}</div>` : ''}
       </div>`;
     }).join('');
     return `<div class="card">
-      <div class="card-header"><div><h2>ผลย้อนหลังของผู้ปฏิบัติจริง</h2><div class="small muted">ผู้ดูแลระบบหรือผู้จัดการคุณภาพกรอกจากหลักฐานเดิมแทนผู้ปฏิบัติ จากนั้นเจ้าตัวตรวจสอบและยืนยัน</div></div><span class="badge info">ข้อมูลย้อนหลัง</span></div>
-      <div class="notice"><strong>ห้ามให้ผู้ปฏิบัติทำผล EQA ใหม่เพื่อแทนข้อมูลในอดีต</strong> หากไม่มีผลแยกรายบุคคล ให้เลือก “ไม่มีหลักฐานผลรายบุคคล” และเก็บเฉพาะผลกลางที่ห้องส่งจริง</div>
+      <div class="card-header"><div><h2>ผลย้อนหลังของผู้ปฏิบัติจริง</h2><div class="small muted">ผู้ปฏิบัติจริงกรอกและยืนยันข้อมูลของตนเองได้ ผู้ดูแลระบบหรือผู้จัดการคุณภาพกรอกแทนได้เมื่อมีหลักฐานเดิม</div></div><span class="badge info">ข้อมูลย้อนหลัง</span></div>
+      <div class="notice"><strong>วันเวลาที่เกิดเหตุการณ์จริง</strong> แยกจากวันเวลาที่บันทึกเข้าระบบ ซึ่งระบบเก็บอัตโนมัติใน Audit trail</div>
       <div style="height:14px"></div><div class="grid cols-2">${cards || empty('ยังไม่ได้กำหนดผู้ปฏิบัติจริง')}</div>
       ${(rows || []).length === 2 ? `<div class="modal-footer"><button class="btn btn-primary" data-go-historical-step="consensus">ขั้นต่อไป: กรอกผลกลางที่ห้องส่งจริง</button></div>` : ''}
     </div>`;
   }
 
   async function openHistoricalIndividualEntry(round, userId) {
-    if (!canImportHistoricalEqa()) return toast('เฉพาะผู้ดูแลระบบหรือผู้จัดการคุณภาพเท่านั้น', 'warning');
+    const isSelf = userId === state.user.id;
+    if (!isSelf && !canImportHistoricalEqa()) return toast('ไม่มีสิทธิ์กรอกข้อมูลย้อนหลังแทนบุคคลนี้', 'warning');
     const [{ data: existing }, directory] = await Promise.all([
       state.supabase.from('ec_individual_results').select('*').eq('round_id', round.id).eq('user_id', userId).maybeSingle(),
       loadDirectory()
     ]);
     const person = directory.find((item) => item.id === userId);
-    const noEvidence = Boolean(existing?.no_individual_evidence);
+    const noEvidence = Boolean(existing?.no_individual_evidence && !isSelf);
     const fallbackDateTime = existing?.performed_at || round.actual_submitted_at || round.received_at;
     const fallbackDate = fallbackDateTime ? fmtDateInput(fallbackDateTime) : '';
     const fallbackTime = fallbackDateTime ? fmtDateTimeInput(fallbackDateTime).slice(11, 16) : '';
     const performedDate = existing?.performed_date ? String(existing.performed_date).slice(0, 10) : fallbackDate;
     const performedTime = existing?.performed_time ? String(existing.performed_time).slice(0, 5) : fallbackTime;
-    const timeUnknown = existing?.performed_time_known === false;
+    const performedTimeKnown = existing?.performed_time_known !== false;
+    const sentDate = existing?.sent_to_physician_date ? String(existing.sent_to_physician_date).slice(0, 10) : (round.actual_submitted_at ? fmtDateInput(round.actual_submitted_at) : performedDate);
+    const sentTime = existing?.sent_to_physician_time ? String(existing.sent_to_physician_time).slice(0, 5) : (round.actual_submitted_at ? fmtDateTimeInput(round.actual_submitted_at).slice(11, 16) : performedTime);
+    const sentTimeKnown = existing?.sent_to_physician_time_known !== false;
+    const title = isSelf ? `กรอกผลย้อนหลังของฉัน — ${person?.full_name || ''}` : `กรอกผลย้อนหลังแทน — ${person?.full_name || ''}`;
 
-    showModal(`กรอกผลย้อนหลังแทน — ${person?.full_name || ''}`, `
+    showModal(title, `
       <form id="historical-individual-form" class="form-grid">
-        <div class="notice"><strong>ผู้ปฏิบัติจริง:</strong> ${esc(person?.full_name || userId)}<br><strong>ผู้กรอกข้อมูลย้อนหลัง:</strong> ${esc(state.profile.full_name)}<br><span class="small">วันเวลาเกิดเหตุการณ์จริงจะเก็บแยกจากวันเวลาที่นำข้อมูลเข้าระบบ</span></div>
-        <section class="historical-action-card" data-historical-action="performed">
-          <div class="historical-action-card-head"><strong>วันที่ปฏิบัติจริงตามหลักฐานเดิม</strong></div>
-          <div class="historical-action-grid">
-            <div class="field"><label>วันที่ปฏิบัติจริง</label><input class="input" type="date" name="performed_date" required value="${esc(performedDate)}"></div>
-            <div class="field"><label>เวลา</label><input class="input" type="time" name="performed_time" value="${esc(performedTime)}" ${timeUnknown ? 'disabled' : ''}></div>
-          </div>
-          <label class="historical-unknown-time"><input type="checkbox" name="performed_time_unknown" ${timeUnknown ? 'checked' : ''}><span>หลักฐานระบุเฉพาะวันที่ ไม่ทราบเวลาที่แน่นอน</span></label>
-        </section>
-        <label style="display:flex;gap:9px;align-items:flex-start"><input type="checkbox" id="no-individual-evidence" name="no_evidence" ${noEvidence ? 'checked' : ''}><span><strong>ไม่มีหลักฐานผลรายบุคคลแยก</strong><br><span class="small muted">เลือกข้อนี้เมื่อมีเพียงผลกลางที่ห้องส่ง ห้ามคาดเดาหรือสร้างผลรายบุคคลย้อนหลัง</span></span></label>
-        <div class="field"><label>แหล่งข้อมูล/หลักฐาน</label><textarea class="textarea" name="evidence_note" required placeholder="เช่น แบบบันทึกผลเดิม ลงชื่อผู้ปฏิบัติ 2 คน หน้า...">${esc(existing?.evidence_note || '')}</textarea></div>
-        <div id="historical-individual-result-fields">${resultForm(existing?.result_payload, 'historicalIndividual', noEvidence)}</div>
-      </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-historical-individual">บันทึกข้อมูลที่กรอกแทน</button>`, true);
+        <div class="notice"><strong>ผู้ปฏิบัติจริง:</strong> ${esc(person?.full_name || userId)}<br><strong>ผู้บันทึกเข้าระบบ:</strong> ${esc(state.profile.full_name)}<br><span class="small">ระบบจะเก็บวันเวลาที่บันทึกเข้าระบบอัตโนมัติ แยกจากวันเวลาเหตุการณ์จริงด้านล่าง</span></div>
+        ${historicalDateTimePair('performed', 'วันที่และเวลาที่ปฏิบัติจริง', performedDate, performedTime, performedTimeKnown, 'ตามแบบบันทึกหรือหลักฐานเดิม')}
+        ${historicalDateTimePair('sent_physician', 'วันที่และเวลาที่ส่งผลให้แพทย์', sentDate, sentTime, sentTimeKnown, 'ตามหลักฐานเดิม')}
+        ${!isSelf ? `<label style="display:flex;gap:9px;align-items:flex-start"><input type="checkbox" id="no-individual-evidence" name="no_evidence" ${noEvidence ? 'checked' : ''}><span><strong>ไม่มีหลักฐานผลรายบุคคลแยก</strong><br><span class="small muted">เลือกเมื่อมีเพียงผลกลางที่ห้องส่ง ห้ามคาดเดาผลรายบุคคล</span></span></label>` : ''}
+        <div class="field"><label>แหล่งข้อมูล/หมายเหตุ</label><textarea class="textarea" name="evidence_note" required placeholder="เช่น แบบบันทึกผลเดิม หน้า 2 หรือผลที่ตนเองบันทึกไว้">${esc(existing?.evidence_note || '')}</textarea></div>
+        <div id="historical-individual-result-fields">${resultForm(existing?.result_payload, 'historicalIndividual', noEvidence, true)}</div>
+      </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-secondary" id="save-historical-draft">บันทึกร่าง</button><button class="btn btn-primary" id="submit-historical-individual">ยืนยันและส่งผล</button>`, true);
 
     bindCapWorkupControls(document.getElementById('historical-individual-form'));
     bindHistoricalTimeControls(document.getElementById('historical-individual-form'));
-
     const checkbox = document.getElementById('no-individual-evidence');
     const toggle = () => {
+      if (!checkbox) return;
       document.querySelectorAll('#historical-individual-result-fields input, #historical-individual-result-fields textarea, #historical-individual-result-fields select').forEach((field) => { field.disabled = checkbox.checked; });
       document.querySelectorAll('#historical-individual-result-fields [data-add-workup-panel], #historical-individual-result-fields [data-add-workup-extra], #historical-individual-result-fields [data-remove-workup-row]').forEach((button) => { button.disabled = checkbox.checked; });
     };
-    checkbox.addEventListener('change', toggle);
+    checkbox?.addEventListener('change', toggle);
     toggle();
 
-    document.getElementById('save-historical-individual').addEventListener('click', async () => {
+    const save = async (submit) => {
       const form = document.getElementById('historical-individual-form');
       if (!form.reportValidity()) return;
       const fd = new FormData(form);
-      const timeKnown = fd.get('performed_time_unknown') !== 'on';
+      const performedKnown = fd.get('performed_time_unknown') !== 'on';
+      const sentKnown = fd.get('sent_physician_time_unknown') !== 'on';
       const performedTimeValue = String(fd.get('performed_time') || '');
-      if (timeKnown && !performedTimeValue) return toast('กรุณาระบุเวลา หรือเลือกไม่ทราบเวลาที่แน่นอน', 'warning');
-      const payload = checkbox.checked ? defaultResultPayload() : collectResultPayload(form, 'historicalIndividual');
+      const sentTimeValue = String(fd.get('sent_physician_time') || '');
+      if (performedKnown && !performedTimeValue) return toast('กรุณาระบุเวลาปฏิบัติ หรือเลือกไม่ทราบเวลา', 'warning');
+      if (sentKnown && !sentTimeValue) return toast('กรุณาระบุเวลาที่ส่งให้แพทย์ หรือเลือกไม่ทราบเวลา', 'warning');
+      const noIndividualEvidence = Boolean(checkbox?.checked);
+      const payload = noIndividualEvidence ? defaultResultPayload() : collectResultPayload(form, 'historicalIndividual');
       if (!payload) return toast('กรุณาสร้างแบบกรอกจากฟอร์มเปล่าของรอบนี้ก่อนบันทึกผล', 'warning');
-
+      if (submit && !noIndividualEvidence && !resultPayloadHasData(payload)) return toast('กรุณากรอกผลอย่างน้อย 1 รายการก่อนส่ง', 'warning');
       setBusy(true);
-      const { error } = await state.supabase.rpc('ec_record_historical_individual_result_v259', {
+      const { error } = await state.supabase.rpc('ec_record_historical_individual_result_v262', {
         p_round_id: round.id,
         p_user_id: userId,
         p_result_payload: payload,
         p_performed_date: String(fd.get('performed_date') || ''),
-        p_performed_time: timeKnown ? performedTimeValue : null,
-        p_time_known: timeKnown,
+        p_performed_time: performedKnown ? performedTimeValue : null,
+        p_performed_time_known: performedKnown,
+        p_sent_to_physician_date: String(fd.get('sent_physician_date') || ''),
+        p_sent_to_physician_time: sentKnown ? sentTimeValue : null,
+        p_sent_to_physician_time_known: sentKnown,
         p_evidence_note: String(fd.get('evidence_note') || '').trim(),
-        p_no_individual_evidence: checkbox.checked
+        p_no_individual_evidence: noIndividualEvidence,
+        p_submit: submit
       });
       setBusy(false);
       if (error) return toast(friendlyError(error), 'danger');
       closeModal();
-      toast('บันทึกข้อมูลย้อนหลังแทนผู้ปฏิบัติแล้ว', 'success');
+      toast(submit ? 'ส่งผลย้อนหลังแล้ว' : 'บันทึกร่างข้อมูลย้อนหลังแล้ว', 'success');
       route();
+    };
+    document.getElementById('save-historical-draft').addEventListener('click', () => save(false));
+    document.getElementById('submit-historical-individual').addEventListener('click', () => {
+      if (confirm('ยืนยันส่งผลย้อนหลังหรือไม่ หลังส่งจะเข้าสู่ขั้นตอนทบทวน')) save(true);
     });
   }
 
   async function roundIndividual(round) {
     if (isHistoricalRound(round)) return roundHistoricalIndividual(round);
     await loadRoundInstructionExtractions(round.id);
-    const { data: rows, error } = await state.supabase.from('ec_individual_results').select('*, ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('round_id', round.id).order('updated_at');
-    if (error) throw error;
+    const [{ data: rows, error }, { data: evidenceRows, error: evidenceError }] = await Promise.all([
+      state.supabase.from('ec_individual_results').select('*, ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('round_id', round.id).order('updated_at'),
+      state.supabase.from('ec_work_evidence').select('*').eq('round_id', round.id).eq('user_id', state.user.id).eq('context_type', 'practical').is('archived_at', null).order('created_at', { ascending: false })
+    ]);
+    if (error || evidenceError) throw (error || evidenceError);
     const own = (rows || []).find((r) => r.user_id === state.user.id);
     const practitioner = await isPractitioner(round.id);
     const canEditOwn = practitioner && hasRole('staff') && (!own || ['draft','returned'].includes(own.status));
@@ -3651,6 +3772,7 @@
     return `<div class="grid ${canReview() ? 'cols-2' : ''}">
       <div class="card"><div class="card-header"><div><h2>ผลที่ฉันบันทึก</h2><div class="small muted">ระบบเก็บประวัติฉบับเดิมทุกครั้งที่แก้ไข</div></div>${own ? `<span class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, own.status))} · ฉบับที่ ${own.version}</span>` : ''}</div>
         ${practitioner ? `<form id="individual-result-form">${resultForm(own?.result_payload, 'individual', !canEditOwn, useCurrentGeneratedForm)}</form>
+          <div style="height:14px"></div>${workEvidencePanelHtml('practical-current', evidenceRows || [], hasRole('staff'))}
           ${canEditOwn ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-individual">บันทึกร่าง</button><button class="btn btn-primary" id="submit-individual">ยืนยันและส่งผล</button></div>` : practitioner && !hasRole('staff') && (!own || ['draft','returned'].includes(own.status)) ? `<div class="notice warning">คุณได้รับมอบหมายเป็นผู้ปฏิบัติจริง กรุณาเปลี่ยน “ใช้งานในบทบาท” เป็นเจ้าหน้าที่ก่อนบันทึกหรือส่งผล</div>` : `<div class="notice">ผลถูกส่งแล้วและล็อกการแก้ไข หากต้องแก้ระบบจะส่งกลับทั้งชุดผ่านขั้นผู้ทบทวนหรือผู้จัดการคุณภาพ</div>`}` : `<div class="notice">หน้านี้ใช้สำหรับผู้ปฏิบัติจริงที่ได้รับมอบหมายเท่านั้น</div>`}
       </div>
       ${canReview() ? `<div class="card"><h2>ผลของผู้ปฏิบัติทั้งหมด</h2>${(rows || []).length ? (rows || []).map((r) => `<div style="padding:12px 0;border-bottom:1px solid var(--line)"><strong>${esc(r.ec_profiles?.full_name || r.user_id)}</strong><span style="float:right" class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, r.status))} · ฉบับที่ ${r.version}</span><br><span class="small muted">ส่ง ${fmtDate(r.submitted_at, true)}</span><div style="margin-top:8px"><button class="btn btn-outline btn-sm" data-view-individual="${r.id}">ดูผล</button></div></div>`).join('') : empty('ยังไม่มีผู้ปฏิบัติส่งผล')}</div>` : ''}
@@ -4458,12 +4580,23 @@
   }
 
   function bindHistoricalIndividual(round) {
+    const ownPanelId = `historical-practical-${state.user.id}`;
+    bindWorkEvidencePanel(ownPanelId, { roundId: round.id, contextType: 'practical' });
+    document.querySelectorAll('[data-work-evidence-panel^="historical-practical-"]').forEach((panel) => {
+      const panelId = panel.dataset.workEvidencePanel;
+      if (panelId && panelId !== ownPanelId) bindWorkEvidencePanel(panelId, { roundId: round.id, contextType: 'practical' });
+    });
     document.querySelectorAll('[data-enter-historical-individual]').forEach((button) => button.addEventListener('click', () => openHistoricalIndividualEntry(round, button.dataset.enterHistoricalIndividual)));
     document.querySelectorAll('[data-view-individual]').forEach((button) => button.addEventListener('click', async () => {
-      const { data, error } = await state.supabase.from('ec_individual_results').select('*').eq('id', button.dataset.viewIndividual).single();
-      if (error) return toast(friendlyError(error), 'danger');
-      showModal('ผลย้อนหลังที่กรอกแทนผู้ปฏิบัติ', resultForm(data.result_payload, 'viewHistorical', true), '', true);
+      const [{ data, error }, { data: evidenceRows, error: evidenceError }] = await Promise.all([
+        state.supabase.from('ec_individual_results').select('*').eq('id', button.dataset.viewIndividual).single(),
+        state.supabase.from('ec_work_evidence').select('*').eq('round_id', round.id).eq('context_type', 'practical').is('archived_at', null).order('created_at', { ascending: false })
+      ]);
+      if (error || evidenceError) return toast(friendlyError(error || evidenceError), 'danger');
+      const userEvidence = (evidenceRows || []).filter((row) => row.user_id === data.user_id);
+      showModal('ผลย้อนหลังของผู้ปฏิบัติ', `${resultForm(data.result_payload, 'viewHistorical', true)}<div style="height:14px"></div>${workEvidencePanelHtml('view-practical-evidence', userEvidence, false)}`, '', true);
       bindCapWorkupControls(document.getElementById('modal-backdrop') || document);
+      bindWorkEvidencePanel('view-practical-evidence', { roundId: round.id, contextType: 'practical' });
     }));
     document.querySelectorAll('[data-confirm-historical-result]').forEach((button) => button.addEventListener('click', async () => {
       if (!confirm('ยืนยันว่าข้อมูลที่ผู้ดูแลระบบหรือผู้จัดการคุณภาพกรอกแทน ตรงกับหลักฐานเดิมของคุณหรือไม่')) return;
@@ -5175,9 +5308,20 @@
       const res=existing?await state.supabase.from('ec_individual_results').update(row).eq('id',existing.id):await state.supabase.from('ec_individual_results').insert(row);
       if(res.error)return toast(friendlyError(res.error), 'danger'); toast(submit?'ส่งผลแล้ว':'บันทึกร่างแล้ว','success'); route();
     };
+    bindWorkEvidencePanel('practical-current', { roundId: round.id, contextType: 'practical' });
     document.getElementById('save-individual')?.addEventListener('click',()=>save(false));
     document.getElementById('submit-individual')?.addEventListener('click',()=>{ if(confirm('ยืนยันส่งผลรายบุคคลหรือไม่ หลังส่งจะแก้ไขเองไม่ได้')) save(true); });
-    document.querySelectorAll('[data-view-individual]').forEach((b)=>b.addEventListener('click',async()=>{const {data,error}=await state.supabase.from('ec_individual_results').select('*,ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('id',b.dataset.viewIndividual).single();if(error)return toast(friendlyError(error), 'danger');showModal(`ผลของ ${data.ec_profiles?.full_name||''}`,resultForm(data.result_payload,'view',true),'',true);bindCapWorkupControls(document.getElementById('modal-backdrop') || document);}));
+    document.querySelectorAll('[data-view-individual]').forEach((b)=>b.addEventListener('click',async()=>{
+      const [{data,error},{data:evidenceRows,error:evidenceError}] = await Promise.all([
+        state.supabase.from('ec_individual_results').select('*,ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('id',b.dataset.viewIndividual).single(),
+        state.supabase.from('ec_work_evidence').select('*').eq('round_id',round.id).eq('context_type','practical').is('archived_at',null).order('created_at',{ascending:false})
+      ]);
+      if(error||evidenceError)return toast(friendlyError(error||evidenceError),'danger');
+      const userEvidence=(evidenceRows||[]).filter((row)=>row.user_id===data.user_id);
+      showModal(`ผลของ ${data.ec_profiles?.full_name||''}`,`${resultForm(data.result_payload,'view',true)}<div style="height:14px"></div>${workEvidencePanelHtml('view-practical-evidence',userEvidence,false)}`,'',true);
+      bindCapWorkupControls(document.getElementById('modal-backdrop')||document);
+      bindWorkEvidencePanel('view-practical-evidence',{roundId:round.id,contextType:'practical'});
+    }));
   }
 
   function bindConsensus(round) {
@@ -5609,11 +5753,12 @@
   }
 
   async function openPracticalReview(assignmentId) {
-    const [{ data: assignment, error: assignmentError }, { data: assessment, error: assessmentError }] = await Promise.all([
+    const [{ data: assignment, error: assignmentError }, { data: assessment, error: assessmentError }, { data: evidenceRows, error: evidenceError }] = await Promise.all([
       state.supabase.from('ec_competency_assignments').select('*, ec_profiles!ec_competency_assignments_user_id_fkey(full_name)').eq('id', assignmentId).single(),
-      state.supabase.from('ec_practical_assessments').select('*').eq('assignment_id', assignmentId).maybeSingle()
+      state.supabase.from('ec_practical_assessments').select('*').eq('assignment_id', assignmentId).maybeSingle(),
+      state.supabase.from('ec_work_evidence').select('*').eq('competency_assignment_id', assignmentId).eq('context_type', 'competency').is('archived_at', null).order('created_at', { ascending: false })
     ]);
-    if (assignmentError || assessmentError) return toast(friendlyError(assignmentError || assessmentError), 'danger');
+    if (assignmentError || assessmentError || evidenceError) return toast(friendlyError(assignmentError || assessmentError || evidenceError), 'danger');
     const fields = [
       ['result_accuracy', 'ความถูกต้องของผล'],
       ['procedure_compliance', 'ปฏิบัติตามวิธีและขั้นตอน'],
@@ -5622,8 +5767,9 @@
       ['documentation', 'การบันทึกข้อมูล'],
       ['problem_solving', 'การแก้ปัญหา']
     ];
-    const body = `<div class="notice">ผู้ทบทวนประเมินครบทุกหัวข้อ แล้วส่งต่อให้ผู้รับรองคุณภาพรับรอง</div><div style="height:12px"></div><form id="practical-review-form" class="form-grid">${fields.map(([key,label]) => `<div class="field"><label>${esc(label)}</label><select class="select" name="${key}" required><option value="">เลือกผล</option><option value="true" ${assessment?.[key]===true?'selected':''}>ผ่าน</option><option value="false" ${assessment?.[key]===false?'selected':''}>ต้องทบทวน</option></select></div>`).join('')}<div class="field"><label>ข้อคิดเห็นผู้ทบทวน</label><textarea class="textarea" name="note">${esc(assessment?.reviewer_note || '')}</textarea></div></form>`;
+    const body = `<div class="notice">ผู้ทบทวนประเมินครบทุกหัวข้อ แล้วส่งต่อให้ผู้รับรองคุณภาพรับรอง</div><div style="height:12px"></div>${workEvidencePanelHtml('review-competency-evidence', evidenceRows || [], false)}<div style="height:12px"></div><form id="practical-review-form" class="form-grid">${fields.map(([key,label]) => `<div class="field"><label>${esc(label)}</label><select class="select" name="${key}" required><option value="">เลือกผล</option><option value="true" ${assessment?.[key]===true?'selected':''}>ผ่าน</option><option value="false" ${assessment?.[key]===false?'selected':''}>ต้องทบทวน</option></select></div>`).join('')}<div class="field"><label>ข้อคิดเห็นผู้ทบทวน</label><textarea class="textarea" name="note">${esc(assessment?.reviewer_note || '')}</textarea></div></form>`;
     showModal(`ประเมินการปฏิบัติจริง — ${assignment.ec_profiles?.full_name || ''}`, body, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-practical-review">ผ่านการทบทวนและส่งให้ผู้รับรองคุณภาพ</button>`, true);
+    bindWorkEvidencePanel('review-competency-evidence', { roundId: assignment.round_id, contextType: 'competency', assignmentId });
     document.getElementById('save-practical-review').addEventListener('click', async () => {
       const form = document.getElementById('practical-review-form'); if (!form.reportValidity()) return;
       const fd = new FormData(form);
@@ -5636,14 +5782,15 @@
   }
 
   async function openQuizReview(assignmentId) {
-    const [{ data: assignment, error: assignmentError }, { data: answers, error: answersError }, { data: questions }, { data: choices }, { data: keys }] = await Promise.all([
+    const [{ data: assignment, error: assignmentError }, { data: answers, error: answersError }, { data: questions }, { data: choices }, { data: keys }, { data: reviewEvidenceRows, error: reviewEvidenceError }] = await Promise.all([
       state.supabase.from('ec_competency_assignments').select('*, ec_profiles!ec_competency_assignments_user_id_fkey(full_name), ec_eqa_rounds(*)').eq('id', assignmentId).single(),
       state.supabase.from('ec_competency_answers').select('*').eq('assignment_id', assignmentId),
       state.supabase.from('ec_questions').select('*').order('question_order'),
       state.supabase.from('ec_question_choices').select('*').order('choice_order'),
-      state.supabase.from('ec_question_answer_keys').select('*')
+      state.supabase.from('ec_question_answer_keys').select('*'),
+      state.supabase.from('ec_work_evidence').select('*').eq('competency_assignment_id', assignmentId).eq('context_type', 'competency').is('archived_at', null).order('created_at', { ascending: false })
     ]);
-    if (assignmentError || answersError) return toast(friendlyError(assignmentError || answersError), 'danger');
+    if (assignmentError || answersError || reviewEvidenceError) return toast(friendlyError(assignmentError || answersError || reviewEvidenceError), 'danger');
 
     state.currentRound = assignment.ec_eqa_rounds;
     await loadRoundInstructionExtractions(assignment.round_id);
@@ -5674,8 +5821,10 @@
         <div style="height:12px"></div><div class="card" style="box-shadow:none;border:1px solid var(--line)"><div class="card-header"><h3>แบบผลที่เจ้าหน้าที่กรอก</h3></div>${resultForm(assignment.result_payload, 'reviewCompetencyResult', true, true, { showReportingCodes: false })}</div>
         <div style="height:12px"></div><div class="field"><label>ผลการตรวจแบบกรอกหลัก</label><select class="select" id="result-form-review-pass" required><option value="">เลือกผล</option><option value="true" ${formReviewValue==='true'?'selected':''}>ผ่าน — แปลผลเหมาะสม</option><option value="false" ${formReviewValue==='false'?'selected':''}>ต้องทบทวน — มีผลไม่ถูกต้อง/ไม่ครบ</option></select></div>
         ${supplementalRows ? `<div style="height:12px"></div><h3>คำถามเสริม</h3><div id="quiz-review-list" class="grid">${supplementalRows}</div>` : ''}
+        <div style="height:12px"></div>${workEvidencePanelHtml('review-competency-evidence', reviewEvidenceRows || [], false)}
         <div class="field"><label>หมายเหตุรวมของผู้ทบทวน</label><textarea class="textarea" id="quiz-review-note">${esc(assignment.result_form_review_note || '')}</textarea></div>`;
       showModal(`ตรวจการแปลผลจากภาพ — ${assignment.ec_profiles?.full_name || ''}`, body, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-quiz-review">ผ่านการทบทวนและส่งให้ผู้รับรองคุณภาพ</button>`, true);
+      bindWorkEvidencePanel('review-competency-evidence', { roundId: assignment.round_id, contextType: 'competency', assignmentId });
       document.getElementById('save-quiz-review').addEventListener('click', async () => {
         const passValue = document.getElementById('result-form-review-pass').value;
         if (!passValue) return toast('กรุณาเลือกผลการตรวจแบบกรอกหลัก', 'warning');
@@ -5728,7 +5877,8 @@
         </div>
       </div>`;
     }).join('');
-    showModal(`ตรวจแบบทดสอบ — ${assignment.ec_profiles?.full_name || ''}`, `<div class="notice">ผู้ทบทวนเป็นผู้ตรวจด่านแรก เมื่อบันทึกแล้วระบบจะส่งต่อให้ผู้รับรองคุณภาพรับรอง</div><div style="height:12px"></div><div id="quiz-review-list" class="grid">${rows || empty('ไม่พบคำตอบ')}</div><div class="field"><label>หมายเหตุรวมของผู้ทบทวน</label><textarea class="textarea" id="quiz-review-note"></textarea></div>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-quiz-review">ผ่านการทบทวนและส่งให้ผู้รับรองคุณภาพ</button>`, true);
+    showModal(`ตรวจแบบทดสอบ — ${assignment.ec_profiles?.full_name || ''}`, `<div class="notice">ผู้ทบทวนเป็นผู้ตรวจด่านแรก เมื่อบันทึกแล้วระบบจะส่งต่อให้ผู้รับรองคุณภาพรับรอง</div><div style="height:12px"></div><div id="quiz-review-list" class="grid">${rows || empty('ไม่พบคำตอบ')}</div><div style="height:12px"></div>${workEvidencePanelHtml('review-competency-evidence', reviewEvidenceRows || [], false)}<div class="field"><label>หมายเหตุรวมของผู้ทบทวน</label><textarea class="textarea" id="quiz-review-note"></textarea></div>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-quiz-review">ผ่านการทบทวนและส่งให้ผู้รับรองคุณภาพ</button>`, true);
+    bindWorkEvidencePanel('review-competency-evidence', { roundId: assignment.round_id, contextType: 'competency', assignmentId });
     document.getElementById('save-quiz-review').addEventListener('click', async () => {
       const reviewRows = [...document.querySelectorAll('[data-answer-result]')].map((select) => ({
         answer_id: select.dataset.answerResult,
@@ -5857,11 +6007,13 @@
 
       if (historical) {
         if (!result) {
-          badge = '<span class="badge warning">รอบันทึกข้อมูลเดิม</span>';
-          actionLabel = 'ยังเปิดไม่ได้';
-          disabled = true;
-          detail = '<div class="notice warning small">ผู้ดูแลระบบยังไม่ได้บันทึกข้อมูลจากหลักฐานเดิม</div>';
-        } else if (round.historical_review_status === 'awaiting_practitioner_confirmation' && !confirmation) {
+          badge = '<span class="badge warning">ยังไม่บันทึกย้อนหลัง</span>';
+          actionLabel = 'กรอกผลย้อนหลังของฉัน';
+          detail = '<div class="notice info small">กรอกตามผลและหลักฐานเดิม พร้อมระบุวันเวลาปฏิบัติจริงและวันเวลาที่ส่งให้แพทย์</div>';
+        } else if (result.status === 'draft') {
+          badge = '<span class="badge info">มีร่างย้อนหลัง</span>';
+          actionLabel = 'ทำต่อ';
+        } else if (round.historical_review_status === 'awaiting_practitioner_confirmation' && !confirmation && result.entry_mode === 'entered_on_behalf') {
           badge = '<span class="badge warning">รอคุณยืนยัน</span>';
           actionLabel = 'ตรวจและยืนยันข้อมูลย้อนหลัง';
         } else if (confirmation?.decision === 'disputed') {
@@ -5887,6 +6039,9 @@
       const performedText = result?.performed_date
         ? `${fmtDate(result.performed_date)}${result.performed_time_known === false ? ' · ไม่ทราบเวลา' : result.performed_time ? ` · ${String(result.performed_time).slice(0,5)} น.` : ''}`
         : result?.performed_at ? fmtDate(result.performed_at, true) : '-';
+      const sentPhysicianText = result?.sent_to_physician_date
+        ? `${fmtDate(result.sent_to_physician_date)}${result.sent_to_physician_time_known === false ? ' · ไม่ทราบเวลา' : result.sent_to_physician_time ? ` · ${String(result.sent_to_physician_time).slice(0,5)} น.` : ''}`
+        : '-';
 
       return `<article class="my-competency-card my-work-practical-card">
         <div class="my-competency-card-head">
@@ -5896,6 +6051,7 @@
         <div class="my-competency-meta">
           <div><span>วันครบกำหนดรอบ</span><strong>${fmtDate(round.due_date)}</strong></div>
           <div><span>วันที่ปฏิบัติจริง</span><strong>${performedText}</strong></div>
+          ${historical ? `<div><span>วันที่ส่งให้แพทย์</span><strong>${sentPhysicianText}</strong></div>` : ''}
         </div>
         ${detail}
         <button class="btn btn-primary my-competency-open" data-open-practitioner-round="${assignment.round_id}" ${disabled ? 'disabled' : ''}>${actionLabel}</button>
@@ -5944,6 +6100,13 @@
     }
     const { data: assignment, error } = await state.supabase.from('ec_competency_assignments').select('*,ec_eqa_rounds(*)').eq('id', id).eq('user_id', state.user.id).single();
     if (error) return renderError(error);
+    const { data: competencyEvidenceRows, error: competencyEvidenceError } = await state.supabase.from('ec_work_evidence')
+      .select('*')
+      .eq('competency_assignment_id', id)
+      .eq('context_type', 'competency')
+      .is('archived_at', null)
+      .order('created_at', { ascending: false });
+    if (competencyEvidenceError) return renderError(competencyEvidenceError);
     state.currentRound = assignment.ec_eqa_rounds;
     await loadRoundInstructionExtractions(assignment.round_id);
     const { data: practitionerLink, error: practitionerLinkError } = await state.supabase.from('ec_round_assignments')
@@ -5994,9 +6157,10 @@
           ${reflectionEditable ? `<div class="modal-footer"><button class="btn btn-primary" id="submit-practical-reflection">ส่งแบบทบทวน</button></div>` : ''}
         </div>` : '';
       const driveButton = '';
-      const content = `<section class="page"><div class="page-header"><div><h1>การประเมินจากการปฏิบัติจริง</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div><div class="card"><div class="card-header"><div><h2>การประเมินผู้ปฏิบัติจริง</h2><p class="muted">ผลเชื่อมจากการทำ EQA รายบุคคล วิธีตรวจ การแปลผล การบันทึก และการแก้ปัญหา</p></div>${assignmentBadge(assignment.status)}</div>${assignment.reviewer_note ? `<div class="notice info"><strong>หมายเหตุจากผู้ประเมิน:</strong> ${esc(assignment.reviewer_note)}</div><div style="height:12px"></div>` : ''}<button class="btn btn-primary" id="open-round-practical">เปิดรอบ EQA</button></div><div style="height:16px"></div>${reflectionHtml}</section>`;
+      const content = `<section class="page"><div class="page-header"><div><h1>การประเมินจากการปฏิบัติจริง</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div><div class="card"><div class="card-header"><div><h2>การประเมินผู้ปฏิบัติจริง</h2><p class="muted">ผลเชื่อมจากการทำ EQA รายบุคคล วิธีตรวจ การแปลผล การบันทึก และการแก้ปัญหา</p></div>${assignmentBadge(assignment.status)}</div>${assignment.reviewer_note ? `<div class="notice info"><strong>หมายเหตุจากผู้ประเมิน:</strong> ${esc(assignment.reviewer_note)}</div><div style="height:12px"></div>` : ''}<button class="btn btn-primary" id="open-round-practical">เปิดรอบ EQA</button></div><div style="height:16px"></div>${workEvidencePanelHtml('competency-assignment', competencyEvidenceRows || [], ['not_started','in_progress'].includes(assignment.status) && !deadlinePassed && !notOpened)}<div style="height:16px"></div>${reflectionHtml}</section>`;
       appEl.innerHTML = shell(content, 'การประเมินจากการปฏิบัติจริง');
       bindShell();
+      bindWorkEvidencePanel('competency-assignment', { roundId: assignment.round_id, contextType: 'competency', assignmentId: id });
       document.getElementById('back-my').onclick = () => navigate('my-competency');
       document.getElementById('open-round-practical').onclick = () => navigate(`round/${assignment.round_id}/individual`);
       document.getElementById('archive-practical-competency')?.addEventListener('click', async () => {
@@ -6086,12 +6250,14 @@
         <div class="quiz-intro-card quiz-intro-compact"><div><span class="eyebrow">แบบประเมินรายบุคคล</span><h2>อ่านข้อมูล แล้วกรอกผลของตนเอง</h2></div><div class="quiz-progress-box"><strong>${esc(completedLabel)}</strong><span>สถานะ</span></div></div>
         <div class="card"><div class="card-header"><div><h2>กรอกผลจากภาพของแต่ละตัวอย่าง</h2><div class="small muted">เลือกตัวอย่างด้านบน ภาพผลดิบที่เกี่ยวข้องจะแสดงก่อนช่องตอบในหน้าเดียวกัน</div></div></div><form id="competency-result-form">${formHtml}</form></div>
         ${supplementalHtml ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>3. คำถามเสริม</h2><div class="small muted">มีเฉพาะข้อที่ผู้จัดการคุณภาพเพิ่มเอง</div></div></div><form id="competency-supplement-form" class="quiz-form-shell">${supplementalHtml}</form></div>` : ''}
+        <div style="height:16px"></div>${workEvidencePanelHtml('competency-assignment', competencyEvidenceRows || [], editable)}
         ${editable ? `<div class="quiz-submit-bar"><button class="btn btn-secondary" id="save-competency-form">บันทึกร่าง</button><button class="btn btn-primary" id="submit-competency-form">ยืนยันและส่งผล</button></div>` : `<div style="height:16px"></div><div class="notice info">${assignment.reviewer_note ? `<strong>หมายเหตุผู้ประเมิน:</strong> ${esc(assignment.reviewer_note)}` : 'แบบประเมินถูกส่งแล้วและล็อกการแก้ไข'}</div>`}
         ${reflectionHtml}
       </section>`;
       appEl.innerHTML = shell(content, 'ประเมินจากภาพผลดิบ / Case Study');
       bindShell();
       bindCapWorkupControls(document.getElementById('competency-result-form') || document);
+      bindWorkEvidencePanel('competency-assignment', { roundId: assignment.round_id, contextType: 'competency', assignmentId: id });
 
       document.getElementById('back-my').onclick = () => navigate('my-competency');
       document.getElementById('archive-my-competency')?.addEventListener('click', async () => {
@@ -6240,9 +6406,10 @@
     }).length;
     const content = `<section class="page quiz-page"><div class="page-header"><div><h1>แบบทดสอบ EQA Competency</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div>
       <div class="quiz-intro-card"><div><span class="eyebrow">แบบประเมินจากผลทดสอบจริง</span><h2>อ่านภาพและเลือกคำตอบที่ถูกต้องที่สุด</h2><p>คำถามแยกตามหมวดเหมือน Google Form สามารถบันทึกร่างแล้วกลับมาทำต่อได้ก่อนวันปิดรับคำตอบ</p></div><div class="quiz-progress-box"><strong>${answeredCount}/${(questions || []).length}</strong><span>ข้อที่บันทึกแล้ว</span></div></div>
-      <form id="quiz-form" class="quiz-form-shell">${questionHtml || empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form>${editable && questions?.length ? `<div class="quiz-submit-bar"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>` : ''}${releasedReviewHtml}${reflectionHtml}</section>`;
+      <form id="quiz-form" class="quiz-form-shell">${questionHtml || empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form><div style="height:16px"></div>${workEvidencePanelHtml('competency-assignment', competencyEvidenceRows || [], editable)}${editable && questions?.length ? `<div class="quiz-submit-bar"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>` : ''}${releasedReviewHtml}${reflectionHtml}</section>`;
     appEl.innerHTML = shell(content, 'แบบทดสอบ');
     bindShell();
+    bindWorkEvidencePanel('competency-assignment', { roundId: assignment.round_id, contextType: 'competency', assignmentId: id });
 
     const updateQuizProgress = () => {
       const count = (questions || []).filter((question) => {
