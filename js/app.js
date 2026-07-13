@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.5.9
+/* CNMI EQA and Competency Management System v2.6.0
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -15,6 +15,7 @@
     activeRole: null,
     rounds: [],
     directory: [],
+    qmDelegations: [],
     currentRound: null,
     instructionExtractions: [],
     instructionExtractionCache: new Map(),
@@ -73,8 +74,8 @@
     staff: 'รับ EQA เข้าระบบ ปฏิบัติงานตามที่ได้รับมอบหมาย และทำการประเมินความสามารถ',
     reviewer: 'ตรวจเทียบผลรายบุคคล ตรวจสรุปผลห้องปฏิบัติการที่ระบบสร้าง และส่งให้ผู้รับรองคุณภาพ',
     qm: 'บริหารรอบ EQA และอนุมัติด้านคุณภาพหลังผู้ทบทวนตรวจแล้ว',
-    deputy_qm: 'รับรองด้านคุณภาพแทนผู้จัดการคุณภาพเมื่อได้รับมอบหมายในรอบนั้น',
-    physician: 'รับทราบสรุปผลห้องปฏิบัติการหลังผู้รับรองคุณภาพอนุมัติ ไม่ต้องทำแบบทดสอบบุคลากร',
+    deputy_qm: 'ทำหน้าที่แทนผู้จัดการคุณภาพเฉพาะช่วงวันเวลาที่ผู้จัดการคุณภาพหรือผู้ดูแลระบบเปิดมอบหมาย',
+    physician: 'แพทย์ผู้มีคุณสมบัติทั้งสองคนมีสิทธิ์เท่าเทียมกัน คนใดคนหนึ่งรับทราบผลของแต่ละรอบได้ และไม่ต้องทำแบบทดสอบบุคลากร',
     admin: 'จัดการผู้ใช้งาน สิทธิ์ และการตั้งค่าระบบ',
     viewer: 'อ่านรายงานและประวัติการใช้งานโดยไม่แก้ไขข้อมูล'
   };
@@ -228,7 +229,9 @@
     set_active: 'เปลี่ยนสถานะบัญชี',
     reset_password: 'รีเซ็ตรหัสผ่าน',
     approve_profile_change: 'อนุมัติการเปลี่ยนข้อมูลส่วนตัว',
-    reject_profile_change: 'ไม่อนุมัติการเปลี่ยนข้อมูลส่วนตัว'
+    reject_profile_change: 'ไม่อนุมัติการเปลี่ยนข้อมูลส่วนตัว',
+    create_qm_delegation: 'มอบหมายผู้ทำหน้าที่แทนผู้จัดการคุณภาพ',
+    cancel_qm_delegation: 'ยุติการมอบหมายผู้ทำหน้าที่แทน'
   };
   const AUDIT_TABLE_LABELS = {
     ec_profiles: 'ข้อมูลผู้ใช้งาน',
@@ -252,7 +255,8 @@
     ec_reflections: 'แบบทบทวนข้อผิดพลาด',
     ec_notification_settings: 'ตั้งค่าการแจ้งเตือน',
     ec_notification_logs: 'ประวัติการแจ้งเตือน',
-    ec_report_archives: 'ทะเบียนไฟล์ Google Drive'
+    ec_report_archives: 'ทะเบียนไฟล์ Google Drive',
+    ec_qm_delegations: 'การมอบหมายรองผู้จัดการคุณภาพ'
   };
   const METHOD_LABELS = {
     abo: 'หมู่เลือด ABO',
@@ -673,9 +677,15 @@
   // hasRole ใช้สำหรับ “มุมมองที่กำลังจำลอง” เท่านั้น ผู้ดูแลระบบยังคงสิทธิ์จริงระดับ admin ผ่าน isSystemAdmin()
   function hasRole(...roles) { return roles.includes(state.activeRole); }
   function canManage() { return hasRole('admin', 'qm'); }
-  function canQualityApprove() { return hasRole('qm', 'deputy_qm'); }
+  function canQualityApprove(roundId = state.currentRound?.id || null) {
+    if (hasRole('qm')) return true;
+    if (!hasRole('deputy_qm')) return false;
+    return Boolean(activeQmDelegation(roundId));
+  }
   function canDeleteRound() { return hasRole('admin'); }
-  function canReview() { return hasRole('admin', 'qm', 'deputy_qm', 'reviewer'); }
+  function canReview(roundId = state.currentRound?.id || null) {
+    return hasRole('admin', 'qm', 'reviewer') || (hasRole('deputy_qm') && Boolean(activeQmDelegation(roundId)));
+  }
   function isPhysician() { return hasRole('physician'); }
   function canReceiveEqa() { return hasRole('staff', 'qm', 'admin'); }
   function canImportHistoricalEqa() { return hasRole('admin', 'qm'); }
@@ -1155,10 +1165,122 @@
     return state.directory;
   }
 
+
+  async function loadQmDelegations() {
+    const { data, error } = await state.supabase
+      .from('ec_qm_delegations')
+      .select('*')
+      .order('starts_at', { ascending: false });
+    if (error) throw error;
+    state.qmDelegations = data || [];
+    return state.qmDelegations;
+  }
+
+  function delegationActiveAt(row, at = new Date()) {
+    if (!row || row.status !== 'active') return false;
+    const now = at.getTime();
+    return new Date(row.starts_at).getTime() <= now && now <= new Date(row.ends_at).getTime();
+  }
+
+  function activeQmDelegation(roundId = null, userId = state.user?.id) {
+    return (state.qmDelegations || []).find((row) =>
+      row.deputy_qm_id === userId
+      && delegationActiveAt(row)
+      && (!row.round_id || row.round_id === roundId)
+    ) || null;
+  }
+
+  function qualityApproverCandidates(directory, roundId = null, currentAssignedId = '') {
+    return (directory || []).filter((person) => {
+      if (personHasRole(person, 'qm')) return true;
+      if (!personHasRole(person, 'deputy_qm')) return false;
+      if (person.id === currentAssignedId) return true;
+      return Boolean((state.qmDelegations || []).find((row) =>
+        row.deputy_qm_id === person.id
+        && row.status === 'active'
+        && new Date(row.ends_at).getTime() >= Date.now()
+        && (!row.round_id || row.round_id === roundId)
+      ));
+    });
+  }
+
+  function delegationScopeText(row, rounds = state.rounds || []) {
+    if (!row?.round_id) return 'ทุกรอบในช่วงเวลาที่กำหนด';
+    const round = rounds.find((item) => item.id === row.round_id);
+    return round ? `${round.provider} ${round.round_code}` : 'เฉพาะรอบที่กำหนด';
+  }
+
+  function renderQmDelegationCard(rounds, directory) {
+    if (!hasRole('qm', 'deputy_qm', 'admin')) return '';
+    const currentOrScheduled = (state.qmDelegations || []).filter((row) => row.status === 'active' && new Date(row.ends_at).getTime() >= Date.now());
+    const name = (id) => directory.find((person) => person.id === id)?.full_name || '-';
+    const own = hasRole('deputy_qm') ? currentOrScheduled.find((row) => row.deputy_qm_id === state.user.id) : null;
+    const activeRows = hasRole('deputy_qm') ? (own ? [own] : []) : currentOrScheduled;
+    return `<div class="card qm-delegation-card">
+      <div class="card-header"><div><h2>การมอบหมายผู้จัดการคุณภาพ</h2><div class="small muted">รองผู้จัดการคุณภาพทำหน้าที่แทนได้เฉพาะช่วงที่เปิดมอบหมาย และสิทธิ์จะสิ้นสุดอัตโนมัติเมื่อครบกำหนด</div></div>${hasRole('qm','admin') ? '<button class="btn btn-primary btn-sm" id="open-qm-delegation">มอบหมายผู้ทำหน้าที่แทน</button>' : ''}</div>
+      ${activeRows.length ? `<div class="timeline">${activeRows.map((row) => `<div class="timeline-item"><div class="timeline-dot"></div><div class="timeline-content"><strong>${esc(name(row.deputy_qm_id))}</strong><br><span class="small">${esc(delegationScopeText(row, rounds))}</span><br><span class="badge ${delegationActiveAt(row) ? 'success' : 'info'}">${delegationActiveAt(row) ? 'กำลังทำหน้าที่แทน' : 'กำหนดไว้ล่วงหน้า'}</span><br><span class="small muted">${fmtDate(row.starts_at, true)} ถึง ${fmtDate(row.ends_at, true)} · ${esc(row.reason || '-')}</span>${hasRole('qm','admin') ? `<div style="margin-top:8px"><button class="btn btn-outline btn-sm" data-cancel-qm-delegation="${row.id}">ยุติก่อนกำหนด</button></div>` : ''}</div></div>`).join('')}</div>` : `<div class="notice ${hasRole('deputy_qm') ? 'warning' : 'info'}">${hasRole('deputy_qm') ? 'ขณะนี้ยังไม่มีการมอบหมายให้ทำหน้าที่แทนผู้จัดการคุณภาพ จึงเปิดดูได้แต่ยังรับรองผลไม่ได้' : 'ขณะนี้ไม่มีการมอบหมายผู้ทำหน้าที่แทน'}</div>`}
+    </div>`;
+  }
+
+  async function openQmDelegationModal() {
+    if (!hasRole('qm','admin')) return toast('เฉพาะผู้จัดการคุณภาพหรือผู้ดูแลระบบเท่านั้นที่เปิดการมอบหมายได้', 'warning');
+    const [directory, rounds] = await Promise.all([loadDirectory(), loadRounds()]);
+    const deputies = directory.filter((person) => personHasRole(person, 'deputy_qm'));
+    if (!deputies.length) return toast('ยังไม่มีผู้ใช้ที่ได้รับบทบาทรองผู้จัดการคุณภาพ', 'warning');
+    const now = new Date();
+    const start = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0,16);
+    const endDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const end = new Date(endDate.getTime() - endDate.getTimezoneOffset() * 60000).toISOString().slice(0,16);
+    const personOptions = deputies.map((person) => `<option value="${person.id}">${esc(person.full_name)}${person.position_title ? ` — ${esc(person.position_title)}` : ''}</option>`).join('');
+    const roundOptions = (rounds || []).filter((round) => !['closed','cancelled'].includes(round.status)).map((round) => `<option value="${round.id}">${esc(round.provider)} ${esc(round.round_code)}</option>`).join('');
+    showModal('มอบหมายผู้ทำหน้าที่แทนผู้จัดการคุณภาพ', `<form id="qm-delegation-form" class="form-grid cols-2">
+      <div class="notice" style="grid-column:1/-1"><strong>สิทธิ์ชั่วคราว</strong><br><span class="small">รองผู้จัดการคุณภาพจะเห็นและรับรองงานในขอบเขตที่กำหนดเท่านั้น เมื่อครบกำหนดระบบปิดสิทธิ์ให้อัตโนมัติ</span></div>
+      <div class="field" style="grid-column:1/-1"><label>รองผู้จัดการคุณภาพ</label><select class="select" name="deputy_qm_id" required>${personOptions}</select></div>
+      <div class="field"><label>เริ่มทำหน้าที่แทน</label><input class="input" type="datetime-local" name="starts_at" required value="${start}"></div>
+      <div class="field"><label>สิ้นสุด</label><input class="input" type="datetime-local" name="ends_at" required value="${end}"></div>
+      <div class="field" style="grid-column:1/-1"><label>ขอบเขต</label><select class="select" name="round_id"><option value="">ทุกรอบในช่วงเวลาที่กำหนด</option>${roundOptions}</select></div>
+      <div class="field" style="grid-column:1/-1"><label>เหตุผล</label><textarea class="textarea" name="reason" required placeholder="เช่น ผู้จัดการคุณภาพไปประชุมต่างประเทศ วันที่... ถึงวันที่..."></textarea></div>
+    </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-qm-delegation">บันทึกการมอบหมาย</button>`);
+    document.getElementById('save-qm-delegation')?.addEventListener('click', async () => {
+      const form = document.getElementById('qm-delegation-form');
+      if (!form.reportValidity()) return;
+      const fd = new FormData(form);
+      const startValue = String(fd.get('starts_at') || '');
+      const endValue = String(fd.get('ends_at') || '');
+      const reason = String(fd.get('reason') || '').trim();
+      if (new Date(endValue).getTime() <= new Date(startValue).getTime()) return toast('วันเวลาสิ้นสุดต้องอยู่หลังวันเวลาเริ่ม', 'warning');
+      setBusy(true);
+      const { error } = await state.supabase.rpc('ec_create_qm_delegation_v260', {
+        p_deputy_qm_id: String(fd.get('deputy_qm_id') || ''),
+        p_starts_at: new Date(startValue).toISOString(),
+        p_ends_at: new Date(endValue).toISOString(),
+        p_reason: reason,
+        p_round_id: String(fd.get('round_id') || '') || null
+      });
+      setBusy(false);
+      if (error) return toast(friendlyError(error), 'danger');
+      closeModal();
+      toast('เปิดการมอบหมายผู้ทำหน้าที่แทนแล้ว', 'success');
+      route();
+    });
+  }
+
+  async function cancelQmDelegation(id) {
+    const reason = prompt('ระบุเหตุผลที่ยุติการมอบหมายก่อนกำหนด');
+    if (reason === null) return;
+    if (!reason.trim()) return toast('กรุณาระบุเหตุผล', 'warning');
+    const { error } = await state.supabase.rpc('ec_cancel_qm_delegation_v260', { p_delegation_id: id, p_reason: reason.trim() });
+    if (error) return toast(friendlyError(error), 'danger');
+    toast('ยุติการมอบหมายแล้ว', 'success');
+    route();
+  }
+
     async function renderDashboard() {
-    const [roundsRes, assignmentRes] = await Promise.all([
+    const [roundsRes, assignmentRes, directory] = await Promise.all([
       state.supabase.from('ec_eqa_rounds').select('*').order('created_at', { ascending: false }).limit(8),
-      state.supabase.from('ec_competency_assignments').select('*, ec_eqa_rounds(round_code,provider)').eq('user_id', state.user.id).order('created_at', { ascending: false })
+      state.supabase.from('ec_competency_assignments').select('*, ec_eqa_rounds(round_code,provider)').eq('user_id', state.user.id).order('created_at', { ascending: false }),
+      loadDirectory(),
+      loadQmDelegations()
     ]);
     const rounds = roundsRes.data || [];
     const assignments = assignmentRes.data || [];
@@ -1182,6 +1304,7 @@
           <div class="card stat-card"><div><div class="stat-value">${pendingCompetency}</div><div class="stat-label">รายการที่ต้องดำเนินการ</div></div><div class="stat-icon">!</div></div>` : `<div class="card stat-card"><div><div class="stat-value">${openRounds}</div><div class="stat-label">รอบที่รอการรับรอง</div></div><div class="stat-icon">✓</div></div>
           <div class="card stat-card"><div><div class="stat-value">0</div><div class="stat-label">แบบทดสอบที่ต้องทำ</div></div><div class="stat-icon">–</div></div>`}
         </div>
+        ${renderQmDelegationCard(rounds, directory)}
         <div style="height:18px"></div>
         <div class="grid cols-2">
           <div class="card">
@@ -1194,11 +1317,11 @@
               </div></div>`).join('')}</div>` : empty('ยังไม่มีรอบ EQA')}
           </div>
           <div class="card">
-            <div class="card-header"><h2>${isCompetencyParticipant() ? 'การประเมินของฉัน' : 'หน้าที่ของแพทย์ผู้รับรอง'}</h2>${isCompetencyParticipant() ? `<button class="btn btn-outline btn-sm" data-nav-inline="my-competency">ดูทั้งหมด</button>` : ''}</div>
+            <div class="card-header"><h2>${isCompetencyParticipant() ? 'การประเมินของฉัน' : hasRole('physician') ? 'งานแพทย์ผู้รับทราบ' : hasRole('reviewer') ? 'งานทบทวนผล' : 'งานรับรองคุณภาพ'}</h2>${isCompetencyParticipant() ? `<button class="btn btn-outline btn-sm" data-nav-inline="my-competency">ดูทั้งหมด</button>` : ''}</div>
             ${isCompetencyParticipant() ? (assignments.length ? assignments.slice(0, 6).map((a) => `<div style="padding:10px 0;border-bottom:1px solid var(--line)">
               <strong>${esc(a.ec_eqa_rounds?.provider || '')} ${esc(a.ec_eqa_rounds?.round_code || '')}</strong>
               <span style="float:right">${assignmentBadge(a.status)}</span>
-            </div>`).join('') : empty('ยังไม่มีการประเมินที่ได้รับมอบหมาย')) : `<div class="notice">แพทย์ไม่ต้องทำแบบทดสอบบุคลากร หน้าที่ในระบบคืออนุมัติผล EQA ขั้นสุดท้าย รับทราบผลประเมิน และรับรองการปิดรอบ</div>`}
+            </div>`).join('') : empty('ยังไม่มีการประเมินที่ได้รับมอบหมาย')) : hasRole('physician') ? `<div class="notice">แพทย์ผู้รับรองทั้งสองคนมีสิทธิ์เท่าเทียมกัน คนใดคนหนึ่งตรวจและกดรับทราบต่อรอบได้ ระบบจะบันทึกชื่อและวันเวลาของผู้ที่ดำเนินการจริง</div>` : hasRole('deputy_qm') ? `<div class="notice">เปิดรอบที่ได้รับมอบหมายเพื่อตรวจงานได้ ปุ่มรับรองจะแสดงเฉพาะเมื่ออยู่ในช่วงที่ผู้จัดการคุณภาพเปิดให้ทำหน้าที่แทน</div>` : `<div class="notice">เปิดรอบที่เกี่ยวข้องเพื่อดำเนินงานตามบทบาทและลำดับที่ได้รับมอบหมาย</div>`}
           </div>
         </div>
       </section>`;
@@ -1209,6 +1332,8 @@
     document.getElementById('new-round-btn')?.addEventListener('click', openRoundModal);
     document.getElementById('receive-eqa-btn')?.addEventListener('click', () => openReceiveEqaModal());
     document.getElementById('historical-eqa-btn')?.addEventListener('click', () => openHistoricalRoundModal());
+    document.getElementById('open-qm-delegation')?.addEventListener('click', openQmDelegationModal);
+    document.querySelectorAll('[data-cancel-qm-delegation]').forEach((button) => button.addEventListener('click', () => cancelQmDelegation(button.dataset.cancelQmDelegation)));
   }
 
   function empty(text) { return `<div class="empty-state"><div class="empty-icon">○</div>${esc(text)}</div>`; }
@@ -1305,7 +1430,7 @@
   async function openHistoricalRoundModal(round = null) {
     if (!canImportHistoricalEqa()) return toast('กรุณาเลือกโหมดผู้ดูแลระบบหรือผู้จัดการคุณภาพ', 'warning');
     let directory;
-    try { directory = await loadDirectory(); } catch (error) { return toast(friendlyError(error), 'danger'); }
+    try { [directory] = await Promise.all([loadDirectory(), loadQmDelegations()]); } catch (error) { return toast(friendlyError(error), 'danger'); }
 
     const [{ data: currentAssignments }, resultCount] = round?.id
       ? await Promise.all([
@@ -1320,7 +1445,7 @@
     const findAssigned = (role, slot = null) => findAssignment(role, slot)?.user_id || '';
     const practitioners = directory.filter((person) => personHasRole(person, 'staff') && !personHasRole(person, 'physician'));
     const reviewers = directory.filter((person) => personHasRole(person, 'reviewer'));
-    const qualityApprovers = directory.filter((person) => personHasRole(person, 'qm') || personHasRole(person, 'deputy_qm'));
+    const qualityApprovers = qualityApproverCandidates(directory, round?.id || null, findAssigned('quality_approver'));
     const physicians = directory.filter((person) => personHasRole(person, 'physician'));
     const people = directory.filter((person) => person.active !== false && personHasRole(person, 'staff') && !personHasRole(person, 'physician'));
     const options = (rows, selected, blank = 'กรุณาเลือก') => `<option value="">${blank}</option>${rows.map((person) => `<option value="${person.id}" ${person.id === selected ? 'selected' : ''}>${esc(person.full_name)}${person.position_title ? ` — ${esc(person.position_title)}` : ''}</option>`).join('')}`;
@@ -1348,8 +1473,8 @@
         <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 1</label><select class="select" name="p1" required ${practitionersLocked ? 'disabled' : ''}>${options(practitioners, findAssigned('practitioner', 1))}</select>${practitionersLocked ? '<div class="help">ล็อกแล้ว เพราะมีการกรอกผลย้อนหลัง</div>' : ''}</div>
         <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 2</label><select class="select" name="p2" required ${practitionersLocked ? 'disabled' : ''}>${options(practitioners, findAssigned('practitioner', 2))}</select>${practitionersLocked ? '<div class="help">ล็อกแล้ว เพราะมีการกรอกผลย้อนหลัง</div>' : ''}</div>
         <div class="field"><label>ผู้ทบทวนผล</label><select class="select" name="reviewer" required>${options(reviewers, findAssigned('reviewer'))}</select><div class="help">ต้องไม่ใช่ผู้ปฏิบัติจริงของรอบนี้</div></div>
-        <div class="field"><label>ผู้รับรองคุณภาพ</label><select class="select" name="quality_approver" required>${options(qualityApprovers, findAssigned('quality_approver'))}</select><div class="help">เลือกผู้จัดการคุณภาพหรือรองผู้จัดการคุณภาพ และต้องไม่ซ้ำผู้ปฏิบัติหรือผู้ทบทวน</div></div>
-        <div class="field" style="grid-column:1/-1"><label>แพทย์ผู้รับทราบ</label><select class="select" name="physician">${options(physicians, findAssigned('physician'), 'ยังไม่ระบุ')}</select></div>
+        <div class="field"><label>ผู้รับรองคุณภาพ</label><select class="select" name="quality_approver" required>${options(qualityApprovers, findAssigned('quality_approver'))}</select><div class="help">ผู้จัดการคุณภาพรับรองได้ตามปกติ ส่วนรองผู้จัดการคุณภาพจะแสดงเมื่อมีช่วงมอบหมายที่ใช้งานอยู่</div></div>
+        <div class="field" style="grid-column:1/-1"><label>แพทย์ผู้รับทราบตามหลักฐานเดิม</label><select class="select" name="physician">${options(physicians, findAssigned('physician'), 'ยังไม่ระบุ')}</select><div class="help">ใช้เฉพาะข้อมูลย้อนหลัง เพื่อบันทึกว่าแพทย์คนใดรับทราบจริงในเอกสารเดิม</div></div>
 
         <div class="historical-action-section" style="grid-column:1/-1">
           <h3>วันเวลาเหตุการณ์จริงตามเอกสารเดิม</h3>
@@ -1944,12 +2069,12 @@
     const canChange = canManage();
     const historicalColumn = isHistoricalRound(round) ? '<th>วันเวลาเหตุการณ์จริง</th>' : '';
     return `<div class="card">
-      <div class="card-header"><div><h2>ผู้รับผิดชอบ</h2><div class="small muted">ผู้ปฏิบัติจริง 2 คน ผู้ทบทวน และผู้รับรองคุณภาพต้องเป็นคนละคนในรอบเดียวกัน ผู้รับรองคุณภาพเลือกได้ทั้งผู้จัดการคุณภาพหรือรองผู้จัดการคุณภาพ</div></div>${canChange ? `<button class="btn btn-primary" id="manage-assignments">กำหนดผู้รับผิดชอบ</button>` : ''}</div>
-      <div class="notice info">บุคคลเดียวกันมีหลายบทบาทในระบบได้ และสามารถทำหน้าที่คนละบทบาทในคนละรอบ แต่ระบบจะไม่ให้ทำหน้าที่ที่ขัดกันภายในรอบเดียวกัน</div><div style="height:12px"></div>
+      <div class="card-header"><div><h2>ผู้รับผิดชอบ</h2><div class="small muted">ผู้ปฏิบัติจริง 2 คน ผู้ทบทวน และผู้รับรองคุณภาพต้องเป็นคนละคนในรอบเดียวกัน รองผู้จัดการคุณภาพทำแทนได้เฉพาะช่วงที่ได้รับมอบหมาย</div></div>${canChange ? `<button class="btn btn-primary" id="manage-assignments">กำหนดผู้รับผิดชอบ</button>` : ''}</div>
+      <div class="notice info">บุคคลเดียวกันมีหลายบทบาทในระบบได้ และสามารถทำหน้าที่คนละบทบาทในคนละรอบ แต่ระบบจะไม่ให้ทำหน้าที่ที่ขัดกันภายในรอบเดียวกัน<br><span class="small">สำหรับรอบปกติ ไม่ต้องเลือกแพทย์ล่วงหน้า แพทย์ผู้รับรองทั้งสองคนมีสิทธิ์เท่าเทียมกันและคนแรกที่กดรับทราบจะเป็นผู้ลงนามของรอบนั้น</span></div><div style="height:12px"></div>
       ${isHistoricalRound(round) && resultCount.count ? `<div class="notice warning">มีการกรอกผลย้อนหลังแล้ว ระบบล็อกชื่อผู้ปฏิบัติจริงไว้ แต่ยังแก้ผู้ทบทวน ผู้รับรองคุณภาพ แพทย์ และวันเวลาเหตุการณ์จริงได้</div><div style="height:12px"></div>` : ''}
       ${(assignments || []).length ? `<div class="table-wrap"><table><thead><tr><th>บทบาท</th><th>ชื่อ</th><th>ลำดับ</th>${historicalColumn}<th>บันทึกในระบบเมื่อ</th></tr></thead><tbody>
         ${(assignments || []).map((assignment) => `<tr><td>${esc(labelFrom(ASSIGNMENT_ROLE_LABELS, assignment.assignment_role))}</td><td>${esc(name(assignment.user_id))}</td><td>${assignment.practitioner_slot || '-'}</td>${isHistoricalRound(round) ? `<td>${esc(fmtHistoricalEvent(assignment))}${assignment.actual_action_note ? `<br><span class="small muted">${esc(assignment.actual_action_note)}</span>` : ''}</td>` : ''}<td>${fmtDate(assignment.assigned_at, true)}</td></tr>`).join('')}
-      </tbody></table></div>` : empty('ยังไม่ได้กำหนดผู้ปฏิบัติ ผู้ทบทวน ผู้รับรองคุณภาพ หรือแพทย์')}
+      </tbody></table></div>` : empty('ยังไม่ได้กำหนดผู้ปฏิบัติ ผู้ทบทวน หรือผู้รับรองคุณภาพ')}
     </div>`;
   }
 
@@ -3620,7 +3745,8 @@
     const [{ data: approvals }, { data: assignments }, directory] = await Promise.all([
       state.supabase.from('ec_approvals').select('*').eq('round_id', round.id).in('stage', ['historical_practitioner_confirm','historical_reviewer_review','historical_qm_certification']).order('signed_at'),
       state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true),
-      loadDirectory()
+      loadDirectory(),
+      loadQmDelegations()
     ]);
     const name = (id) => directory.find((person) => person.id === id)?.full_name || id;
     const reviewer = (assignments || []).find((assignment) => assignment.assignment_role === 'reviewer');
@@ -3628,7 +3754,7 @@
     const isAssignedReviewer = reviewer?.user_id === state.user.id;
     const isAssignedQualityApprover = qualityApprover?.user_id === state.user.id;
     const reviewerCanAct = hasRole('reviewer') && isAssignedReviewer && round.historical_review_status === 'awaiting_reviewer';
-    const qmCanAct = canQualityApprove() && isAssignedQualityApprover && round.historical_review_status === 'awaiting_qm_certification';
+    const qmCanAct = canQualityApprove(round.id) && isAssignedQualityApprover && round.historical_review_status === 'awaiting_qm_certification';
     const stages = [
       ['historical_practitioner_confirm','ผู้ปฏิบัติจริงตรวจและยืนยันข้อมูลของตน'],
       ['historical_reviewer_review','ผู้ทบทวนตรวจข้อมูลและหลักฐานย้อนหลัง'],
@@ -3645,7 +3771,8 @@
         ${qmCanAct ? `<div class="form-grid"><div class="notice success">ผู้ทบทวนตรวจผ่านแล้ว ผู้รับรองคุณภาพสามารถรับรองและเปิดการประเมินความสามารถได้</div><div class="field"><label>หมายเหตุผู้รับรองคุณภาพ</label><textarea class="textarea" id="historical-qm-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="historical-qm-approve">รับรองข้อมูลและเปิดการประเมิน</button><button class="btn btn-warning" id="historical-qm-return">ส่งกลับแก้ไข</button></div></div>` : ''}
         ${round.historical_review_status === 'qm_certified' ? `<div class="notice success"><strong>รับรองข้อมูลย้อนหลังแล้ว</strong><br>สามารถไปหัวข้อ 10 เพื่อสร้างรายการประเมิน ผู้ปฏิบัติจริง 2 คนจะได้แบบประเมินการปฏิบัติงาน ส่วนเจ้าหน้าที่คนอื่นจะได้แบบทดสอบ</div><div class="modal-footer"><button class="btn btn-primary" data-go-historical-step="competency">ไปเปิดการประเมินความสามารถ</button></div>` : ''}
         ${hasRole('reviewer') && reviewer && !isAssignedReviewer ? `<div class="notice warning">รอบนี้มอบหมายผู้ทบทวนเป็น ${esc(name(reviewer.user_id))} คุณเปิดดูได้แต่กดตรวจผ่านไม่ได้</div>` : ''}
-        ${canQualityApprove() && qualityApprover && !isAssignedQualityApprover ? `<div class="notice warning">รอบนี้มอบหมายผู้รับรองคุณภาพเป็น ${esc(name(qualityApprover.user_id))} คุณเปิดดูได้แต่รับรองแทนไม่ได้</div>` : ''}
+        ${hasRole('deputy_qm') && isAssignedQualityApprover && !canQualityApprove(round.id) ? `<div class="notice warning">คุณได้รับกำหนดเป็นผู้รับรองคุณภาพของรอบนี้ แต่ช่วงมอบหมายให้ทำหน้าที่แทนยังไม่เปิดหรือหมดอายุแล้ว</div>` : ''}
+        ${(hasRole('qm','deputy_qm')) && qualityApprover && !isAssignedQualityApprover ? `<div class="notice warning">รอบนี้มอบหมายผู้รับรองคุณภาพเป็น ${esc(name(qualityApprover.user_id))} คุณเปิดดูได้แต่รับรองแทนไม่ได้</div>` : ''}
       </div>
     </div>`;
   }
@@ -3686,14 +3813,15 @@
     const [{ data: approvals }, { data: consensus }, { data: assignments }] = await Promise.all([
       state.supabase.from('ec_approvals').select('*, ec_profiles!ec_approvals_approver_id_fkey(full_name)').eq('round_id', round.id).order('signed_at'),
       state.supabase.from('ec_consensus_results').select('*').eq('round_id', round.id).maybeSingle(),
-      state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true)
+      state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true),
+      loadQmDelegations()
     ]);
     const assignedReviewer = (assignments || []).find((a) => a.assignment_role === 'reviewer');
     const assignedQualityApprover = (assignments || []).find((a) => a.assignment_role === 'quality_approver');
     const isAssignedReviewer = Boolean(assignedReviewer && assignedReviewer.user_id === state.user.id);
     const isAssignedQualityApprover = Boolean(assignedQualityApprover && assignedQualityApprover.user_id === state.user.id);
     const reviewerCanAct = consensus && hasRole('reviewer') && isAssignedReviewer && ['practitioners_confirmed','returned'].includes(consensus.status);
-    const qmCanAct = consensus && canQualityApprove() && isAssignedQualityApprover && ['awaiting_qm_review'].includes(consensus.status);
+    const qmCanAct = consensus && canQualityApprove(round.id) && isAssignedQualityApprover && ['awaiting_qm_review'].includes(consensus.status);
     const physicianCanAct = consensus && hasRole('physician') && ['qm_approved','awaiting_physician_approval'].includes(consensus.status);
     const stages = ['reviewer_review','qm_review','physician_approval'];
     return `<div class="grid cols-2">
@@ -3707,10 +3835,11 @@
         ${!consensus ? `<div class="notice warning">ยังไม่มีสรุปผลห้องปฏิบัติการ</div>` : ''}
         ${reviewerCanAct ? `<div class="form-grid"><div class="notice">ระบบสร้างสรุปจากผลผู้ปฏิบัติทั้งสองคนแล้ว ผู้ทบทวนต้องตรวจค่าที่ต่างกันในหัวข้อ 5 ก่อนส่งต่อ</div><div class="table-actions"><button class="btn btn-primary" id="go-reviewer-summary">ไปตรวจสรุปผลห้องแลป</button></div></div>` : ''}
         ${qmCanAct ? `<div class="form-grid"><div class="notice">ผู้ทบทวนตรวจสรุปและส่งมาแล้ว ผู้รับรองคุณภาพที่ได้รับมอบหมายจึงสามารถรับรองได้</div><div class="field"><label>หมายเหตุผู้รับรองคุณภาพ</label><textarea class="textarea" id="qm-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="qm-approve">ผู้รับรองคุณภาพรับรอง</button><button class="btn btn-warning" id="qm-return">ส่งกลับให้ผู้ทบทวนแก้สรุป</button></div></div>` : ''}
-        ${physicianCanAct ? `<div class="form-grid"><div class="notice">ผู้รับรองคุณภาพรับรองแล้ว แพทย์ตรวจดูและกดรับทราบ</div><div class="field"><label>หมายเหตุแพทย์</label><textarea class="textarea" id="physician-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="physician-acknowledge">แพทย์รับทราบ</button><button class="btn btn-warning" id="physician-return">ส่งกลับผู้รับรองคุณภาพ</button></div></div>` : ''}
+        ${physicianCanAct ? `<div class="form-grid"><div class="notice">ผู้รับรองคุณภาพรับรองแล้ว แพทย์ผู้รับรองคนใดคนหนึ่งตรวจดูและกดรับทราบ ระบบจะบันทึกผู้ที่ดำเนินการจริง</div><div class="field"><label>หมายเหตุแพทย์</label><textarea class="textarea" id="physician-note"></textarea></div><div class="table-actions"><button class="btn btn-success" id="physician-acknowledge">แพทย์รับทราบ</button><button class="btn btn-warning" id="physician-return">ส่งกลับผู้รับรองคุณภาพ</button></div></div>` : ''}
         ${consensus && !reviewerCanAct && !qmCanAct && !physicianCanAct ? `<div class="notice">สถานะปัจจุบัน: ${esc(labelFrom(RESULT_STATUS_LABELS, consensus.status, consensus.status))}<br>ระบบจะเปิดปุ่มให้เฉพาะผู้มีหน้าที่ในลำดับปัจจุบันเท่านั้น</div>` : ''}
         ${hasRole('reviewer') && assignedReviewer && !isAssignedReviewer ? `<div class="notice warning">รอบนี้มอบหมายผู้ทบทวนคนอื่น คุณเปิดดูได้แต่ไม่สามารถส่งสรุปได้</div>` : ''}
-        ${canQualityApprove() && assignedQualityApprover && !isAssignedQualityApprover ? `<div class="notice warning">รอบนี้มอบหมายผู้รับรองคุณภาพเป็นบุคคลอื่น คุณเปิดดูได้แต่ไม่สามารถรับรองได้</div>` : ''}
+        ${hasRole('deputy_qm') && isAssignedQualityApprover && !canQualityApprove(round.id) ? `<div class="notice warning">คุณได้รับกำหนดเป็นผู้รับรองคุณภาพของรอบนี้ แต่ช่วงมอบหมายให้ทำหน้าที่แทนยังไม่เปิดหรือหมดอายุแล้ว</div>` : ''}
+        ${(hasRole('qm','deputy_qm')) && assignedQualityApprover && !isAssignedQualityApprover ? `<div class="notice warning">รอบนี้มอบหมายผู้รับรองคุณภาพเป็นบุคคลอื่น คุณเปิดดูได้แต่ไม่สามารถรับรองได้</div>` : ''}
       </div>
     </div>`;
   }
@@ -4140,7 +4269,8 @@
       state.supabase.from('ec_question_answer_keys').select('question_id,correct_choice_ids,answer_key_json,explanation'),
       state.supabase.from('ec_ai_generation_runs').select('*').eq('round_id', round.id).order('created_at', { ascending: false }).limit(5),
       state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true),
-      loadDirectory()
+      loadDirectory(),
+      loadQmDelegations()
     ]);
     if (questionError || assignmentError || documentError || keyError || runError || roundRoleError) throw (questionError || assignmentError || documentError || keyError || runError || roundRoleError);
 
@@ -4178,7 +4308,7 @@
         if (canReviewQuiz || canReviewPractical) actions.push(`<button class="btn btn-primary btn-sm" data-review-competency="${assignment.id}" data-type="${assignment.assignment_type}">ตรวจประเมิน</button>`);
         if (assignment.status === 'reflection_submitted') actions.push(`<button class="btn btn-primary btn-sm" data-review-reflection="${assignment.id}">ตรวจแบบทบทวน</button>`);
       }
-      if (canQualityApprove() && isAssignedQualityApprover && assignment.status === 'under_review') {
+      if (canQualityApprove(round.id) && isAssignedQualityApprover && assignment.status === 'under_review') {
         actions.push(`<button class="btn btn-success btn-sm" data-qm-approve-competency="${assignment.id}">รับรองผล</button>`);
         actions.push(`<button class="btn btn-warning btn-sm" data-qm-return-competency="${assignment.id}">ส่งกลับผู้ทบทวน</button>`);
       }
@@ -4929,7 +5059,8 @@
         loadDirectory(),
         isHistoricalRound(round)
           ? state.supabase.from('ec_individual_results').select('id', { count: 'exact', head: true }).eq('round_id', round.id)
-          : Promise.resolve({ count: 0 })
+          : Promise.resolve({ count: 0 }),
+        loadQmDelegations()
       ]);
       const practitionersLocked = Boolean(resultCount.count);
       const findAssignment = (role, slot = null) => current?.find((a) => a.assignment_role === role && (slot ? a.practitioner_slot === slot : true)) || null;
@@ -4937,7 +5068,7 @@
       const options = (people, selected, blankLabel = 'กรุณาเลือก') => `<option value="">${blankLabel}</option>${people.map((p) => `<option value="${p.id}" ${p.id === selected ? 'selected' : ''}>${esc(p.full_name)}${p.position_title ? ` — ${esc(p.position_title)}` : ''}</option>`).join('')}`;
       const practitioners = directory.filter((p) => personHasRole(p, 'staff') && !personHasRole(p, 'physician'));
       const reviewers = directory.filter((p) => personHasRole(p, 'reviewer'));
-      const qualityApprovers = directory.filter((p) => personHasRole(p, 'qm') || personHasRole(p, 'deputy_qm'));
+      const qualityApprovers = qualityApproverCandidates(directory, round.id, find('quality_approver'));
       const physicians = directory.filter((p) => personHasRole(p, 'physician'));
 
       showModal('กำหนดผู้รับผิดชอบ', `<form id="assignment-form" class="form-grid cols-2">
@@ -4945,13 +5076,13 @@
         <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 1</label><select class="select" name="p1" required ${practitionersLocked ? 'disabled' : ''}>${options(practitioners, find('practitioner',1))}</select>${practitionersLocked ? '<div class="help">ล็อกแล้ว เพราะมีการบันทึกผลรายบุคคล</div>' : ''}</div>
         <div class="field"><label>ผู้ปฏิบัติจริง คนที่ 2</label><select class="select" name="p2" required ${practitionersLocked ? 'disabled' : ''}>${options(practitioners, find('practitioner',2))}</select>${practitionersLocked ? '<div class="help">ล็อกแล้ว เพราะมีการบันทึกผลรายบุคคล</div>' : ''}</div>
         <div class="field"><label>ผู้ทบทวนผล</label><select class="select" name="reviewer" required>${options(reviewers, find('reviewer'))}</select><div class="help">ต้องเป็นคนละคนกับผู้ปฏิบัติทั้งสองคน</div></div>
-        <div class="field"><label>ผู้รับรองคุณภาพ</label><select class="select" name="quality_approver" required>${options(qualityApprovers, find('quality_approver'))}</select><div class="help">เลือกผู้จัดการคุณภาพหรือรองผู้จัดการคุณภาพ และต้องไม่ซ้ำผู้ปฏิบัติหรือผู้ทบทวน</div></div>
-        <div class="field" style="grid-column:1/-1"><label>แพทย์ผู้รับทราบที่คาดไว้</label><select class="select" name="physician">${options(physicians, find('physician'), 'ยังไม่ระบุ — แพทย์ผู้รับรองคนใดก็ได้สามารถรับทราบ')}</select></div>
-        ${isHistoricalRound(round) ? `<div class="historical-action-section" style="grid-column:1/-1"><h3>วันเวลาเหตุการณ์จริงตามหลักฐานเดิม</h3><p class="small muted">เว้นว่างได้หากขั้นตอนยังไม่เกิดขึ้น วันเวลาที่บันทึกในระบบยังเก็บอัตโนมัติตามจริง</p>
+        <div class="field"><label>ผู้รับรองคุณภาพ</label><select class="select" name="quality_approver" required>${options(qualityApprovers, find('quality_approver'))}</select><div class="help">ผู้จัดการคุณภาพรับรองได้ตามปกติ รองผู้จัดการคุณภาพรับรองได้เฉพาะช่วงที่เปิดมอบหมาย และต้องไม่ซ้ำผู้ปฏิบัติหรือผู้ทบทวน</div></div>
+        ${isHistoricalRound(round) ? `<div class="field" style="grid-column:1/-1"><label>แพทย์ผู้รับทราบตามหลักฐานเดิม</label><select class="select" name="physician">${options(physicians, find('physician'), 'ยังไม่ระบุ')}</select><div class="help">รอบใหม่ไม่ต้องกำหนดแพทย์ล่วงหน้า เพราะแพทย์ทั้งสองคนมีสิทธิ์เท่าเทียมกันและคนใดคนหนึ่งรับทราบได้</div></div>
+        <div class="historical-action-section" style="grid-column:1/-1"><h3>วันเวลาเหตุการณ์จริงตามหลักฐานเดิม</h3><p class="small muted">เว้นว่างได้หากขั้นตอนยังไม่เกิดขึ้น วันเวลาที่บันทึกในระบบยังเก็บอัตโนมัติตามจริง</p>
           ${historicalActionFields('reviewer_action', 'ผู้ทบทวนตรวจผลจริง', findAssignment('reviewer'))}
           ${historicalActionFields('quality_action', 'ผู้รับรองคุณภาพรับรองจริง', findAssignment('quality_approver'))}
           ${historicalActionFields('physician_action', 'แพทย์รับทราบจริง', findAssignment('physician'))}
-        </div>` : ''}
+        </div>` : '<div class="notice info" style="grid-column:1/-1"><strong>แพทย์ผู้รับทราบ</strong><br><span class="small">แพทย์ที่มีบทบาท “แพทย์ผู้รับรอง” ทั้งสองคนมีสิทธิ์เท่าเทียมกัน คนใดคนหนึ่งสามารถรับทราบรอบนี้ได้ ระบบจะบันทึกชื่อและวันเวลาของผู้ที่กดจริง</span></div>'}
       </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-assignments">บันทึก</button>`, true);
 
       bindHistoricalTimeControls(document.getElementById('assignment-form'));
