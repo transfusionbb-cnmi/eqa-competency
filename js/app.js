@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.5.3
+/* CNMI EQA and Competency Management System v2.5.5
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -623,6 +623,23 @@
   function canImportHistoricalEqa() { return hasRole('admin', 'qm'); }
   function isHistoricalRound(round) { return round?.round_mode === 'historical_import'; }
   function isCompetencyParticipant() { return hasRole('staff') && !hasRole('physician'); }
+
+  function visibleRoutesForActiveRole() {
+    const role = state.activeRole || 'staff';
+    const routes = {
+      admin: ['dashboard','my-competency','rounds','round','assignment','reports','users','audit','automation','settings','help'],
+      staff: ['dashboard','my-competency','rounds','round','assignment','help'],
+      reviewer: ['dashboard','rounds','round','assignment','reports','help'],
+      qm: ['dashboard','rounds','round','assignment','reports','help'],
+      physician: ['dashboard','rounds','round','reports','help'],
+      viewer: ['dashboard','rounds','round','reports','audit','help']
+    };
+    return routes[role] || routes.staff;
+  }
+
+  function canViewRoute(routeName) {
+    return visibleRoutesForActiveRole().includes(routeName);
+  }
   function personHasRole(person, role) { return Array.isArray(person?.roles) && person.roles.includes(role); }
   function normalizedRoles(roles) {
     const result = [...new Set((roles || []).filter(Boolean))];
@@ -875,19 +892,19 @@
             <div><strong>EQA และประเมินความสามารถ</strong></div>
           </div>
           <div class="nav-section">งานของฉัน</div>
-          ${navItem('dashboard', '⌂', 'ภาพรวม', route)}
-          ${isCompetencyParticipant() ? navItem('my-competency', '✓', 'การประเมินของฉัน', route) : ''}
-          <div class="nav-section">งาน EQA</div>
-          ${navItem('rounds', '▦', 'รอบ EQA', route)}
-          ${roundSubmenu(route)}
-          ${navItem('reports', '▤', 'รายงาน / ทะเบียน', route)}
-          <div class="nav-section">การจัดการ</div>
-          ${navItem('users', '♙', 'ผู้ใช้งานและสิทธิ์', route)}
-          ${navItem('audit', '◷', 'ประวัติการใช้งาน', route)}
-          ${(isSystemAdmin() || canManage()) ? navItem('automation', '◉', 'แจ้งเตือน / Google Drive', route) : ''}
-          ${navItem('settings', '⚙', 'ตั้งค่าของฉัน', route)}
+          ${canViewRoute('dashboard') ? navItem('dashboard', '⌂', 'ภาพรวม', route) : ''}
+          ${canViewRoute('my-competency') && isCompetencyParticipant() ? navItem('my-competency', '✓', 'การประเมินของฉัน', route) : ''}
+          ${canViewRoute('rounds') ? '<div class="nav-section">งาน EQA</div>' : ''}
+          ${canViewRoute('rounds') ? navItem('rounds', '▦', 'รอบ EQA', route) : ''}
+          ${canViewRoute('rounds') ? roundSubmenu(route) : ''}
+          ${canViewRoute('reports') ? navItem('reports', '▤', 'รายงาน / ทะเบียน', route) : ''}
+          ${(canViewRoute('users') || canViewRoute('audit') || canViewRoute('automation') || canViewRoute('settings')) ? '<div class="nav-section">การจัดการ</div>' : ''}
+          ${canViewRoute('users') ? navItem('users', '♙', 'ผู้ใช้งานและสิทธิ์', route) : ''}
+          ${canViewRoute('audit') ? navItem('audit', '◷', 'ประวัติการใช้งาน', route) : ''}
+          ${canViewRoute('automation') ? navItem('automation', '◉', 'แจ้งเตือน / Google Drive', route) : ''}
+          ${canViewRoute('settings') ? navItem('settings', '⚙', 'ตั้งค่าระบบ', route) : ''}
           <div class="nav-section">ช่วยเหลือ</div>
-          ${navItem('help', '?', 'คู่มือการใช้งาน', route)}
+          ${canViewRoute('help') ? navItem('help', '?', 'คู่มือการใช้งาน', route) : ''}
           <div class="sidebar-footer">
             <div class="user-mini">
               <div class="user-name-row">
@@ -899,10 +916,8 @@
                 <select class="role-select" id="active-role-select" data-role-switch ${availableViewRoles().length <= 1 ? 'disabled' : ''}>
                   ${roleOptions()}
                 </select>
-                ${isSystemAdmin() ? '<div class="role-hint">สิทธิ์จริงยังเป็นผู้ดูแลระบบ การเลือกนี้เปลี่ยนเฉพาะหน้าตาที่ต้องการตรวจดู</div>' : ''}
+                
               </div>
-              <div class="small muted">สิทธิ์ที่ได้รับทั้งหมด</div>
-              <div class="user-role-list">${assignedRoleBadges || '<span class="badge">ยังไม่ได้รับบทบาท</span>'}</div>
               <button class="btn btn-outline btn-sm" id="logout-btn">ออกจากระบบ</button>
             </div>
           </div>
@@ -920,13 +935,55 @@
               <span class="small topbar-username">${esc(state.profile?.username || '')}</span>
             </div>
           </header>
-          ${isAdminPreview() ? `<div class="admin-preview-banner"><div><strong>กำลังดูในมุมมอง ${esc(ROLE_LABELS[state.activeRole] || '')}</strong><span>สิทธิ์จริงของบัญชียังเป็นผู้ดูแลระบบ เมนูทั้งหมดจึงยังเปิดให้เข้าถึงได้</span></div><button class="btn btn-outline btn-sm" id="reset-admin-preview">กลับสู่มุมมองผู้ดูแลระบบ</button></div>` : ''}
+          ${isAdminPreview() ? `<div class="admin-preview-banner"><strong>มุมมอง: ${esc(ROLE_LABELS[state.activeRole] || '')}</strong><button class="btn btn-outline btn-sm" id="reset-admin-preview">กลับสู่ผู้ดูแลระบบ</button></div>` : ''}
           ${content}
         </main>
       </div>`;
   }
 
+  function enhanceMobileTables() {
+    document.querySelectorAll('.table-wrap > table').forEach((table) => {
+      if (table.dataset.mobileEnhanced === '1') return;
+      const headers = [...table.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+      if (!headers.length) return;
+      table.querySelectorAll('tbody tr').forEach((row) => {
+        [...row.children].forEach((cell, index) => {
+          if (!cell.dataset.label) cell.dataset.label = headers[index] || '';
+        });
+      });
+      table.dataset.mobileEnhanced = '1';
+    });
+  }
+
+  function enhanceMobileSpecimenSelectors() {
+    document.querySelectorAll('.provider-specimen-tabs').forEach((tabs, groupIndex) => {
+      if (tabs.dataset.mobileSelectEnhanced === '1') return;
+      const buttons = [...tabs.querySelectorAll('.provider-specimen-tab')];
+      if (buttons.length < 2) return;
+      const select = document.createElement('select');
+      select.className = 'select provider-mobile-specimen-select';
+      select.setAttribute('aria-label', 'เลือกตัวอย่าง');
+      buttons.forEach((button, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = button.textContent.trim();
+        option.selected = button.classList.contains('active');
+        select.appendChild(option);
+      });
+      select.addEventListener('change', () => buttons[Number(select.value)]?.click());
+      buttons.forEach((button, index) => button.addEventListener('click', () => { select.value = String(index); }));
+      tabs.parentNode.insertBefore(select, tabs);
+      tabs.dataset.mobileSelectEnhanced = '1';
+    });
+  }
+
+  function enhanceResponsiveUi() {
+    enhanceMobileTables();
+    enhanceMobileSpecimenSelectors();
+  }
+
   function bindShell() {
+    enhanceResponsiveUi();
     const sidebar = document.getElementById('sidebar');
     const backdrop = document.getElementById('sidebar-backdrop');
     const closeSidebar = () => {
@@ -3927,7 +3984,7 @@
     const evidenceDocs = (documents || []).filter((doc) => ['raw_result_image','antibody_panel'].includes(doc.category));
     const hiddenEvidenceDocs = evidenceDocs.filter((doc) => doc.visibility !== 'staff');
     const latestRun = generationRuns?.[0] || null;
-    const canCreateCompetency = canManage() && (!isHistoricalRound(round) || round.historical_review_status === 'qm_certified');
+    const canCreateCompetency = canManage();
     const closePassed = round.competency_close_at && new Date(round.competency_close_at).getTime() < Date.now();
     const windowText = round.competency_close_at
       ? `${round.competency_open_at ? `เปิด ${fmtDate(round.competency_open_at, true)} · ` : ''}ปิด ${fmtDate(round.competency_close_at, true)}`
@@ -3948,7 +4005,7 @@
       if (!['not_started','in_progress','cancelled'].includes(assignment.status) && canReview()) {
         actions.push(`<button class="btn btn-outline btn-sm" data-archive-competency="${assignment.id}" data-archive-stage="${assignment.status}">เก็บ PDF ใน Drive</button>`);
       }
-      if (isSystemAdmin()) actions.unshift(`<button class="btn btn-outline btn-sm" data-preview-staff-assignment="${assignment.id}">ดูหน้าที่เจ้าหน้าที่เห็น</button>`);
+      if (hasRole('admin')) actions.unshift(`<button class="btn btn-outline btn-sm" data-preview-staff-assignment="${assignment.id}">ดูหน้าที่เจ้าหน้าที่เห็น</button>`);
       return actions.length ? actions.join('') : '<span class="small muted">รอตามลำดับงาน</span>';
     };
 
@@ -4016,8 +4073,7 @@
         <div class="card-header"><div><h2>การมอบหมายและตรวจประเมิน</h2></div>${canCreateCompetency?`<button class="btn btn-primary" id="assign-all-competency">สร้างรายการประเมิน</button>`:''}</div>
         <div class="notice ${closePassed ? 'danger' : 'info'}"><strong>${closePassed ? 'ปิดรับคำตอบแล้ว' : 'ช่วงเวลาทำ Competency'}</strong><br>${esc(windowText)}${canManage() ? `<div style="margin-top:8px"><button class="btn btn-outline btn-sm" id="set-competency-window">กำหนด/แก้ไขวันเปิด–ปิด</button></div>` : ''}</div>
         <div style="height:12px"></div>
-        ${isHistoricalRound(round) && round.historical_review_status !== 'qm_certified' ? `<div class="notice warning">ต้องให้ผู้ปฏิบัติ ผู้ทบทวน และผู้จัดการคุณภาพรับรองข้อมูลย้อนหลังให้ครบก่อน จึงจะสร้างรายการประเมินได้</div><div style="height:12px"></div>` : ''}
-        ${isHistoricalRound(round) && round.historical_review_status === 'qm_certified' && !round.competency_close_at ? `<div class="notice warning">กรุณากำหนดวันปิด Competency ก่อนสร้างรายการประเมิน</div><div style="height:12px"></div>` : ''}
+        ${!round.competency_close_at ? `<div class="notice warning">กรุณากำหนดวันปิด Competency ก่อนสร้างรายการประเมิน</div><div style="height:12px"></div>` : ''}
         ${(assignments || []).length ? `<div class="table-wrap"><table style="min-width:760px"><thead><tr><th>ชื่อ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${assignments.map((a)=>`<tr><td>${esc(name(a.user_id))}</td><td>${esc(a.assignment_type === 'quiz' && formBasedCompetency ? 'ประเมินจากภาพผลดิบ / Case Study' : labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${assignmentBadge(a.status)}</td><td>${a.score ?? '-'}</td><td><div class="table-actions">${actionFor(a)}</div></td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่ได้สร้างรายการประเมิน')}
       </div>
     </div>`;
@@ -5133,7 +5189,6 @@
     document.getElementById('set-competency-window')?.addEventListener('click', () => openWindowModal());
 
     document.getElementById('assign-all-competency')?.addEventListener('click', async () => {
-      if (isHistoricalRound(round) && round.historical_review_status !== 'qm_certified') return toast('ต้องให้ผู้จัดการคุณภาพรับรองข้อมูลย้อนหลังให้ครบก่อน', 'warning');
       const formBased = Boolean(generatedResultSchema(round));
       if (!formBased) {
         const { count: publishedCount, error: questionCountError } = await state.supabase.from('ec_questions').select('id', { count: 'exact', head: true }).eq('round_id', round.id).eq('published', true).is('archived_at', null);
@@ -5870,7 +5925,7 @@
   }
 
   async function renderAutomation() {
-    if (!isSystemAdmin() && !canManage()) {
+    if (!hasRole('admin') && !canManage()) {
       const content = `<section class="page"><div class="page-header"><div><h1>แจ้งเตือน / Google Drive</h1></div></div><div class="notice warning">หน้านี้ตั้งค่าได้เฉพาะโหมดผู้ดูแลระบบหรือผู้จัดการคุณภาพ กรุณาเปลี่ยนบทบาทจากเมนูด้านซ้าย</div></section>`;
       appEl.innerHTML = shell(content, 'แจ้งเตือน / Google Drive'); bindShell(); return;
     }
@@ -5985,7 +6040,7 @@
   }
 
   async function renderUsers() {
-    if (!isSystemAdmin() && !hasRole('admin')) {
+    if (!hasRole('admin')) {
       const content = `<section class="page">
         <div class="page-header"><div><h1>ผู้ใช้งานและสิทธิ์</h1><p>ขณะนี้อยู่ในโหมด ${esc(ROLE_LABELS[state.activeRole] || 'ไม่ระบุบทบาท')}</p></div></div>
         <div class="notice warning">หน้านี้จัดการได้เฉพาะโหมดผู้ดูแลระบบ กรุณาเลือกโหมดการทำงานจากเมนูด้านซ้าย</div>
@@ -6202,7 +6257,7 @@
     };
   }
 
-  async function renderAudit(){if(!isSystemAdmin() && !hasRole('admin','qm','viewer')){const content=`<section class="page"><div class="notice warning">บัญชีนี้ไม่มีสิทธิ์ดูประวัติการใช้งาน</div></section>`;appEl.innerHTML=shell(content,'ประวัติการใช้งาน');bindShell();return;}const {data,error}=await state.supabase.from('ec_audit_logs').select('*').order('occurred_at',{ascending:false}).limit(300);if(error)return renderError(error);const content=`<section class="page"><div class="page-header"><div><h1>ประวัติการใช้งาน</h1><p>ตรวจสอบว่าใครทำรายการอะไร เมื่อใด และแก้ไขข้อมูลส่วนใด</p></div></div><div class="card"><div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>รายการที่ทำ</th><th>ส่วนของระบบ</th><th>รหัสรายการ</th><th>เหตุผล</th></tr></thead><tbody>${(data||[]).map(x=>`<tr><td>${fmtDate(x.occurred_at,true)}</td><td>${esc(labelFrom(AUDIT_ACTION_LABELS,x.action,'รายการอื่น'))}</td><td>${esc(labelFrom(AUDIT_TABLE_LABELS,x.table_name,'ส่วนอื่นของระบบ'))}</td><td><code>${esc(x.record_id||'-')}</code></td><td>${esc(x.reason||'-')}</td></tr>`).join('')}</tbody></table></div></div></section>`;appEl.innerHTML=shell(content,'ประวัติการใช้งาน');bindShell();}
+  async function renderAudit(){if(!hasRole('admin','qm','viewer')){const content=`<section class="page"><div class="notice warning">บัญชีนี้ไม่มีสิทธิ์ดูประวัติการใช้งาน</div></section>`;appEl.innerHTML=shell(content,'ประวัติการใช้งาน');bindShell();return;}const {data,error}=await state.supabase.from('ec_audit_logs').select('*').order('occurred_at',{ascending:false}).limit(300);if(error)return renderError(error);const content=`<section class="page"><div class="page-header"><div><h1>ประวัติการใช้งาน</h1><p>ตรวจสอบว่าใครทำรายการอะไร เมื่อใด และแก้ไขข้อมูลส่วนใด</p></div></div><div class="card"><div class="table-wrap"><table><thead><tr><th>วันเวลา</th><th>รายการที่ทำ</th><th>ส่วนของระบบ</th><th>รหัสรายการ</th><th>เหตุผล</th></tr></thead><tbody>${(data||[]).map(x=>`<tr><td>${fmtDate(x.occurred_at,true)}</td><td>${esc(labelFrom(AUDIT_ACTION_LABELS,x.action,'รายการอื่น'))}</td><td>${esc(labelFrom(AUDIT_TABLE_LABELS,x.table_name,'ส่วนอื่นของระบบ'))}</td><td><code>${esc(x.record_id||'-')}</code></td><td>${esc(x.reason||'-')}</td></tr>`).join('')}</tbody></table></div></div></section>`;appEl.innerHTML=shell(content,'ประวัติการใช้งาน');bindShell();}
 
   async function renderSettings(){
     const {data:factors}=await state.supabase.auth.mfa.listFactors();
@@ -6278,6 +6333,10 @@
     if(!state.user){renderLogin();return;}
     if(state.profile?.must_change_password){await renderForcePassword();return;}
     const parts=currentRoute().split('/');
+    const requestedRoute = parts[0] || 'dashboard';
+    if (!canViewRoute(requestedRoute)) {
+      if (requestedRoute !== 'dashboard') { navigate('dashboard'); return; }
+    }
     try{
       if(parts[0]==='dashboard')await renderDashboard();
       else if(parts[0]==='rounds')await renderRounds();

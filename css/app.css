@@ -2067,3 +2067,99 @@ tr:last-child td { border-bottom: 0; }
 @media (max-width: 480px) {
   .provider-evidence-thumb-grid { grid-template-columns: 1fr; }
 }
+
+
+/* v2.5.5 — true role view + compact mobile cards */
+.provider-mobile-specimen-select { display: none; margin: 0 0 12px; }
+.admin-preview-banner { min-height: 48px; }
+.admin-preview-banner > strong { font-size: 14px; }
+.sidebar .role-switcher { margin-top: 4px; }
+.sidebar .user-mini { gap: 8px; }
+
+@media (max-width: 760px) {
+  .page { padding: 14px 12px calc(24px + env(safe-area-inset-bottom)); }
+  .page-header { margin-bottom: 14px; gap: 8px; }
+  .page-header h1 { font-size: 24px; }
+  .page-header p { display: none; }
+  .card { padding: 13px; }
+  .btn { min-height: 44px; padding: 9px 13px; }
+  .btn.btn-sm { min-height: 38px; padding: 7px 11px; }
+  .topbar { height: 62px; }
+  .admin-preview-banner {
+    top: 62px;
+    min-height: 44px;
+    padding: 7px 12px;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+  }
+  .admin-preview-banner .btn { width: auto; margin-left: auto; white-space: nowrap; }
+  .actual-role-badge { display: none; }
+  .sidebar { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .sidebar-footer { padding-bottom: env(safe-area-inset-bottom); }
+  .sidebar .role-hint, .sidebar .user-role-list { display: none !important; }
+
+  /* Generic mobile card rendering for standard data tables. */
+  .table-wrap { overflow: visible; border: 0; background: transparent; }
+  .table-wrap > table[data-mobile-enhanced="1"] { min-width: 0; border-collapse: separate; background: transparent; }
+  .table-wrap > table[data-mobile-enhanced="1"] thead { display: none; }
+  .table-wrap > table[data-mobile-enhanced="1"] tbody { display: grid; gap: 10px; }
+  .table-wrap > table[data-mobile-enhanced="1"] tbody tr {
+    display: block;
+    padding: 11px 12px;
+    border: 1px solid var(--line);
+    border-radius: 15px;
+    background: #fff;
+    box-shadow: 0 5px 14px rgba(32, 79, 111, .05);
+  }
+  .table-wrap > table[data-mobile-enhanced="1"] tbody td,
+  .table-wrap > table[data-mobile-enhanced="1"] tbody th {
+    display: grid;
+    grid-template-columns: minmax(84px, 34%) minmax(0, 1fr);
+    gap: 10px;
+    width: 100%;
+    min-width: 0;
+    padding: 8px 0;
+    border: 0;
+    border-bottom: 1px solid #edf2f6;
+    text-align: left;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .table-wrap > table[data-mobile-enhanced="1"] tbody td:last-child,
+  .table-wrap > table[data-mobile-enhanced="1"] tbody th:last-child { border-bottom: 0; }
+  .table-wrap > table[data-mobile-enhanced="1"] tbody td::before,
+  .table-wrap > table[data-mobile-enhanced="1"] tbody th::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 800;
+    line-height: 1.35;
+  }
+  .table-wrap > table[data-mobile-enhanced="1"] .table-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+  }
+  .table-wrap > table[data-mobile-enhanced="1"] .table-actions .btn { width: 100%; }
+  .table-wrap > table[data-mobile-enhanced="1"] a,
+  .table-wrap > table[data-mobile-enhanced="1"] code,
+  .table-wrap > table[data-mobile-enhanced="1"] strong { overflow-wrap: anywhere; word-break: break-word; }
+
+  /* CAP form: use one compact selector instead of a long horizontal row. */
+  .provider-mobile-specimen-select { display: block; width: 100%; min-height: 46px; }
+  .provider-specimen-tabs { display: none !important; }
+  .provider-specimen-heading h3 { font-size: 21px; }
+  .provider-specimen-heading .badge { font-size: 11px; }
+  .provider-form-intro .eyebrow { display: none; }
+  .provider-form-intro h3 { font-size: 21px; }
+  .provider-form-intro p { display: none; }
+  .provider-specimen-panel, .provider-dry-question-section { padding: 10px; }
+}
+
+@media (max-width: 420px) {
+  .admin-preview-banner > strong { font-size: 13px; }
+  .admin-preview-banner .btn { font-size: 12px; padding-inline: 9px; }
+  .table-wrap > table[data-mobile-enhanced="1"] tbody td,
+  .table-wrap > table[data-mobile-enhanced="1"] tbody th { grid-template-columns: 78px minmax(0, 1fr); }
+}
