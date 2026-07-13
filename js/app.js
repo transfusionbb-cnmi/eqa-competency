@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.6.6
+/* CNMI EQA and Competency Management System v2.7.0
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -2129,13 +2129,14 @@
     const generatedAt = round.generated_form_generated_at ? fmtDate(round.generated_form_generated_at, true) : '';
     const generatedFormStatus = `<div class="compact-status"><span>ฟอร์มต้นฉบับ <strong>${sourceDocuments.length}</strong></span><span>คู่มือ/คำแนะนำ <strong>${instructionDocuments.length}</strong></span><span>ภาพผลดิบ <strong>${rawResultDocuments.length}</strong></span><span>Panel/Antigram <strong>${antibodyPanelDocuments.length}</strong></span><span>ผลที่ส่ง <strong>${submittedResultDocuments.length}</strong></span><span>Official Evaluation <strong>${officialDocuments.length}</strong></span><span>Participant Summary <strong>${participantSummaryDocuments.length}</strong></span></div>
       <div style="height:10px"></div>
-      <div class="compact-status"><span>แบบกรอก <strong>${round.generated_result_form_schema ? 'สร้างแล้ว' : 'ยังไม่สร้าง'}</strong></span><span>คำแนะนำ <strong>${round.generated_instruction_th ? 'สร้างแล้ว' : 'ยังไม่สร้าง'}</strong></span>${generatedAt ? `<span>อัปเดตแบบกรอก <strong>${esc(generatedAt)}</strong></span>` : ''}</div>
+      <div class="compact-status"><span>แบบกรอก <strong>${round.generated_result_form_schema ? 'สร้างแล้ว' : 'ยังไม่สร้าง'}</strong></span><span>โครงสร้าง <strong class="text-${providerStructureStatusClass(round.generated_result_form_schema)}">${esc(providerStructureStatusLabel(round.generated_result_form_schema))}</strong></span><span>คำแนะนำ <strong>${round.generated_instruction_th ? 'สร้างแล้ว' : 'ยังไม่สร้าง'}</strong></span>${generatedAt ? `<span>อัปเดตแบบกรอก <strong>${esc(generatedAt)}</strong></span>` : ''}</div>
       ${round.generated_instruction_th ? `<details class="notice success" style="margin-top:10px"><summary><strong>เปิดดูคำแนะนำภาษาไทย</strong></summary><div class="small" style="white-space:pre-wrap;margin-top:8px">${esc(round.generated_instruction_th)}</div></details>` : ''}`;
     return `<div class="card">
       <div class="card-header"><div><h2>เอกสารและภาพ</h2></div>
       <div class="table-actions">${uploadAllowed ? `<button class="btn btn-primary" id="upload-doc-btn">＋ อัปโหลดไฟล์</button>` : ''}${canManage() && (rawResultDocuments.length || antibodyPanelDocuments.length) ? `<button class="btn btn-outline" id="open-evidence-for-staff">เปิดภาพ Competency ให้บุคลากร</button>` : ''}<button class="btn btn-outline" id="go-auto-competency">จัดการข้อสอบ</button></div></div>
       ${canManage() ? `<div class="ai-action-grid">
         <button class="btn btn-primary" id="generate-form-only" ${formReady ? '' : 'disabled'}>1. สร้างแบบกรอกจากฟอร์มเปล่า</button>
+        <button class="btn btn-outline" id="review-round-structure" ${round.generated_result_form_schema ? '' : 'disabled'}>ตรวจโครงสร้างรอบ</button>
         <button class="btn btn-outline" id="generate-instruction-only" ${instructionReady ? '' : 'disabled'}>2. สร้างคำแนะนำจากคู่มือ</button>
         <button class="btn btn-secondary" id="generate-questions-only" ${round.generated_result_form_schema ? 'disabled' : (questionReady ? '' : 'disabled')}>${round.generated_result_form_schema ? '3. ไม่ต้องสร้าง — Part 10 ใช้แบบกรอกและภาพผลดิบ' : '3. สร้างข้อสอบจากภาพ/เอกสาร'}</button>
         <button class="btn btn-success" id="generate-answer-keys" ${answerBundleReady ? '' : 'disabled'}>4. สร้างเฉลยข้อสอบ</button>
@@ -2198,6 +2199,200 @@
   function generatedResultSchema(round = state.currentRound) {
     const schema = round?.generated_result_form_schema;
     return schema && typeof schema === 'object' && Array.isArray(schema.programs) ? schema : null;
+  }
+
+
+  function providerStructureReview(schema = generatedResultSchema()) {
+    const review = schema?.structure_review;
+    if (review && typeof review === 'object') return review;
+    // Schemas created before v2.7.0 remain usable and are marked as legacy so
+    // current JA/JB work is not blocked. New schemas are generated as draft.
+    return { status: 'legacy', version: 'legacy', confirmed_at: null, confirmed_by: null };
+  }
+
+  function providerStructureStatusLabel(schema = generatedResultSchema()) {
+    const status = String(providerStructureReview(schema)?.status || 'draft');
+    if (status === 'confirmed') return 'ยืนยันโครงสร้างแล้ว';
+    if (status === 'legacy') return 'โครงสร้างเดิม';
+    return 'รอตรวจโครงสร้าง';
+  }
+
+  function providerStructureStatusClass(schema = generatedResultSchema()) {
+    const status = String(providerStructureReview(schema)?.status || 'draft');
+    if (status === 'confirmed') return 'success';
+    if (status === 'legacy') return 'info';
+    return 'warning';
+  }
+
+  function providerSpecimenRoleLabel(role) {
+    return ({ patient: 'ตัวอย่างทดสอบ', donor: 'Donor / unit', reference: 'ตัวอย่างอ้างอิง', case: 'Case Study', unknown: 'ยังไม่ระบุ' })[String(role || 'unknown')] || 'ยังไม่ระบุ';
+  }
+
+  function providerStructureAllSpecimens(schema) {
+    const rows = [];
+    (schema?.programs || []).forEach((program, programIndex) => {
+      (program?.specimens || []).forEach((specimen, specimenIndex) => rows.push({ program, programIndex, specimen, specimenIndex }));
+    });
+    return rows;
+  }
+
+  function providerStructureSpecimenOptions(program) {
+    const values = new Map();
+    (program?.specimens || []).forEach((item) => {
+      const id = String(item?.id || item?.label || '').trim();
+      if (id) values.set(id, String(item?.label || id));
+    });
+    (program?.relationships || []).forEach((relationship) => {
+      [relationship?.from_specimen, relationship?.to_specimen].forEach((raw) => {
+        const id = String(raw || '').trim();
+        if (id && !values.has(id)) values.set(id, id);
+      });
+    });
+    return [...values.entries()];
+  }
+
+  function providerStructureProgramTests(program) {
+    const categories = [...new Set((program?.specimen_fields || []).map((field) => providerFieldCategory(program, field)))];
+    return categories.map((category) => ({
+      abo_rh: 'ABO/Rh', screening: 'Ab screen', antibody_id: 'Ab ID', crossmatch: 'Crossmatch', antigen: 'Ag typing', other: 'ข้อมูลอื่น'
+    })[category] || category);
+  }
+
+  function providerStructureReviewHtml(schema) {
+    const programs = Array.isArray(schema?.programs) ? schema.programs : [];
+    if (!programs.length) return '<div class="notice warning">ยังไม่มีแบบกรอกที่สร้างจาก Blank Result Form</div>';
+    return `<div class="notice info"><strong>ตรวจจากฟอร์มของรอบนี้ก่อนเปิดให้เจ้าหน้าที่ใช้งาน</strong><br>ตรวจ Part, Wet/Dry, บทบาทตัวอย่าง, หมู่เลือด Donor และคู่ Crossmatch ระบบจะใช้โครงสร้างนี้กับรอบในอนาคตโดยไม่ผูกกับรหัส JA/JB หรือปี 2026</div>
+      <div class="round-structure-editor" id="round-structure-editor">${programs.map((program, programIndex) => {
+        const specimenOptions = providerStructureSpecimenOptions(program);
+        const tests = providerStructureProgramTests(program);
+        const relationships = Array.isArray(program?.relationships) ? program.relationships : [];
+        return `<section class="round-structure-program" data-structure-program="${programIndex}">
+          <div class="round-structure-program-head"><div><span class="eyebrow">PROGRAM ${programIndex + 1}</span><h3>${esc(program?.title || program?.key || `Program ${programIndex + 1}`)}</h3><div class="structure-test-badges">${tests.map((test) => `<span>${esc(test)}</span>`).join('')}</div></div>
+          <div class="round-structure-program-controls"><label>ส่วนของฟอร์ม<select class="select" data-structure-scope><option value="J" ${program?.scope === 'J' ? 'selected' : ''}>Part J</option><option value="JE" ${program?.scope === 'JE' ? 'selected' : ''}>Part JE</option><option value="JE1" ${program?.scope === 'JE1' ? 'selected' : ''}>JE1</option><option value="JXM" ${program?.scope === 'JXM' ? 'selected' : ''}>JXM</option><option value="OTHER" ${!['J','JE','JE1','JXM'].includes(String(program?.scope || '')) ? 'selected' : ''}>อื่น ๆ</option></select></label>
+          <label>รูปแบบ<select class="select" data-structure-challenge><option value="wet" ${program?.challenge_mode === 'wet' ? 'selected' : ''}>Wet / ตัวอย่างจริง</option><option value="dry" ${program?.challenge_mode === 'dry' ? 'selected' : ''}>Dry / Case Study</option><option value="mixed" ${program?.challenge_mode === 'mixed' ? 'selected' : ''}>Mixed</option><option value="not_applicable" ${program?.challenge_mode === 'not_applicable' ? 'selected' : ''}>ไม่เกี่ยวข้อง</option><option value="unknown" ${!['wet','dry','mixed','not_applicable'].includes(String(program?.challenge_mode || '')) ? 'selected' : ''}>ยังไม่แน่ใจ</option></select></label></div></div>
+          <div class="round-structure-subhead"><strong>ตัวอย่างในส่วนนี้</strong><span>${(program?.specimens || []).length} รายการ</span></div>
+          <div class="round-structure-specimen-list">${(program?.specimens || []).map((specimen, specimenIndex) => `<div class="round-structure-specimen" data-structure-specimen="${specimenIndex}">
+            <div class="structure-specimen-id"><strong>${esc(specimen?.id || '-')}</strong><small>${esc(specimen?.source_reference || '')}</small></div>
+            <label>ชื่อที่แสดง<input class="input" data-structure-label value="${esc(specimen?.label || specimen?.id || '')}"></label>
+            <label>หน้าที่<select class="select" data-structure-role><option value="patient" ${specimen?.role === 'patient' ? 'selected' : ''}>ตัวอย่างทดสอบ</option><option value="donor" ${specimen?.role === 'donor' ? 'selected' : ''}>Donor / unit</option><option value="reference" ${specimen?.role === 'reference' ? 'selected' : ''}>ตัวอย่างอ้างอิง</option><option value="case" ${specimen?.role === 'case' ? 'selected' : ''}>Case Study</option><option value="unknown" ${!['patient','donor','reference','case'].includes(String(specimen?.role || '')) ? 'selected' : ''}>ยังไม่ระบุ</option></select></label>
+            <label>ABO<input class="input" data-structure-abo value="${esc(specimen?.abo_group || '')}" placeholder="เช่น O"></label>
+            <label>Rh<select class="select" data-structure-rh><option value="" ${!specimen?.rh_type ? 'selected' : ''}>ไม่ระบุ</option><option value="Positive" ${specimen?.rh_type === 'Positive' ? 'selected' : ''}>Positive</option><option value="Negative" ${specimen?.rh_type === 'Negative' ? 'selected' : ''}>Negative</option></select></label>
+          </div>`).join('')}</div>
+          <div class="round-structure-subhead"><strong>คู่ Crossmatch / ความสัมพันธ์</strong><button type="button" class="btn btn-outline btn-sm" data-add-structure-relationship="${programIndex}">＋ เพิ่มคู่</button></div>
+          <div class="round-structure-relationship-list" data-structure-relationships>${relationships.map((relationship, relationshipIndex) => `<div class="round-structure-relationship" data-structure-relationship="${relationshipIndex}">
+            <select class="select" data-structure-from>${specimenOptions.map(([id, label]) => `<option value="${esc(id)}" ${String(relationship?.from_specimen || '') === id ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select><span>×</span><select class="select" data-structure-to>${specimenOptions.map(([id, label]) => `<option value="${esc(id)}" ${String(relationship?.to_specimen || '') === id ? 'selected' : ''}>${esc(label)}</option>`).join('')}</select><input class="input" data-structure-relation-note value="${esc(relationship?.note || '')}" placeholder="หมายเหตุ"><button type="button" class="btn btn-danger btn-sm" data-remove-structure-relationship>ลบ</button>
+          </div>`).join('')}</div>
+        </section>`;
+      }).join('')}</div>`;
+  }
+
+  function providerCollectStructureSchema(schema, status = 'draft') {
+    const copy = JSON.parse(JSON.stringify(schema || {}));
+    document.querySelectorAll('[data-structure-program]').forEach((programNode) => {
+      const programIndex = Number(programNode.dataset.structureProgram);
+      const program = copy.programs?.[programIndex];
+      if (!program) return;
+      program.scope = String(programNode.querySelector('[data-structure-scope]')?.value || 'OTHER');
+      program.challenge_mode = String(programNode.querySelector('[data-structure-challenge]')?.value || 'unknown');
+      programNode.querySelectorAll('[data-structure-specimen]').forEach((specimenNode) => {
+        const specimenIndex = Number(specimenNode.dataset.structureSpecimen);
+        const specimen = program.specimens?.[specimenIndex];
+        if (!specimen) return;
+        specimen.label = String(specimenNode.querySelector('[data-structure-label]')?.value || specimen.id || '').trim();
+        specimen.role = String(specimenNode.querySelector('[data-structure-role]')?.value || 'unknown');
+        specimen.abo_group = String(specimenNode.querySelector('[data-structure-abo]')?.value || '').trim().toUpperCase();
+        specimen.rh_type = String(specimenNode.querySelector('[data-structure-rh]')?.value || '');
+        specimen.provider_group_text = [specimen.abo_group ? `Blood Group ${specimen.abo_group}` : '', specimen.rh_type ? `Rh ${specimen.rh_type}` : ''].filter(Boolean).join(', ');
+      });
+      program.relationships = [...programNode.querySelectorAll('[data-structure-relationship]')].map((row) => ({
+        type: 'crossmatch',
+        from_specimen: String(row.querySelector('[data-structure-from]')?.value || '').trim(),
+        to_specimen: String(row.querySelector('[data-structure-to]')?.value || '').trim(),
+        note: String(row.querySelector('[data-structure-relation-note]')?.value || '').trim(),
+        source_reference: 'ตรวจและยืนยันโดยผู้ดูแลระบบ'
+      })).filter((relationship) => relationship.from_specimen && relationship.to_specimen && relationship.from_specimen !== relationship.to_specimen);
+    });
+    copy.structure_review = {
+      ...(copy.structure_review || {}),
+      status,
+      version: '2.7.0',
+      reviewed_at: new Date().toISOString(),
+      confirmed_at: status === 'confirmed' ? new Date().toISOString() : null,
+      confirmed_by: status === 'confirmed' ? state.user.id : null
+    };
+    return copy;
+  }
+
+  async function providerSaveRoundStructure(round, schema, status) {
+    const payload = providerCollectStructureSchema(schema, status);
+    const { data, error } = await state.supabase.rpc('ec_save_round_structure', { p_round_id: round.id, p_schema: payload, p_status: status });
+    if (error) throw error;
+    state.currentRound = { ...round, generated_result_form_schema: data?.generated_result_form_schema || payload };
+    return state.currentRound.generated_result_form_schema;
+  }
+
+  function providerBindStructureEditor(round, schema) {
+    document.querySelectorAll('[data-add-structure-relationship]').forEach((button) => button.addEventListener('click', () => {
+      const programIndex = Number(button.dataset.addStructureRelationship);
+      const programNode = document.querySelector(`[data-structure-program="${programIndex}"]`);
+      const program = schema?.programs?.[programIndex];
+      const options = providerStructureSpecimenOptions(program);
+      if (options.length < 2) return toast('ต้องมีตัวอย่างอย่างน้อย 2 รายการก่อนเพิ่มคู่ Crossmatch', 'warning');
+      const list = programNode?.querySelector('[data-structure-relationships]');
+      if (!list) return;
+      const row = document.createElement('div');
+      row.className = 'round-structure-relationship';
+      row.dataset.structureRelationship = String(list.children.length);
+      const optionHtml = options.map(([id, label]) => `<option value="${esc(id)}">${esc(label)}</option>`).join('');
+      row.innerHTML = `<select class="select" data-structure-from>${optionHtml}</select><span>×</span><select class="select" data-structure-to>${optionHtml}</select><input class="input" data-structure-relation-note placeholder="หมายเหตุ"><button type="button" class="btn btn-danger btn-sm" data-remove-structure-relationship>ลบ</button>`;
+      list.appendChild(row);
+      row.querySelector('[data-remove-structure-relationship]')?.addEventListener('click', () => row.remove());
+    }));
+    document.querySelectorAll('[data-remove-structure-relationship]').forEach((button) => button.addEventListener('click', () => button.closest('[data-structure-relationship]')?.remove()));
+  }
+
+  function providerPrepareStructureSchema(schema) {
+    const copy = JSON.parse(JSON.stringify(schema || {}));
+    (copy.programs || []).forEach((program) => {
+      program.scope = ['J','JE','JE1','JXM'].includes(String(program?.scope || '').toUpperCase()) ? String(program.scope).toUpperCase() : providerProgramScope(program);
+      program.challenge_mode = String(program?.challenge_mode || 'unknown');
+      if (!Array.isArray(program.specimens)) program.specimens = [];
+      if (!Array.isArray(program.relationships)) program.relationships = [];
+      const ids = new Set(program.specimens.map((item) => String(item?.id || item?.label || '').trim()).filter(Boolean));
+      program.relationships.forEach((relationship) => {
+        [relationship?.from_specimen, relationship?.to_specimen].forEach((raw) => {
+          const id = String(raw || '').trim();
+          if (id && !ids.has(id)) { program.specimens.push({ id, label: id, role: 'unknown', abo_group: '', rh_type: '', provider_group_text: '', source_reference: relationship?.source_reference || '' }); ids.add(id); }
+        });
+      });
+      program.specimens = program.specimens.map((specimen) => {
+        const text = `${specimen?.label || ''} ${program?.title || ''} ${program?.description || ''}`;
+        const role = ['patient','donor','reference','case','unknown'].includes(String(specimen?.role || ''))
+          ? String(specimen.role)
+          : (/\bDONOR\b/i.test(text) ? 'donor' : String(program.challenge_mode).toLowerCase() === 'dry' ? 'case' : 'patient');
+        const abo = String(specimen?.abo_group || text.match(/(?:BLOOD\s+GROUP|GROUP)\s*(AB|A|B|O)\b/i)?.[1] || '').toUpperCase();
+        const rhRaw = String(specimen?.rh_type || text.match(/RH(?:\s*TYPE)?\s*[:\-]?\s*(POSITIVE|NEGATIVE|POS|NEG|\+|\-)/i)?.[1] || '').toUpperCase();
+        const rh = /POS|\+/.test(rhRaw) ? 'Positive' : /NEG|\-/.test(rhRaw) ? 'Negative' : '';
+        return { ...specimen, role, abo_group: abo, rh_type: rh, provider_group_text: String(specimen?.provider_group_text || [abo ? `Blood Group ${abo}` : '', rh ? `Rh ${rh}` : ''].filter(Boolean).join(', ')), source_reference: String(specimen?.source_reference || '') };
+      });
+    });
+    return copy;
+  }
+
+  function openRoundStructureReview(round) {
+    const rawSchema = generatedResultSchema(round);
+    if (!rawSchema) return toast('กรุณาสร้างแบบกรอกจาก Blank Result Form ก่อน', 'warning');
+    const schema = providerPrepareStructureSchema(rawSchema);
+    showModal('ตรวจโครงสร้างรอบจาก Blank Result Form', providerStructureReviewHtml(schema), `<button class="btn btn-outline" data-close-modal>ปิด</button><button class="btn btn-secondary" id="save-round-structure-draft">บันทึกร่าง</button><button class="btn btn-primary" id="confirm-round-structure">ยืนยันและเปิดใช้งาน</button>`, true);
+    providerBindStructureEditor(round, schema);
+    document.getElementById('save-round-structure-draft')?.addEventListener('click', async () => {
+      try { await providerSaveRoundStructure(round, schema, 'draft'); closeModal(); toast('บันทึกร่างโครงสร้างแล้ว', 'success'); route(); }
+      catch (error) { toast(friendlyError(error), 'danger'); }
+    });
+    document.getElementById('confirm-round-structure')?.addEventListener('click', async () => {
+      try { await providerSaveRoundStructure(round, schema, 'confirmed'); closeModal(); toast('ยืนยันโครงสร้างรอบแล้ว', 'success'); route(); }
+      catch (error) { toast(friendlyError(error), 'danger'); }
+    });
   }
 
   const PROVIDER_THAI_EXACT = Object.freeze({
@@ -2671,6 +2866,8 @@
   ]);
 
   function providerProgramScope(program) {
+    const explicitScope = String(program?.scope || '').toUpperCase();
+    if (['J','JE','JE1','JXM'].includes(explicitScope)) return explicitScope;
     const challengeMode = String(program?.challenge_mode || '').toLowerCase();
     const specimenText = (Array.isArray(program?.specimens) ? program.specimens : [])
       .map((item) => `${item?.id || ''} ${item?.label || ''}`)
@@ -2884,71 +3081,68 @@
 
   function providerGroupSpecimens(group, schema) {
     const map = new Map();
-    const legacyJa = isLegacyCapJJeARound(state.currentRound);
     group.programs.forEach((program) => {
       (program.specimens || []).forEach((item) => {
         const id = String(item?.id || item?.label || '').trim();
-        if (id && !map.has(id)) map.set(id, String(item?.label || id));
-      });
-      // For the legacy JA round, relationship-only donor IDs are displayed as a
-      // relationship chip, not as a separate answer tab. Other rounds keep the
-      // existing behaviour because their provider schemas may require it.
-      if (!legacyJa) {
-        (program.relationships || []).forEach((relationship) => {
-          [relationship?.from_specimen, relationship?.to_specimen].forEach((raw) => {
-            const id = String(raw || '').trim();
-            if (id && !map.has(id)) map.set(id, id);
-          });
+        if (!id) return;
+        const current = map.get(id) || {};
+        map.set(id, {
+          ...current,
+          ...item,
+          id,
+          label: String(item?.label || current?.label || id),
+          role: String(item?.role || current?.role || 'unknown')
         });
-      }
+      });
+      // Relationship-only IDs remain available, but are marked unknown until the
+      // Admin confirms the structure. This avoids hard-coding JA/JB specimen numbers.
+      (program.relationships || []).forEach((relationship) => {
+        [relationship?.from_specimen, relationship?.to_specimen].forEach((raw) => {
+          const id = String(raw || '').trim();
+          if (id && !map.has(id)) map.set(id, { id, label: id, role: 'unknown' });
+        });
+      });
     });
     (schema?.antigen_sections || []).forEach((section) => {
       const id = String(section?.specimen_id || '').trim();
       if (!id) return;
       const inferred = providerProgramScope({ key: id, specimens: [{ id }] });
-      if (inferred === group.scope && !map.has(id)) map.set(id, id);
+      if (inferred === group.scope && !map.has(id)) map.set(id, { id, label: id, role: 'unknown' });
     });
-    let rows = [...map.entries()].map(([id, label]) => ({ id, label, sourceIds: [id] }));
-    // Part J commonly uses a red-cell/serum pair for one challenge. Schema
-    // versions may represent it as J-08R/J-08S, or as separate J-08R and J-08S.
-    // Merge them into one tab while retaining every source ID for data binding.
-    if (group.scope === 'J') {
+
+    let rows = [...map.values()].map((item) => ({ ...item, sourceIds: [item.id] }));
+
+    const mergePhysicalPairs = (items, prefix) => {
       const pairedByBase = new Map();
       const unpaired = [];
-      rows.forEach((row) => {
-        if (/\bDONOR\b/i.test(String(row.label || ''))) { unpaired.push(row); return; }
-        const matches = [...`${row.id || ''} ${row.label || ''}`.matchAll(/\b(J[-_ ]?\d{1,2})(R|S)\b/gi)];
-        if (!matches.length) { unpaired.push(row); return; }
-        const base = matches[0][1].replace(/[_ ]+/g, '-').toUpperCase();
+      items.forEach((row) => {
+        const isDonor = row.role === 'donor' || /\bDONOR\b/i.test(String(row.label || ''));
+        if (isDonor) { unpaired.push(row); return; }
+        const match = `${row.id || ''} ${row.label || ''}`.match(new RegExp(`\\b(${prefix}[-_ ]?\\d{1,3})(R|S)\\b`, 'i'));
+        if (!match) { unpaired.push(row); return; }
+        const base = match[1].replace(/[_ ]+/g, '-').toUpperCase();
         if (!pairedByBase.has(base)) pairedByBase.set(base, []);
         pairedByBase.get(base).push(row);
       });
-      rows = [...pairedByBase.entries()].map(([base, members]) => {
+      const pairedRows = [...pairedByBase.entries()].map(([base, members]) => {
         const sourceIds = [...new Set(members.flatMap((row) => row.sourceIds || [row.id]))];
         const hasR = members.some((row) => /R\b/i.test(`${row.id || ''} ${row.label || ''}`));
         const hasS = members.some((row) => /S\b/i.test(`${row.id || ''} ${row.label || ''}`));
-        if (hasR && hasS) return { id: `${base}R/${base}S`, label: `${base}R / ${base}S`, sourceIds };
+        if (hasR && hasS) return { ...members[0], id: `${base}R/${base}S`, label: `${base}R / ${base}S`, sourceIds, role: 'patient' };
         return { ...members[0], sourceIds };
-      }).concat(unpaired);
+      });
+      return pairedRows.concat(unpaired);
+    };
+
+    if (group.scope === 'J') rows = mergePhysicalPairs(rows, 'J');
+    if (group.scope === 'JE') {
+      // A donor used only as a Crossmatch reference belongs in the relationship,
+      // not as a separate JE answer tab. This works for JE-07, future JE specimens,
+      // and future rounds with different donor numbers.
+      rows = rows.filter((row) => !(row.role === 'donor' || /\bDONOR\b/i.test(String(row.label || ''))));
+      rows = mergePhysicalPairs(rows, 'JE');
     }
-    // In CAP J/JE-A 2026, J-06R is the donor / antigen-typing specimen from
-    // Part J. It may be referenced by JE-07 crossmatch, but it must not become
-    // a separate answer tab inside Part JE.
-    if (legacyJa && group.scope === 'JE') {
-      rows = rows.filter((row) => !/^J-?0?6R?\b/i.test(String(row.id || '')));
-    }
-    // JA 2026 uses JE-07S (serum) and JE-07R (red cells) as two physical
-    // components of the same challenge. Show one JE-07 tab and one result form.
-    if (legacyJa && group.scope === 'JE') {
-      const paired = rows.filter((row) => /^JE-?0?7[RS]?\b/i.test(String(row.id || '')));
-      if (paired.length) {
-        rows = rows.filter((row) => !paired.includes(row));
-        const sourceRank = (value) => /S\b/i.test(String(value)) ? 0 : /R\b/i.test(String(value)) ? 1 : 2;
-        const sourceIds = [...new Set(paired.flatMap((row) => row.sourceIds || [row.id]))]
-          .sort((a, b) => sourceRank(a) - sourceRank(b) || a.localeCompare(b, 'en'));
-        rows.push({ id: 'JE-07', label: 'JE-07', sourceIds });
-      }
-    }
+
     return rows.sort((a, b) => providerSpecimenOrder(a.id) - providerSpecimenOrder(b.id) || a.id.localeCompare(b.id, 'en'));
   }
 
@@ -3004,8 +3198,10 @@
   function providerDonorMetadata(group, specimen) {
     const sourceIds = Array.isArray(specimen?.sourceIds) && specimen.sourceIds.length ? specimen.sourceIds : [specimen?.id];
     const idText = sourceIds.join(' ');
-    const contextRows = [String(specimen?.label || ''), idText];
-    let explicitDonor = /\bDONOR\b/i.test(contextRows.join(' '));
+    const schemaSpecimens = (group?.programs || []).flatMap((program) => (program?.specimens || []).filter((item) => sourceIds.some((id) => providerSpecimenIdMatches(item?.id || item?.label, id))));
+    const explicitRole = schemaSpecimens.map((item) => String(item?.role || '')).find(Boolean) || '';
+    const contextRows = [String(specimen?.label || ''), idText, ...schemaSpecimens.flatMap((item) => [item?.label, item?.provider_group_text, item?.source_reference])];
+    let explicitDonor = explicitRole === 'donor' || /\bDONOR\b/i.test(contextRows.join(' '));
 
     (group?.programs || []).forEach((program) => {
       const programText = providerProgramText(program);
@@ -3034,10 +3230,12 @@
     const isDonor = explicitDonor || relationshipDonor;
     const combined = contextRows.join(' ');
     const donorId = sourceIds.find((id) => /(?:JE|J)[-_ ]?\d{1,2}R\b/i.test(String(id))) || sourceIds[0] || specimen?.id || 'Donor';
+    const explicitAbo = schemaSpecimens.map((item) => String(item?.abo_group || '').trim()).find(Boolean) || '';
+    const explicitRh = schemaSpecimens.map((item) => String(item?.rh_type || '').trim()).find(Boolean) || '';
     const groupMatch = combined.match(/(?:BLOOD\s+GROUP|GROUP)\s*(AB|A|B|O)\b/i);
     const rhMatch = combined.match(/RH(?:\s*TYPE)?\s*[:\-]?\s*(POSITIVE|NEGATIVE|POS|NEG|\+|\-)/i);
-    let abo = groupMatch ? groupMatch[1].toUpperCase() : '';
-    const rhRaw = String(rhMatch?.[1] || '').toUpperCase();
+    let abo = explicitAbo.toUpperCase() || (groupMatch ? groupMatch[1].toUpperCase() : '');
+    const rhRaw = String(explicitRh || rhMatch?.[1] || '').toUpperCase();
     let rh = /POS|\+/.test(rhRaw) ? 'Positive' : /NEG|\-/.test(rhRaw) ? 'Negative' : '';
     // Current CAP J/JE 2026 blank forms explicitly identify these donor units.
     // Keep a deterministic fallback so an older generated schema still renders
@@ -5381,6 +5579,7 @@
     };
 
     document.getElementById('generate-form-only')?.addEventListener('click', () => openBundleModal('form'));
+    document.getElementById('review-round-structure')?.addEventListener('click', () => openRoundStructureReview(round));
     document.getElementById('generate-instruction-only')?.addEventListener('click', () => openBundleModal('instructions'));
     document.getElementById('generate-questions-only')?.addEventListener('click', () => openBundleModal('questions'));
     document.getElementById('generate-answer-keys')?.addEventListener('click', () => openBundleModal('answers'));

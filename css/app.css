@@ -2379,3 +2379,22 @@ tr:last-child td { border-bottom: 0; }
   .provider-donor-blood-group { text-align: left; }
   .provider-crossmatch-specimen-title { align-items: flex-start; flex-direction: column; }
 }
+
+
+/* v2.7.0 — Dynamic round structure review */
+.round-structure-editor{display:grid;gap:16px;margin-top:14px}
+.round-structure-program{border:1px solid var(--line,#d9e4ec);border-radius:18px;background:#f8fbfd;padding:16px;display:grid;gap:14px}
+.round-structure-program-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+.round-structure-program-head h3{margin:2px 0 6px}
+.round-structure-program-controls{display:grid;grid-template-columns:repeat(2,minmax(180px,1fr));gap:10px;min-width:min(100%,420px)}
+.round-structure-program-controls label,.round-structure-specimen label{font-size:.82rem;font-weight:700;color:#38536a;display:grid;gap:5px}
+.structure-test-badges{display:flex;flex-wrap:wrap;gap:6px}
+.structure-test-badges span{background:#e8f5fb;border:1px solid #c8e6f3;border-radius:999px;padding:3px 8px;font-size:.76rem;color:#1c617b}
+.round-structure-subhead{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #dce8ef;padding-top:12px}
+.round-structure-specimen-list,.round-structure-relationship-list{display:grid;gap:8px}
+.round-structure-specimen{display:grid;grid-template-columns:minmax(120px,.7fr) minmax(220px,1.5fr) minmax(150px,1fr) minmax(90px,.55fr) minmax(120px,.7fr);gap:8px;align-items:end;background:white;border:1px solid #dce8ef;border-radius:14px;padding:10px}
+.structure-specimen-id{display:grid;gap:3px;align-self:center}.structure-specimen-id small{color:#6b7f91;overflow-wrap:anywhere}
+.round-structure-relationship{display:grid;grid-template-columns:minmax(160px,1fr) auto minmax(160px,1fr) minmax(220px,1.3fr) auto;gap:8px;align-items:center;background:white;border:1px solid #dce8ef;border-radius:14px;padding:10px}
+.text-success{color:#177347}.text-warning{color:#996515}.text-info{color:#176b8c}
+@media(max-width:900px){.round-structure-program-head{display:grid}.round-structure-program-controls{grid-template-columns:1fr;width:100%}.round-structure-specimen{grid-template-columns:1fr 1fr}.structure-specimen-id{grid-column:1/-1}.round-structure-relationship{grid-template-columns:1fr}.round-structure-relationship>span{display:none}}
+@media(max-width:560px){.round-structure-program{padding:12px}.round-structure-specimen{grid-template-columns:1fr}.round-structure-subhead{align-items:flex-start;gap:8px}.round-structure-relationship{padding:8px}}
