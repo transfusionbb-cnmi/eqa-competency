@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.7.0
+/* CNMI EQA and Competency Management System v2.7.1
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -791,7 +791,7 @@
   function canReceiveEqa() { return hasRole('staff', 'qm', 'admin'); }
   function canImportHistoricalEqa() { return hasRole('admin', 'qm'); }
   function isHistoricalRound(round) { return round?.round_mode === 'historical_import'; }
-  function isCompetencyParticipant() { return hasRole('staff') && !hasRole('physician'); }
+  function isCompetencyParticipant() { return hasRole('staff', 'admin') && !hasRole('physician'); }
 
   function visibleRoutesForActiveRole() {
     const role = state.activeRole || 'staff';
@@ -6615,10 +6615,6 @@
   async function renderAssignment(id) {
     const assignedStaff = hasAssignedRole('staff') && !hasAssignedRole('physician');
     if (!assignedStaff) return navigate('dashboard');
-    if (state.activeRole !== 'staff') {
-      state.activeRole = 'staff';
-      localStorage.setItem(roleStorageKey(), 'staff');
-    }
     const { data: assignment, error } = await state.supabase.from('ec_competency_assignments').select('*,ec_eqa_rounds(*)').eq('id', id).eq('user_id', state.user.id).single();
     if (error) return renderError(error);
     const { data: competencyEvidenceRows, error: competencyEvidenceError } = await state.supabase.from('ec_work_evidence')
@@ -7455,10 +7451,6 @@
     if(state.profile?.must_change_password){await renderForcePassword();return;}
     const parts=currentRoute().split('/');
     const requestedRoute = parts[0] || 'dashboard';
-    if ((requestedRoute === 'my-competency' || requestedRoute === 'assignment') && hasAssignedRole('staff') && !hasAssignedRole('physician') && state.activeRole !== 'staff') {
-      state.activeRole = 'staff';
-      localStorage.setItem(roleStorageKey(), 'staff');
-    }
     if (!canViewRoute(requestedRoute)) {
       if (requestedRoute !== 'dashboard') { navigate('dashboard'); return; }
     }
