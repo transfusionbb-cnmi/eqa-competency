@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.7.3
+/* CNMI EQA and Competency Management System v2.7.4
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -3292,7 +3292,7 @@
       return currentLooksRbc && otherLooksSerum && (/DONOR/i.test(relationText) || !/DONOR/i.test(String(other)));
     }));
 
-    const isDonor = explicitDonor || relationshipDonor;
+    let isDonor = explicitDonor || relationshipDonor;
     const combined = contextRows.join(' ');
     const donorId = sourceIds.find((id) => /(?:JE|J)[-_ ]?\d{1,2}R\b/i.test(String(id))) || sourceIds[0] || specimen?.id || 'Donor';
     const explicitAbo = schemaSpecimens.map((item) => String(item?.abo_group || '').trim()).find(Boolean) || '';
@@ -3307,6 +3307,11 @@
     // the correct provider-supplied donor group without asking staff to re-enter it.
     const normalizedDonor = providerCanonicalSpecimenId(donorId);
     const roundCode = String(state.currentRound?.round_code || '').toUpperCase();
+    // Legacy generated schemas may omit role=donor even though the official
+    // CAP J-A/J-B form identifies these reference red-cell specimens as donors.
+    // Mark them deterministically so patient tabs never inherit donor-only fields.
+    if (normalizedDonor === 'J06R' && /J\/?JE-A|J-A/.test(roundCode)) isDonor = true;
+    if (normalizedDonor === 'J13R' && /J\/?JE-B|J-B/.test(roundCode)) isDonor = true;
     // CAP J-A 2026 page 4 explicitly identifies Donor J-06R as
     // Blood Group O, Rh Positive. Keep a deterministic fallback for legacy
     // generated schemas that omitted the provider-supplied donor group.
@@ -3528,6 +3533,12 @@
           // J-06R or J-13R). Apply the whole antigen block only to its stated
           // specimen so patient tabs do not inherit donor-only questions.
           if (category === 'antigen') {
+            // CAP Part J patient specimens do not contain Red Cell Antigen
+            // questions. In J-A and J-B these questions belong only to the
+            // donor/reference red-cell specimen, so suppress them on every
+            // non-donor Part J tab even when an old AI schema attached an
+            // explicit patient ID or copied the block to all specimens.
+            if (group.scope === 'J' && !donorMeta.isDonor) return;
             const fieldTargets = providerExplicitFieldSpecimenIds(field);
             const programTargets = providerProgramAntigenTargetSpecimenIds(program);
             const applicableTargets = fieldTargets.length ? fieldTargets : programTargets;
@@ -3599,22 +3610,28 @@
         });
       }
 
-      (schema?.antigen_sections || []).filter((section) => sourceIds.includes(String(section?.specimen_id || ''))).forEach((section) => {
-        const antigenSpecimenId = String(section?.specimen_id || specimen.id);
-        const values = antigenTyping[antigenSpecimenId] || {};
-        (section.fields || []).forEach((field) => {
-          const fieldKey = String(field?.key || '');
-          const context = { program: section, category: 'antigen' };
-          const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="antigen" data-provider-item="${esc(antigenSpecimenId)}" data-provider-field="${esc(fieldKey)}"`;
-          categorized.get('antigen').push({
-            program: section,
-            field,
-            context,
-            displayLabel: providerScopedFieldLabel(field, [antigenSpecimenId]),
-            html: generatedFieldControl(field, values[fieldKey], attrs, disabled, context)
+      // antigen_sections is a second, legacy storage path separate from
+      // program.specimen_fields. It previously bypassed the Part J donor-only
+      // filter above and re-added “Identification of Red Cell Antigens” to
+      // J-01–J-05 and J-08–J-12. Apply the same hard scope here.
+      if (!(group.scope === 'J' && !donorMeta.isDonor)) {
+        (schema?.antigen_sections || []).filter((section) => sourceIds.includes(String(section?.specimen_id || ''))).forEach((section) => {
+          const antigenSpecimenId = String(section?.specimen_id || specimen.id);
+          const values = antigenTyping[antigenSpecimenId] || {};
+          (section.fields || []).forEach((field) => {
+            const fieldKey = String(field?.key || '');
+            const context = { program: section, category: 'antigen' };
+            const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="antigen" data-provider-item="${esc(antigenSpecimenId)}" data-provider-field="${esc(fieldKey)}"`;
+            categorized.get('antigen').push({
+              program: section,
+              field,
+              context,
+              displayLabel: providerScopedFieldLabel(field, [antigenSpecimenId]),
+              html: generatedFieldControl(field, values[fieldKey], attrs, disabled, context)
+            });
           });
         });
-      });
+      }
       const linkedCrossmatchSpecimens = donorMeta.isDonor ? providerLinkedCrossmatchSpecimens(group, donorMeta) : [];
       const categoryKeysWithRows = [...categorized.entries()].filter(([, rows]) => rows.length).map(([key]) => key);
       if (donorMeta.isDonor && linkedCrossmatchSpecimens.length) categoryKeysWithRows.push('crossmatch');
