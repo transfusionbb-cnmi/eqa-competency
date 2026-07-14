@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.7.1
+/* CNMI EQA and Competency Management System v2.7.2
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -3180,6 +3180,34 @@
     return Boolean(a && b && (a === b || a.includes(b) || b.includes(a)));
   }
 
+  function providerExplicitFieldSpecimenIds(field) {
+    const text = [field?.key, field?.label, field?.placeholder, field?.source_reference]
+      .map((value) => String(value || ''))
+      .join(' ')
+      .toUpperCase();
+    const ids = [];
+    const pattern = /(?:^|[^A-Z0-9])(?:DONOR[^A-Z0-9]*)?((?:JE|J)[^A-Z0-9]*\d{1,3}[RS]?)(?=$|[^A-Z0-9])/g;
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      const id = providerCanonicalSpecimenId(match[1]);
+      if (id) ids.push(id);
+    }
+    return [...new Set(ids)];
+  }
+
+  function providerProgramAntigenTargetSpecimenIds(program) {
+    return [...new Set((program?.specimen_fields || [])
+      .flatMap((field) => providerExplicitFieldSpecimenIds(field)))];
+  }
+
+  function providerTargetIdsMatchSpecimen(targetIds, specimenIds) {
+    if (!targetIds?.length) return true;
+    const ids = (Array.isArray(specimenIds) ? specimenIds : [specimenIds])
+      .map((value) => providerCanonicalSpecimenId(value))
+      .filter(Boolean);
+    return targetIds.some((target) => ids.some((id) => providerSpecimenIdMatches(target, id)));
+  }
+
   function providerProgramText(program) {
     return [
       program?.key,
@@ -3458,6 +3486,16 @@
           if (providerIsWorksheetReactionField(program, field)) return;
           const fieldKey = String(field?.key || '');
           const category = providerFieldCategory(program, field);
+          // A provider program can list all Part J specimens even when an Antigen
+          // typing block is explicitly labelled for one donor (for example Donor
+          // J-06R or J-13R). Apply the whole antigen block only to its stated
+          // specimen so patient tabs do not inherit donor-only questions.
+          if (category === 'antigen') {
+            const fieldTargets = providerExplicitFieldSpecimenIds(field);
+            const programTargets = providerProgramAntigenTargetSpecimenIds(program);
+            const applicableTargets = fieldTargets.length ? fieldTargets : programTargets;
+            if (!providerTargetIdsMatchSpecimen(applicableTargets, sourceIds)) return;
+          }
           // Part J donor/reference specimens are not patient samples. Their ABO/Rh
           // group is supplied on the CAP form, so the answer form keeps only donor
           // antigen typing. Crossmatch is rendered once as a donor-centred matrix.
@@ -6797,9 +6835,12 @@
         const startResult = await state.supabase.rpc('ec_start_competency', { p_assignment_id: id });
         if (startResult.error) toast(friendlyError(startResult.error), 'danger');
 
-        const saveForm = async () => {
+        const saveForm = async (validateForSubmit = false) => {
           const form = document.getElementById('competency-result-form');
-          if (!form?.reportValidity()) throw new Error('กรุณากรอกช่องบังคับในแบบผลให้ครบ');
+          if (!form) throw new Error('ไม่พบแบบประเมิน กรุณาเปิดหน้าใหม่อีกครั้ง');
+          // Drafts must accept incomplete forms. Full required-field validation is
+          // performed only when the user confirms final submission.
+          if (validateForSubmit && !form.reportValidity()) throw new Error('กรุณากรอกช่องบังคับในแบบผลให้ครบ');
           const payload = collectResultPayload(form, 'competencyResult');
           if (!payload || !resultPayloadHasData(payload)) throw new Error('กรุณากรอกผลอย่างน้อย 1 รายการก่อนบันทึก');
           const { error: resultError } = await state.supabase.rpc('ec_save_competency_result', { p_assignment_id: id, p_result_payload: payload });
@@ -6822,12 +6863,12 @@
         };
 
         document.getElementById('save-competency-form').onclick = async () => {
-          try { await saveForm(); toast('บันทึกร่างแบบประเมินแล้ว', 'success'); } catch (saveError) { toast(friendlyError(saveError), 'danger'); }
+          try { await saveForm(false); toast('บันทึกร่างแบบประเมินแล้ว', 'success'); } catch (saveError) { toast(friendlyError(saveError), 'danger'); }
         };
         document.getElementById('submit-competency-form').onclick = async () => {
           if (!confirm('ยืนยันส่งผลการแปลจากภาพหรือไม่ หลังส่งจะแก้ไขไม่ได้')) return;
           try {
-            await saveForm();
+            await saveForm(true);
             const { error: submitError } = await state.supabase.rpc('ec_submit_competency', { p_assignment_id: id });
             if (submitError) throw submitError;
             await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: 'submitted' }, true);
