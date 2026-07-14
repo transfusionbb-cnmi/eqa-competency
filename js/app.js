@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.7.2
+/* CNMI EQA and Competency Management System v2.7.3
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -2815,8 +2815,33 @@
     return dynamic ? String(dynamic[1]).trim() : '';
   }
 
+  function providerPreferredSpecimenAnswerId(specimenIds = []) {
+    const ids = (Array.isArray(specimenIds) ? specimenIds : [specimenIds])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean);
+    return ids.find((id) => /S\b/i.test(id)) || ids[0] || '';
+  }
+
+  function providerScopedFieldLabel(field, specimenIds = []) {
+    let label = providerCapFieldLabel(field);
+    const currentSpecimenId = providerPreferredSpecimenAnswerId(specimenIds);
+    if (!currentSpecimenId) return label;
+
+    const specimenMatch = String(currentSpecimenId).toUpperCase().match(/(?:JE|J)[-_ ]?\d{1,3}[RS]?/);
+    const displayId = specimenMatch ? specimenMatch[0].replace(/[_ ]+/g, '-') : String(currentSpecimenId).trim();
+    const specimenRange = /(?:JE|J)[-_ ]?\d{1,3}[RS]?\s*(?:\.{2,3}|…|–|—|\bTO\b|\bTHROUGH\b)\s*(?:JE|J)[-_ ]?\d{1,3}[RS]?/gi;
+    const perSpecimenRange = new RegExp(`\\s*[-–—]?\\s*per\\s+specimen\\s+${specimenRange.source}`, 'gi');
+
+    if (perSpecimenRange.test(label)) {
+      label = label.replace(perSpecimenRange, ` — ${displayId}`);
+    } else {
+      label = label.replace(specimenRange, displayId);
+    }
+    return label.replace(/\s+/g, ' ').trim();
+  }
+
   function providerFieldBlock(row) {
-    const label = providerCapFieldLabel(row.field);
+    const label = String(row?.displayLabel || providerCapFieldLabel(row.field));
     const requiredMark = row.field?.required ? '<span class="cap-required" aria-label="required">*</span>' : '';
     return `<div class="cap-form-question"><div class="cap-form-question-label">${esc(label)} ${requiredMark}</div>${row.html}</div>`;
   }
@@ -3196,8 +3221,20 @@
   }
 
   function providerProgramAntigenTargetSpecimenIds(program) {
-    return [...new Set((program?.specimen_fields || [])
+    const fieldTargets = [...new Set((program?.specimen_fields || [])
       .flatMap((field) => providerExplicitFieldSpecimenIds(field)))];
+    if (fieldTargets.length) return fieldTargets;
+
+    // Some extracted schemas keep the donor/specimen reference only in the
+    // antigen section heading, not in every field label. A single target in the
+    // program heading is safe to use; a multi-specimen heading remains unscoped
+    // and is handled by the donor-only fallback during rendering.
+    const headingTargets = providerExplicitFieldSpecimenIds({
+      key: program?.key,
+      label: `${program?.title || ''} ${program?.description || ''}`,
+      source_reference: program?.source_reference
+    });
+    return headingTargets.length === 1 ? headingTargets : [];
   }
 
   function providerTargetIdsMatchSpecimen(targetIds, specimenIds) {
@@ -3494,7 +3531,13 @@
             const fieldTargets = providerExplicitFieldSpecimenIds(field);
             const programTargets = providerProgramAntigenTargetSpecimenIds(program);
             const applicableTargets = fieldTargets.length ? fieldTargets : programTargets;
-            if (!providerTargetIdsMatchSpecimen(applicableTargets, sourceIds)) return;
+            if (applicableTargets.length && !providerTargetIdsMatchSpecimen(applicableTargets, sourceIds)) return;
+            // CAP Part J places Red Cell Antigen questions on the donor/reference
+            // specimen page. Older AI schemas sometimes copied that shared block to
+            // every patient specimen without retaining “Donor J-xxR” in each field.
+            // When the round has a donor, keep unscoped antigen fields on the donor
+            // tab only. Explicit patient targets and non-Part-J programs remain valid.
+            if (!applicableTargets.length && group.scope === 'J' && groupDonors.length && !donorMeta.isDonor) return;
           }
           // Part J donor/reference specimens are not patient samples. Their ABO/Rh
           // group is supplied on the CAP form, so the answer form keeps only donor
@@ -3509,7 +3552,13 @@
           const storedValue = providerIsAboGroupResultField(field, context)
             ? (values[fieldKey] || providerStoredAboGroup(values))
             : values[fieldKey];
-          categorized.get(category).push({ program, field, context, html: generatedFieldControl(field, storedValue, attrs, disabled, context) });
+          categorized.get(category).push({
+            program,
+            field,
+            context,
+            displayLabel: providerScopedFieldLabel(field, sourceIds),
+            html: generatedFieldControl(field, storedValue, attrs, disabled, context)
+          });
         });
       });
       // Defensive cleanup for schemas generated before donor/reference rules
@@ -3557,7 +3606,13 @@
           const fieldKey = String(field?.key || '');
           const context = { program: section, category: 'antigen' };
           const attrs = `data-provider-prefix="${esc(prefix)}" data-provider-group="antigen" data-provider-item="${esc(antigenSpecimenId)}" data-provider-field="${esc(fieldKey)}"`;
-          categorized.get('antigen').push({ program: section, field, context, html: generatedFieldControl(field, values[fieldKey], attrs, disabled, context) });
+          categorized.get('antigen').push({
+            program: section,
+            field,
+            context,
+            displayLabel: providerScopedFieldLabel(field, [antigenSpecimenId]),
+            html: generatedFieldControl(field, values[fieldKey], attrs, disabled, context)
+          });
         });
       });
       const linkedCrossmatchSpecimens = donorMeta.isDonor ? providerLinkedCrossmatchSpecimens(group, donorMeta) : [];
