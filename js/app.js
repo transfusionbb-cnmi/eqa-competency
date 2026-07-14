@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.7.4
+/* CNMI EQA and Competency Management System v2.7.5
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -2686,36 +2686,58 @@
 
   function providerResolvedOptions(field, context = {}) {
     const existing = (Array.isArray(field?.options) ? field.options : []).map(providerNormalizedOption).filter((option) => option.value || option.label);
-    // Options extracted directly from the provider form always win.
-    if (existing.some((option) => option.code)) return existing;
     const text = providerFieldText(field, context);
     const upper = text.toUpperCase();
     const category = String(context?.category || '').toLowerCase();
     const cleanLabel = providerCapFieldLabel(field).toUpperCase();
     let options = null;
+    let forceCanonical = false;
+
+    // These two provider fields are frequently extracted from the blank form with
+    // malformed pseudo-codes (for example "4+ | 4+") or as free-text inputs.
+    // Always replace them with the official CAP master-list choices.
+    if (/STRENGTH\s+OF\s+REACTION/.test(upper)) {
+      options = CAP_CODE_OPTIONS.strength;
+      forceCanonical = true;
+    } else if (
+      !/INTERPRETATION|\bRESULT\b/.test(upper)
+      && (
+        /OTHER\s+RED\s+CELL\s+ANTISERA\s+USED/.test(upper)
+        || /(?:ENTER|SPECIFY)\s+ANTISERA\s+CODE/.test(upper)
+        || /ANTISERA\s+CODE\s*\d*/.test(upper)
+        || /IDENTIFICATION\s+OF\s+OTHER\s+RED\s+CELL\s+ANTIGENS/.test(upper)
+        || /ANTIGENS?\s*\/\s*ANTISERA/.test(upper)
+        || /OTHER\s+RED\s+CELL\s+ANTIGEN/.test(upper)
+      )
+    ) {
+      options = CAP_CODE_OPTIONS.otherAntigen;
+      forceCanonical = true;
+    }
+
+    // Options extracted directly from the provider form normally win, except for
+    // the two canonical CAP fields above where extracted values are unreliable.
+    if (!forceCanonical && existing.some((option) => option.code)) return existing;
 
     // Raw ABO/Rh reaction fields use the worksheet codes 1=NT, 2=POS, 3=NEG.
     // Match these before Antigen typing so Anti-A/Anti-B are never mapped to 209/210.
-    if (!/MANUFACTURER|METHOD|EXCEPTION|ANTIBODY/.test(upper) && /^(?:ANTI-A(?:1|,B)?|ANTI-B|A1 CELLS?|B CELLS?|ANTI-D|D CONTROL)(?:\s*\(|$)/.test(cleanLabel)) options = CAP_CODE_OPTIONS.reaction;
-    else if (/PRIMARY\s+ANTIBODY/.test(upper)) options = CAP_CODE_OPTIONS.antibody;
-    else if (/ADDITIONAL\s+ANTIBOD/.test(upper)) options = CAP_CODE_OPTIONS.antibody.filter((option) => !['184', '200'].includes(option.code));
-    else if (/IDENTIFICATION\s+OF\s+OTHER\s+RED\s+CELL\s+ANTIGENS|ANTIGENS?\s*\/\s*ANTISERA|OTHER\s+RED\s+CELL\s+ANTIGEN/.test(upper)) options = CAP_CODE_OPTIONS.otherAntigen;
-    else if (/SEROLOGIC\s+CROSSMATCH\s+RESULT|CROSSMATCH\s+RESULT/.test(upper)) options = CAP_CODE_OPTIONS.crossmatchResult;
-    else if (/TYPE\s+OF\s+CROSSMATCH/.test(upper)) options = CAP_CODE_OPTIONS.crossmatchType;
-    else if (/STRENGTH\s+OF\s+REACTION/.test(upper)) options = CAP_CODE_OPTIONS.strength;
-    else if (/ABO\s+SUBGROUP/.test(upper)) options = CAP_CODE_OPTIONS.aboSubgroup;
-    else if (/\bABO\s+GROUP\b/.test(upper) && !/GROUP\s*\/\s*RH/.test(upper)) options = CAP_CODE_OPTIONS.aboGroup;
-    else if (/\bRH(?:\(D\))?\s+TYPE\b|RH\s+POSITIVE|RH\s+NEGATIVE/.test(upper) && !/METHOD|MANUFACTURER/.test(upper)) options = CAP_CODE_OPTIONS.rhType;
-    else if (/UNEXPECTED\s+ANTIBODY.*(?:RESULT|DETECTION)|ANTIBODY\s+SCREEN(?:ING)?\s+RESULT/.test(upper)) options = CAP_CODE_OPTIONS.antibodyScreen;
-    else if (/SCREENING\s+CELL/.test(upper) && /CODE|BOX/.test(upper)) options = CAP_CODE_OPTIONS.screeningCell;
-    else if (/EXCEPTION\s+CODE/.test(upper)) options = CAP_CODE_OPTIONS.exception;
-    else if (/MANUFACTURER\s+CODE/.test(upper)) options = CAP_CODE_OPTIONS.manufacturer;
-    else if (/METHOD\s+CODE/.test(upper)) {
+    if (!options && !/MANUFACTURER|METHOD|EXCEPTION|ANTIBODY/.test(upper) && /^(?:ANTI-A(?:1|,B)?|ANTI-B|A1 CELLS?|B CELLS?|ANTI-D|D CONTROL)(?:\s*\(|$)/.test(cleanLabel)) options = CAP_CODE_OPTIONS.reaction;
+    else if (!options && /PRIMARY\s+ANTIBODY/.test(upper)) options = CAP_CODE_OPTIONS.antibody;
+    else if (!options && /ADDITIONAL\s+ANTIBOD/.test(upper)) options = CAP_CODE_OPTIONS.antibody.filter((option) => !['184', '200'].includes(option.code));
+    else if (!options && /SEROLOGIC\s+CROSSMATCH\s+RESULT|CROSSMATCH\s+RESULT/.test(upper)) options = CAP_CODE_OPTIONS.crossmatchResult;
+    else if (!options && /TYPE\s+OF\s+CROSSMATCH/.test(upper)) options = CAP_CODE_OPTIONS.crossmatchType;
+    else if (!options && /ABO\s+SUBGROUP/.test(upper)) options = CAP_CODE_OPTIONS.aboSubgroup;
+    else if (!options && /\bABO\s+GROUP\b/.test(upper) && !/GROUP\s*\/\s*RH/.test(upper)) options = CAP_CODE_OPTIONS.aboGroup;
+    else if (!options && /\bRH(?:\(D\))?\s+TYPE\b|RH\s+POSITIVE|RH\s+NEGATIVE/.test(upper) && !/METHOD|MANUFACTURER/.test(upper)) options = CAP_CODE_OPTIONS.rhType;
+    else if (!options && /UNEXPECTED\s+ANTIBODY.*(?:RESULT|DETECTION)|ANTIBODY\s+SCREEN(?:ING)?\s+RESULT/.test(upper)) options = CAP_CODE_OPTIONS.antibodyScreen;
+    else if (!options && /SCREENING\s+CELL/.test(upper) && /CODE|BOX/.test(upper)) options = CAP_CODE_OPTIONS.screeningCell;
+    else if (!options && /EXCEPTION\s+CODE/.test(upper)) options = CAP_CODE_OPTIONS.exception;
+    else if (!options && /MANUFACTURER\s+CODE/.test(upper)) options = CAP_CODE_OPTIONS.manufacturer;
+    else if (!options && /METHOD\s+CODE/.test(upper)) {
       if (/D\s*CONTROL/.test(upper)) options = CAP_CODE_OPTIONS.dControlMethod;
       else if (/ABO|ANTI-D|RH\s+TYPE/.test(upper) && !/ANTIBODY|CROSSMATCH/.test(upper)) options = CAP_CODE_OPTIONS.aboMethod;
       else options = CAP_CODE_OPTIONS.antibodyMethod;
     }
-    else if (category === 'antigen' && (/INTERPRETATION|\bRESULT\b|^ANTI[- ]?(?:C|E|K|FYA|FYB|JKA|JKB|LEA|LEB|P1|M|N|S)$/.test(cleanLabel))) options = CAP_CODE_OPTIONS.antigenResult;
+    else if (!options && category === 'antigen' && (/INTERPRETATION|\bRESULT\b|^ANTI[- ]?(?:C|E|K|FYA|FYB|JKA|JKB|LEA|LEB|P1|M|N|S)$/.test(cleanLabel))) options = CAP_CODE_OPTIONS.antigenResult;
 
     if (!options && existing.length) return existing;
     return (options || []).map(providerNormalizedOption);
@@ -2765,10 +2787,17 @@
   }
 
   function providerOptionMatches(option, value) {
-    const current = String(value || '').trim().toLowerCase();
+    const normalizeComparable = (input) => String(input || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[|│:–—-]+/g, ' ')
+      .replace(/\breaction\b/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const current = normalizeComparable(value);
     if (!current) return false;
     const candidates = [option?.value, option?.code, option?.label, `${option?.code || ''} │ ${option?.label || ''}`]
-      .map((item) => String(item || '').trim().toLowerCase())
+      .map(normalizeComparable)
       .filter(Boolean);
     return candidates.includes(current);
   }
@@ -4045,7 +4074,7 @@
       <div class="other-antigen-grid">
         ${otherAntigens.slice(0, slotCount).map((row, index) => `<section class="other-antigen-card">
           <div class="other-antigen-title">ตำแหน่งที่ ${index + 1}</div>
-          <div class="field"><label>ชื่อ Antigen / รหัส antisera</label><input class="input" name="${prefix}_antigen_${specimen}_other_${index}_antigen" value="${esc(row.antigen || '')}" ${disabled ? 'disabled' : ''} placeholder="เช่น 124 │ Anti-K"></div>
+          <div class="field"><label>รหัส Antisera ที่ใช้</label><select class="select cap-code-select" name="${prefix}_antigen_${specimen}_other_${index}_antigen" ${disabled ? 'disabled' : ''}><option value="">— Select —</option>${CAP_CODE_OPTIONS.otherAntigen.map((option) => `<option value="${esc(option.code)}" ${providerOptionMatches(option, row.antigen) ? 'selected' : ''}>${esc(providerOptionDisplay(option))}</option>`).join('')}</select></div>
           <div class="field"><label>ผล</label><select class="select" name="${prefix}_antigen_${specimen}_other_${index}_result" ${disabled ? 'disabled' : ''}>${selectOptions(CAP_RESULT_OPTIONS.antigen, row.result)}</select></div>
         </section>`).join('')}
       </div>

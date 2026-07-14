@@ -1,6 +1,6 @@
-/* CNMI EQA service worker v2.7.4 */
+/* CNMI EQA service worker v2.7.5 */
 const CACHE_PREFIX = 'cnmi-eqa-';
-const CACHE_NAME = `${CACHE_PREFIX}v2.7.4`;
+const CACHE_NAME = `${CACHE_PREFIX}v2.7.5`;
 const APP_SHELL = [
   './',
   './index.html',
@@ -8,7 +8,7 @@ const APP_SHELL = [
   './favicon.ico',
   './css/app.css?rev=20260713m',
   './js/config.js?rev=20260625n',
-  './js/app.js?rev=20260714q',
+  './js/app.js?rev=20260714s',
   './js/pwa-install.js?rev=20260712f',
   './assets/icons/android-chrome-192x192.png',
   './assets/icons/android-chrome-512x512.png',
