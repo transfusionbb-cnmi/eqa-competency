@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.7.5
+/* CNMI EQA and Competency Management System v2.7.6
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -2714,8 +2714,25 @@
       forceCanonical = true;
     }
 
+    // CAP reporting-code fields must use the correct master list for their own
+    // semantic role. OCR/AI extraction can mistakenly copy the Screening Cell
+    // value (for example 2207) into Manufacturer Code and Method Code, so these
+    // three fields must never reuse extracted pseudo-options.
+    if (!options && /SCREENING\s+CELL/.test(upper) && /CODE|BOX/.test(upper)) {
+      options = CAP_CODE_OPTIONS.screeningCell;
+      forceCanonical = true;
+    } else if (!options && /MANUFACTURER\s+CODE/.test(upper)) {
+      options = CAP_CODE_OPTIONS.manufacturer;
+      forceCanonical = true;
+    } else if (!options && /METHOD\s+CODE/.test(upper)) {
+      if (/D\s*CONTROL/.test(upper)) options = CAP_CODE_OPTIONS.dControlMethod;
+      else if (/ABO|ANTI-D|RH\s+TYPE/.test(upper) && !/ANTIBODY|CROSSMATCH/.test(upper)) options = CAP_CODE_OPTIONS.aboMethod;
+      else options = CAP_CODE_OPTIONS.antibodyMethod;
+      forceCanonical = true;
+    }
+
     // Options extracted directly from the provider form normally win, except for
-    // the two canonical CAP fields above where extracted values are unreliable.
+    // canonical CAP fields above where extracted values are unreliable.
     if (!forceCanonical && existing.some((option) => option.code)) return existing;
 
     // Raw ABO/Rh reaction fields use the worksheet codes 1=NT, 2=POS, 3=NEG.
@@ -2729,14 +2746,7 @@
     else if (!options && /\bABO\s+GROUP\b/.test(upper) && !/GROUP\s*\/\s*RH/.test(upper)) options = CAP_CODE_OPTIONS.aboGroup;
     else if (!options && /\bRH(?:\(D\))?\s+TYPE\b|RH\s+POSITIVE|RH\s+NEGATIVE/.test(upper) && !/METHOD|MANUFACTURER/.test(upper)) options = CAP_CODE_OPTIONS.rhType;
     else if (!options && /UNEXPECTED\s+ANTIBODY.*(?:RESULT|DETECTION)|ANTIBODY\s+SCREEN(?:ING)?\s+RESULT/.test(upper)) options = CAP_CODE_OPTIONS.antibodyScreen;
-    else if (!options && /SCREENING\s+CELL/.test(upper) && /CODE|BOX/.test(upper)) options = CAP_CODE_OPTIONS.screeningCell;
     else if (!options && /EXCEPTION\s+CODE/.test(upper)) options = CAP_CODE_OPTIONS.exception;
-    else if (!options && /MANUFACTURER\s+CODE/.test(upper)) options = CAP_CODE_OPTIONS.manufacturer;
-    else if (!options && /METHOD\s+CODE/.test(upper)) {
-      if (/D\s*CONTROL/.test(upper)) options = CAP_CODE_OPTIONS.dControlMethod;
-      else if (/ABO|ANTI-D|RH\s+TYPE/.test(upper) && !/ANTIBODY|CROSSMATCH/.test(upper)) options = CAP_CODE_OPTIONS.aboMethod;
-      else options = CAP_CODE_OPTIONS.antibodyMethod;
-    }
     else if (!options && category === 'antigen' && (/INTERPRETATION|\bRESULT\b|^ANTI[- ]?(?:C|E|K|FYA|FYB|JKA|JKB|LEA|LEB|P1|M|N|S)$/.test(cleanLabel))) options = CAP_CODE_OPTIONS.antigenResult;
 
     if (!options && existing.length) return existing;
