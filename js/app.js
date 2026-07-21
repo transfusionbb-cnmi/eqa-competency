@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.8.0
+/* CNMI EQA and Competency Management System v2.8.1
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -134,6 +134,7 @@
     official_result: 'รายงานผลประเมินอย่างเป็นทางการ (Official Evaluation)',
     participant_summary: 'รายงานเปรียบเทียบผู้เข้าร่วม (Participant Summary)',
     antibody_panel: 'แผงเซลล์ Antibody Identification / Antigram',
+    quiz_image: 'รูปประกอบข้อสอบ Competency',
     corrective_action: 'หลักฐานการแก้ไขและป้องกัน',
     closure_report: 'รายงานสรุปปิดรอบ',
     other: 'เอกสารอื่น ๆ'
@@ -148,6 +149,7 @@
     official_result: 'Original Evaluation หรือรายงานที่มี Intended Response / Grade ใช้เป็นแหล่งหลักของเฉลยและคะแนน',
     participant_summary: 'Participant Summary หรือ PSR ใช้เทียบสัดส่วนคำตอบของห้องอื่น และใช้ประเมิน Educational Challenge',
     antibody_panel: 'Antigram หรือ Panel cell profile ใช้จับคู่ปฏิกิริยากับ antigen profile สำหรับ Antibody Identification อัปโหลดได้หลาย Panel/หลาย Lot และตั้งชื่อ PanelA, PanelB, PanelC ตามลำดับ ไม่ใช่ภาพผลตัวอย่างและไม่ใช่เฉลย',
+    quiz_image: 'รูปที่แอดมินผูกไว้กับคำถามแต่ละข้อ ผู้ทำแบบประเมินจะเห็นเฉพาะในข้อนั้น',
     corrective_action: 'หลักฐานการแก้ไข ป้องกัน และติดตามประสิทธิผล',
     closure_report: 'รายงานสรุปเมื่อปิดรอบ',
     other: 'เอกสารประกอบอื่นที่ไม่เข้ากลุ่มข้างต้น',
@@ -1428,7 +1430,7 @@
             <div class="card-header"><h2>${isCompetencyParticipant() ? 'การประเมินของฉัน' : hasRole('physician') ? 'งานแพทย์ผู้รับทราบ' : hasRole('reviewer') ? 'งานทบทวนผล' : 'งานรับรองคุณภาพ'}</h2>${isCompetencyParticipant() ? `<button class="btn btn-outline btn-sm" data-nav-inline="my-competency">ดูทั้งหมด</button>` : ''}</div>
             ${isCompetencyParticipant() ? (assignments.length ? assignments.slice(0, 6).map((a) => `<div style="padding:10px 0;border-bottom:1px solid var(--line)">
               <strong>${esc(a.ec_eqa_rounds?.provider || '')} ${esc(a.ec_eqa_rounds?.round_code || '')}</strong>
-              <span style="float:right">${assignmentBadge(a.status)}</span>
+              <span style="float:right">${a.correction_required ? '<span class="badge danger">ส่งกลับแก้ไข</span>' : assignmentBadge(a.status)}</span>
             </div>`).join('') : empty('ยังไม่มีการประเมินที่ได้รับมอบหมาย')) : hasRole('physician') ? `<div class="notice">แพทย์ผู้รับรองทั้งสองคนมีสิทธิ์เท่าเทียมกัน คนใดคนหนึ่งตรวจและกดรับทราบต่อรอบได้ ระบบจะบันทึกชื่อและวันเวลาของผู้ที่ดำเนินการจริง</div>` : hasRole('deputy_qm') ? `<div class="notice">เปิดรอบที่ได้รับมอบหมายเพื่อตรวจงานได้ ปุ่มรับรองจะแสดงเฉพาะเมื่ออยู่ในช่วงที่ผู้จัดการคุณภาพเปิดให้ทำหน้าที่แทน</div>` : `<div class="notice">เปิดรอบที่เกี่ยวข้องเพื่อดำเนินงานตามบทบาทและลำดับที่ได้รับมอบหมาย</div>`}
           </div>
         </div>
@@ -2142,15 +2144,13 @@
     return `<div class="card">
       <div class="card-header"><div><h2>เอกสารและภาพ</h2></div>
       <div class="table-actions">${uploadAllowed ? `<button class="btn btn-primary" id="upload-doc-btn">＋ อัปโหลดไฟล์</button>` : ''}${canManage() && (rawResultDocuments.length || antibodyPanelDocuments.length) ? `<button class="btn btn-outline" id="open-evidence-for-staff">เปิดภาพ Competency ให้บุคลากร</button>` : ''}<button class="btn btn-outline" id="go-auto-competency">จัดการข้อสอบ</button></div></div>
-      ${canManage() ? `<div class="ai-action-grid">
-        <button class="btn btn-primary" id="generate-form-only" ${formReady ? '' : 'disabled'}>1. สร้างแบบกรอกจากฟอร์มเปล่า</button>
-        <button class="btn btn-outline" id="review-round-structure" ${round.generated_result_form_schema ? '' : 'disabled'}>ตรวจโครงสร้างรอบ</button>
-        <button class="btn btn-outline" id="generate-instruction-only" ${instructionReady ? '' : 'disabled'}>2. สร้างคำแนะนำจากคู่มือ</button>
-        <button class="btn btn-secondary" id="generate-questions-only" ${round.generated_result_form_schema ? 'disabled' : (questionReady ? '' : 'disabled')}>${round.generated_result_form_schema ? '3. ไม่ต้องสร้าง — Part 10 ใช้แบบกรอกและภาพผลดิบ' : '3. สร้างข้อสอบจากภาพ/เอกสาร'}</button>
-        <button class="btn btn-success" id="generate-answer-keys" ${answerBundleReady ? '' : 'disabled'}>4. สร้างเฉลยข้อสอบ</button>
-        <button class="btn btn-outline" id="generate-official-summary" ${answerBundleReady ? '' : 'disabled'}>5. สร้างสรุปผลอย่างเป็นทางการ</button>
-        <button class="btn btn-outline" id="generate-historical-bundle" ${historicalBundleReady ? '' : 'disabled'}>สร้างย้อนหลังครบชุดอัตโนมัติ</button>
-      </div><div class="small muted" style="margin:8px 0 14px">ระบบแยกเฉลยข้อสอบออกจากสรุปผลอย่างเป็นทางการ และสร้างเฉลยครั้งละชุดย่อย เพื่อลดปัญหา Supabase รหัส 546</div>` : ''}
+      ${canManage() ? `<div class="notice info"><strong>ส่วนแบบทดสอบเปลี่ยนเป็นจัดเองแล้ว</strong><br>AI จะไม่สร้างข้อสอบหรือเฉลยจากเอกสารอีก ให้กด “จัดการข้อสอบ” แล้วใช้ปุ่ม “อ่านข้อความจากเอกสาร” จากนั้นมัสเพิ่มคำถาม ตัวเลือก เฉลย และรูปเองเหมือน Microsoft Forms</div><div class="ai-action-grid">
+        <button class="btn btn-primary" id="generate-form-only" ${formReady ? '' : 'disabled'}>สร้างแบบกรอกผลแลปจากฟอร์มเปล่า</button>
+        <button class="btn btn-outline" id="review-round-structure" ${round.generated_result_form_schema ? '' : 'disabled'}>ตรวจโครงสร้างแบบกรอกผลแลป</button>
+        <button class="btn btn-outline" id="generate-instruction-only" ${instructionReady ? '' : 'disabled'}>สร้างคำแนะนำจากคู่มือ</button>
+        <button class="btn btn-outline" id="generate-official-summary" ${answerBundleReady ? '' : 'disabled'}>สร้างสรุปผลอย่างเป็นทางการ</button>
+        <button class="btn btn-secondary" id="go-manual-question-builder">ไปสร้างข้อสอบด้วยตนเอง</button>
+      </div>` : ''}
       ${participantSummaryDocuments.length && !officialDocuments.length ? `<div class="notice warning"><strong>มี Participant Summary แต่ยังไม่มี Official Evaluation</strong><br>ระบบยังไม่เปิดสร้างเฉลย เพื่อป้องกันการนำร้อยละของผู้เข้าร่วมมาใช้แทนผลของห้องปฏิบัติการ</div><div style="height:12px"></div>` : ''}
       ${officialDocuments.length && !participantSummaryDocuments.length ? `<div class="notice info"><strong>สร้างผลแบบให้คะแนนได้แล้ว</strong><br>หากรอบนี้มี Educational Challenge ให้เพิ่ม Participant Summary เพื่อให้ระบบประเมินเทียบ consensus ของผู้เข้าร่วมได้ถูกต้อง</div><div style="height:12px"></div>` : ''}
       ${generatedFormStatus}
@@ -4442,17 +4442,34 @@
       state.supabase.from('ec_work_evidence').select('*').eq('round_id', round.id).eq('user_id', state.user.id).eq('context_type', 'practical').is('archived_at', null).order('created_at', { ascending: false })
     ]);
     if (error || evidenceError) throw (error || evidenceError);
-    const own = (rows || []).find((r) => r.user_id === state.user.id);
+    const own = (rows || []).find((row) => row.user_id === state.user.id);
     const practitioner = await isPractitioner(round.id);
     const canEditOwn = practitioner && hasRole('staff') && (!own || ['draft','returned'].includes(own.status));
     const useCurrentGeneratedForm = Boolean(generatedResultSchema(round) && (!own || ['draft','returned'].includes(own.status)));
+    const correctionSections = Array.isArray(own?.correction_scope?.sections) ? own.correction_scope.sections : [];
+    const correctionBanner = own?.status === 'returned'
+      ? `<div class="notice warning"><strong>ผู้ทบทวนส่งกลับให้แก้เฉพาะหัวข้อ</strong><br>${esc(own.reviewer_note || 'กรุณาตรวจหัวข้อที่เปิดให้แก้ แล้วส่งกลับตรวจอีกครั้ง')}<div class="small" style="margin-top:6px">หัวข้อที่ต้องแก้: ${esc(correctionSections.map((item) => ({ specimen:'ผลตัวอย่าง/การแปลผล', method:'วิธีทดสอบและผู้ผลิต', antigen:'Antigen typing', general:'ข้อมูลทั่วไป', evidence:'ภาพหลักฐาน' }[item] || item)).join(', ') || 'ตามหมายเหตุ')}</div></div><div style="height:12px"></div>`
+      : '';
+
+    const reviewStatusBadge = (row) => {
+      if (row.status === 'returned' || row.review_status === 'returned') return '<span class="badge danger">ส่งกลับแก้ไข</span>';
+      if (row.review_status === 'approved') return '<span class="badge success">ผู้ทบทวนตรวจผ่าน</span>';
+      if (['submitted','resubmitted'].includes(row.status)) return '<span class="badge warning">รอผู้ทบทวน</span>';
+      return `<span class="badge info">${esc(labelFrom(RESULT_STATUS_LABELS, row.status))}</span>`;
+    };
+
     return `<div class="grid ${canReview() ? 'cols-2' : ''}">
-      <div class="card"><div class="card-header"><div><h2>ผลที่ฉันบันทึก</h2><div class="small muted">ระบบเก็บประวัติฉบับเดิมทุกครั้งที่แก้ไข</div></div>${own ? `<span class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, own.status))} · ฉบับที่ ${own.version}</span>` : ''}</div>
-        ${practitioner ? `<form id="individual-result-form">${resultForm(own?.result_payload, 'individual', !canEditOwn, useCurrentGeneratedForm)}</form>
-          <div style="height:14px"></div>${workEvidencePanelHtml('practical-current', evidenceRows || [], hasRole('staff'))}
-          ${canEditOwn ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-individual">บันทึกร่าง</button><button class="btn btn-primary" id="submit-individual">ยืนยันและส่งผล</button></div>` : practitioner && !hasRole('staff') && (!own || ['draft','returned'].includes(own.status)) ? `<div class="notice warning">คุณได้รับมอบหมายเป็นผู้ปฏิบัติจริง กรุณาเปลี่ยน “ใช้งานในบทบาท” เป็นเจ้าหน้าที่ก่อนบันทึกหรือส่งผล</div>` : `<div class="notice">ผลถูกส่งแล้วและล็อกการแก้ไข หากต้องแก้ระบบจะส่งกลับทั้งชุดผ่านขั้นผู้ทบทวนหรือผู้จัดการคุณภาพ</div>`}` : `<div class="notice">หน้านี้ใช้สำหรับผู้ปฏิบัติจริงที่ได้รับมอบหมายเท่านั้น</div>`}
+      <div class="card">
+        <div class="card-header"><div><h2>ผลที่ฉันบันทึก</h2><div class="small muted">ผู้ทบทวนตรวจจากผลที่กรอก ภาพหลักฐาน และข้อมูลอ้างอิงของรอบนี้</div></div>${own ? `${reviewStatusBadge(own)}<span class="badge">ฉบับที่ ${own.version}</span>` : ''}</div>
+        ${correctionBanner}
+        ${practitioner ? `<form id="individual-result-form" data-correction-sections="${esc(JSON.stringify(correctionSections))}" data-is-correction="${own?.status === 'returned' ? '1' : '0'}">${resultForm(own?.result_payload, 'individual', !canEditOwn, useCurrentGeneratedForm)}</form>
+          <div style="height:14px"></div>${workEvidencePanelHtml('practical-current', evidenceRows || [], canEditOwn && (own?.status !== 'returned' || correctionSections.includes('evidence')))}
+          ${canEditOwn ? `<div class="modal-footer"><button class="btn btn-secondary" id="save-individual">บันทึกร่าง</button><button class="btn btn-primary" id="submit-individual">${own?.status === 'returned' ? 'ส่งกลับตรวจอีกครั้ง' : 'ยืนยันและส่งผล'}</button></div>` : practitioner && !hasRole('staff') && (!own || ['draft','returned'].includes(own.status)) ? `<div class="notice warning">กรุณาเปลี่ยน “ทำงานในบทบาท” เป็นเจ้าหน้าที่ก่อนบันทึกผลของตนเอง</div>` : '<div class="notice">ผลถูกส่งแล้วและกำลังอยู่ในขั้นตรวจ</div>'}` : '<div class="notice">หน้านี้ใช้สำหรับผู้ปฏิบัติจริงที่ได้รับมอบหมายเท่านั้น</div>'}
       </div>
-      ${canReview() ? `<div class="card"><h2>ผลของผู้ปฏิบัติทั้งหมด</h2>${(rows || []).length ? (rows || []).map((r) => `<div style="padding:12px 0;border-bottom:1px solid var(--line)"><strong>${esc(r.ec_profiles?.full_name || r.user_id)}</strong><span style="float:right" class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, r.status))} · ฉบับที่ ${r.version}</span><br><span class="small muted">ส่ง ${fmtDate(r.submitted_at, true)}</span><div style="margin-top:8px"><button class="btn btn-outline btn-sm" data-view-individual="${r.id}">ดูผล</button></div></div>`).join('') : empty('ยังไม่มีผู้ปฏิบัติส่งผล')}</div>` : ''}
+      ${canReview() ? `<div class="card"><div class="card-header"><div><h2>ตรวจผลรายบุคคล</h2><div class="small muted">ตรวจทีละคน แล้วเลือกเฉพาะหัวข้อที่ต้องส่งกลับแก้</div></div></div>${(rows || []).length ? (rows || []).map((row) => {
+        const ready = ['submitted','resubmitted'].includes(row.status);
+        return `<div class="individual-review-row"><div><strong>${esc(row.ec_profiles?.full_name || row.user_id)}</strong><div class="small muted">ส่ง ${fmtDate(row.submitted_at, true)} · ฉบับที่ ${row.version}</div>${row.reviewer_note ? `<div class="small danger-text">${esc(row.reviewer_note)}</div>` : ''}</div><div>${reviewStatusBadge(row)}<div class="table-actions" style="margin-top:8px">${ready && row.user_id !== state.user.id ? `<button class="btn btn-primary btn-sm" data-review-individual="${row.id}">ตรวจ / ส่งกลับ</button>` : `<button class="btn btn-outline btn-sm" data-view-individual="${row.id}">ดูผล</button>`}</div></div></div>`;
+      }).join('') : empty('ยังไม่มีผู้ปฏิบัติส่งผล')}</div>` : ''}
     </div>`;
   }
 
@@ -4627,14 +4644,17 @@
     const practitionerAssignments = (assignmentRows || []).filter((row) => row.assignment_role === 'practitioner');
     const assignedReviewer = (assignmentRows || []).find((row) => row.assignment_role === 'reviewer');
     const submittedIds = new Set((individualRows || []).filter((row) => ['submitted','resubmitted','locked'].includes(row.status)).map((row) => row.user_id));
+    const approvedIds = new Set((individualRows || []).filter((row) => row.review_status === 'approved').map((row) => row.user_id));
     const pairComplete = practitionerAssignments.length === 2 && practitionerAssignments.every((row) => submittedIds.has(row.user_id));
+    const individualReviewComplete = practitionerAssignments.length === 2 && practitionerAssignments.every((row) => approvedIds.has(row.user_id));
     const isAssignedReviewer = Boolean(assignedReviewer && assignedReviewer.user_id === state.user.id);
-    const reviewerCanEdit = Boolean(consensus && hasRole('reviewer') && isAssignedReviewer && ['practitioners_confirmed','returned'].includes(consensus.status));
+    const reviewerCanEdit = Boolean(consensus && individualReviewComplete && hasRole('reviewer') && isAssignedReviewer && ['practitioners_confirmed','returned'].includes(consensus.status));
     const canSeeComparison = pairComplete && (practitioner || canReview() || hasRole('physician','viewer'));
     const sentForward = consensus && ['awaiting_qm_review','qm_approved','awaiting_physician_approval','physician_approved','submitted','locked'].includes(consensus.status);
     return `<div class="card"><div class="card-header"><div><h2>สรุปผลห้องปฏิบัติการ</h2><div class="small muted">เมื่อผู้ปฏิบัติทั้งสองคนส่งผลครบ ระบบจะเทียบผลและเติมค่าที่ตรงกันให้อัตโนมัติ ผู้ทบทวนตรวจเฉพาะค่าที่ต่างกันแล้วส่งให้ผู้รับรองคุณภาพ</div></div>${consensus ? `<span class="badge">${esc(labelFrom(RESULT_STATUS_LABELS, consensus.status))} · ฉบับที่ ${consensus.version}</span>` : ''}</div>
       ${!pairComplete ? `<div class="notice warning">ยังสร้างสรุปไม่ได้ ต้องรอผู้ปฏิบัติจริงทั้ง 2 คนกด “ยืนยันและส่งผล” ให้ครบก่อน</div>` : ''}
-      ${pairComplete && !consensus ? `<div class="notice warning">ผู้ปฏิบัติส่งครบแล้ว ระบบกำลังสร้างสรุปผลห้องปฏิบัติการ กรุณารีเฟรชหน้านี้อีกครั้ง</div>` : ''}
+      ${pairComplete && !individualReviewComplete ? `<div class="notice warning"><strong>ยังส่งต่อผู้รับรองคุณภาพไม่ได้</strong><br>ผู้ทบทวนต้องตรวจผลรายบุคคลของผู้ปฏิบัติจริงทีละคนให้ผ่านครบก่อน แล้วจึงตรวจสรุปผลกลาง<div class="table-actions" style="margin-top:10px"><button class="btn btn-primary btn-sm" id="go-individual-review">ไปตรวจผลรายบุคคล</button></div></div>` : ''}
+      ${pairComplete && individualReviewComplete && !consensus ? `<div class="notice warning">ผู้ปฏิบัติส่งครบและผู้ทบทวนตรวจผ่านแล้ว ระบบกำลังสร้างสรุปผลห้องปฏิบัติการ กรุณารีเฟรชหน้านี้อีกครั้ง</div>` : ''}
       ${canSeeComparison ? `<h3>เปรียบเทียบผลของผู้ปฏิบัติ</h3>${resultComparison((individualRows || []).filter((row) => submittedIds.has(row.user_id)), consensus)}<div style="height:18px"></div>` : ''}
       ${consensus && canSeeComparison ? `${autoLabSummaryPanel(consensus)}<div style="height:18px"></div><h3>สรุปผลที่ใช้ส่งต่อ</h3><form id="consensus-form">${resultForm(consensus.result_payload, 'consensus', !reviewerCanEdit)}</form>
         ${reviewerCanEdit ? `<div class="field"><label>หมายเหตุผู้ทบทวน</label><textarea class="textarea" id="reviewer-summary-note" placeholder="ระบุเหตุผลเมื่อเลือกผลสรุปต่างจากผู้ปฏิบัติ หรือหมายเหตุเพิ่มเติม">${esc(consensus.reviewer_note || '')}</textarea></div>` : consensus.reviewer_note ? `<div class="notice"><strong>หมายเหตุผู้ทบทวน:</strong> ${esc(consensus.reviewer_note)}</div>` : ''}
@@ -5094,54 +5114,34 @@
 
   async function roundCompetency(round) {
     const [
-      { data: questions, error: questionError },
+      { data: allQuestions, error: questionError },
       { data: assignments, error: assignmentError },
       { data: documents, error: documentError },
       { data: keys, error: keyError },
-      { data: generationRuns, error: runError },
       { data: roundRoleAssignments, error: roundRoleError },
       directory
     ] = await Promise.all([
       state.supabase.from('ec_questions').select('*, ec_question_choices(*)').eq('round_id', round.id).order('question_order'),
       state.supabase.from('ec_competency_assignments').select('*').eq('round_id', round.id).neq('status', 'cancelled').order('created_at'),
-      state.supabase.from('ec_round_documents').select('id,title,file_name,mime_type,visibility,category').eq('round_id', round.id).is('archived_at', null).order('created_at', { ascending: false }),
+      state.supabase.from('ec_round_documents').select('id,title,file_name,mime_type,visibility,category,ai_extraction_status,ai_extracted_at').eq('round_id', round.id).is('archived_at', null).order('created_at', { ascending: false }),
       state.supabase.from('ec_question_answer_keys').select('question_id,correct_choice_ids,answer_key_json,explanation'),
-      state.supabase.from('ec_ai_generation_runs').select('*').eq('round_id', round.id).order('created_at', { ascending: false }).limit(5),
       state.supabase.from('ec_round_assignments').select('*').eq('round_id', round.id).eq('active', true),
       loadDirectory(),
       loadQmDelegations()
     ]);
-    if (questionError || assignmentError || documentError || keyError || runError || roundRoleError) throw (questionError || assignmentError || documentError || keyError || runError || roundRoleError);
+    if (questionError || assignmentError || documentError || keyError || roundRoleError) {
+      throw (questionError || assignmentError || documentError || keyError || roundRoleError);
+    }
 
-    const adminImageMap = await loadSignedImageMap((questions || []).flatMap((question) => questionImageIds(question)));
-    const name = (id) => directory.find((p) => p.id === id)?.full_name || id;
-    const imageName = (id) => (documents || []).find((doc) => doc.id === id)?.title || '';
+    const questions = (allQuestions || []).filter((question) => question.generated_by_ai !== true);
+    const ignoredAiCount = (allQuestions || []).filter((question) => question.generated_by_ai === true).length;
+    const adminImageMap = await loadSignedImageMap(questions.flatMap((question) => questionImageIds(question)));
     const keyMap = new Map((keys || []).map((key) => [key.question_id, key]));
-    const sourceCategories = new Set(['source_document','instruction','raw_result_image','antibody_panel']);
-    const sourceDocs = (documents || []).filter((doc) => sourceCategories.has(doc.category));
-    const officialDocs = (documents || []).filter((doc) => doc.category === 'official_result');
-    const participantSummaryDocs = (documents || []).filter((doc) => doc.category === 'participant_summary');
-    const formBasedCompetency = Boolean(generatedResultSchema(round));
-    const supplementalQuestions = formBasedCompetency
-      ? (questions || []).filter((question) => !question.generated_by_ai)
-      : (questions || []);
-    const parkedAiQuestions = formBasedCompetency
-      ? (questions || []).filter((question) => question.generated_by_ai)
-      : [];
-    const questionReviewStats = supplementalQuestions.reduce((stats, question) => {
-      const answerKey = keyMap.get(question.id);
-      const hasKey = Boolean(answerKey?.correct_choice_ids?.length || String(answerKey?.answer_key_json?.text || '').trim());
-      const manual = Boolean(answerKey?.answer_key_json?.needs_manual_review);
-      stats.total += 1;
-      if (!question.published) stats.draft += 1;
-      if (!hasKey) stats.missingKey += 1;
-      if (manual) stats.manual += 1;
-      if (!question.published || !hasKey || manual) stats.needsAction += 1;
-      return stats;
-    }, { total: 0, draft: 0, missingKey: 0, manual: 0, needsAction: 0 });
-    const evidenceDocs = (documents || []).filter((doc) => ['raw_result_image','antibody_panel'].includes(doc.category));
+    const name = (id) => directory.find((profile) => profile.id === id)?.full_name || id;
+    const sourceDocs = (documents || []).filter((doc) => ['source_document','instruction','official_result','participant_summary'].includes(doc.category));
+    const extractedDocs = sourceDocs.filter((doc) => doc.ai_extraction_status === 'completed');
+    const evidenceDocs = (documents || []).filter((doc) => ['raw_result_image','antibody_panel','quiz_image'].includes(doc.category));
     const hiddenEvidenceDocs = evidenceDocs.filter((doc) => doc.visibility !== 'staff');
-    const latestRun = generationRuns?.[0] || null;
     const assignedQualityApprover = (roundRoleAssignments || []).find((row) => row.assignment_role === 'quality_approver');
     const isAssignedQualityApprover = Boolean(assignedQualityApprover && assignedQualityApprover.user_id === state.user.id);
     const canCreateCompetency = canManage();
@@ -5150,31 +5150,96 @@
       ? `${round.competency_open_at ? `เปิด ${fmtDate(round.competency_open_at, true)} · ` : ''}ปิด ${fmtDate(round.competency_close_at, true)}`
       : 'ยังไม่ได้กำหนดวันปิด Competency';
 
+    const questionReviewStats = questions.reduce((stats, question) => {
+      const answerKey = keyMap.get(question.id);
+      const hasKey = Boolean(answerKey?.correct_choice_ids?.length || String(answerKey?.answer_key_json?.text || '').trim());
+      stats.total += 1;
+      if (!question.published) stats.draft += 1;
+      if (!hasKey) stats.missingKey += 1;
+      if (!question.published || !hasKey) stats.needsAction += 1;
+      return stats;
+    }, { total: 0, draft: 0, missingKey: 0, needsAction: 0 });
+
+    const assignmentCounts = (assignments || []).reduce((counts, assignment) => {
+      counts.total += 1;
+      if (assignment.correction_required) counts.returned += 1;
+      else if (assignment.status === 'submitted') counts.waitingReview += 1;
+      else if (assignment.status === 'under_review') counts.waitingQm += 1;
+      else if (['passed','passed_after_review'].includes(assignment.status)) counts.passed += 1;
+      else if (['not_started','in_progress'].includes(assignment.status)) counts.inProgress += 1;
+      return counts;
+    }, { total: 0, returned: 0, waitingReview: 0, waitingQm: 0, passed: 0, inProgress: 0 });
+
+    const assignmentStatus = (assignment) => assignment.correction_required
+      ? '<span class="badge danger">ส่งกลับแก้ไขเฉพาะข้อ</span>'
+      : assignmentBadge(assignment.status);
+
     const actionFor = (assignment) => {
       const actions = [];
       if (hasRole('reviewer')) {
-        const canReviewQuiz = assignment.assignment_type === 'quiz' && assignment.status === 'submitted';
-        const canReviewPractical = assignment.assignment_type === 'practical' && ['not_started','in_progress','submitted'].includes(assignment.status);
-        if (canReviewQuiz || canReviewPractical) actions.push(`<button class="btn btn-primary btn-sm" data-review-competency="${assignment.id}" data-type="${assignment.assignment_type}">ตรวจประเมิน</button>`);
-        if (assignment.status === 'reflection_submitted') actions.push(`<button class="btn btn-primary btn-sm" data-review-reflection="${assignment.id}">ตรวจแบบทบทวน</button>`);
+        if (assignment.assignment_type === 'quiz' && assignment.status === 'submitted') {
+          actions.push(`<button class="btn btn-primary btn-sm" data-review-competency="${assignment.id}" data-type="quiz">ตรวจรายบุคคล</button>`);
+        }
+        if (assignment.assignment_type === 'practical' && ['not_started','in_progress','submitted'].includes(assignment.status)) {
+          actions.push(`<button class="btn btn-primary btn-sm" data-review-competency="${assignment.id}" data-type="practical">ตรวจประเมิน</button>`);
+        }
+        if (assignment.status === 'reflection_submitted') {
+          actions.push(`<button class="btn btn-primary btn-sm" data-review-reflection="${assignment.id}">ตรวจแบบทบทวน</button>`);
+        }
       }
       if (canQualityApprove(round.id) && isAssignedQualityApprover && assignment.status === 'under_review') {
         actions.push(`<button class="btn btn-success btn-sm" data-qm-approve-competency="${assignment.id}">รับรองผล</button>`);
         actions.push(`<button class="btn btn-warning btn-sm" data-qm-return-competency="${assignment.id}">ส่งกลับผู้ทบทวน</button>`);
       }
-      if (hasRole('admin')) actions.unshift(`<button class="btn btn-outline btn-sm" data-preview-staff-assignment="${assignment.id}">ดูหน้าที่เจ้าหน้าที่เห็น</button>`);
+      if (hasRole('admin')) {
+        actions.unshift(`<button class="btn btn-outline btn-sm" data-preview-staff-assignment="${assignment.id}">ดูหน้าที่เจ้าหน้าที่เห็น</button>`);
+      }
       return actions.length ? actions.join('') : '<span class="small muted">รอตามลำดับงาน</span>';
     };
 
-    const aiNotice = canManage() ? `<details class="competency-system-details"><summary>ข้อมูลระบบและไฟล์ที่ใช้</summary><div class="compact-status">
-      <span>เอกสาร ${sourceDocs.length}</span><span>ภาพผลดิบ ${evidenceDocs.length}</span><span>คำถามเสริม ${supplementalQuestions.length}</span><span>Official ${officialDocs.length}</span><span>Summary ${participantSummaryDocs.length}</span>
-    </div></details>` : '';
+    const questionCards = questions.map((question) => {
+      const key = keyMap.get(question.id);
+      const hasKey = Boolean(key?.correct_choice_ids?.length || String(key?.answer_key_json?.text || '').trim());
+      const referenceAnswer = String(key?.answer_key_json?.challenge_type === 'educational'
+        ? (key?.answer_key_json?.consensus_result || key?.answer_key_json?.text || '')
+        : (key?.answer_key_json?.text || '')).trim();
+      const choices = (question.ec_question_choices || []).slice().sort((a,b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
+      const promptParts = questionPromptParts(question.prompt);
+      const galleryHtml = questionImageGallery(question, adminImageMap, 'admin');
+      const searchable = `${question.question_order} ${question.section || ''} ${promptParts.prompt}`.toLowerCase();
+      const needsAction = !question.published || !hasKey;
+      return `<article class="admin-question-card" data-question-search="${esc(searchable)}" data-published="${question.published ? '1' : '0'}" data-has-key="${hasKey ? '1' : '0'}" data-manual="1" data-needs-action="${needsAction ? '1' : '0'}">
+        <div class="admin-question-top">
+          <div class="question-order-badge">${question.question_order}</div>
+          <div class="admin-question-title"><span class="question-section">${esc(question.section || 'แบบประเมิน')}</span><h3>${esc(promptParts.prompt)}</h3></div>
+          <div class="question-status-stack">
+            <span class="badge ${question.published ? 'success' : 'warning'}">${question.published ? 'เผยแพร่แล้ว' : 'ฉบับร่าง'}</span>
+            <span class="badge ${hasKey ? 'success' : 'warning'}">${hasKey ? 'มีเฉลย' : 'รอเฉลย'}</span>
+          </div>
+        </div>
+        ${promptParts.context ? `<div class="quiz-case-context"><strong>ข้อมูลประกอบโจทย์</strong><div>${esc(promptParts.context)}</div></div>` : ''}
+        ${galleryHtml || '<div class="notice info small">ข้อนี้ไม่มีรูปประกอบ</div>'}
+        ${choices.length ? `<div class="question-choice-preview">${choices.map((choice) => `<div><span class="choice-dot"></span>${esc(choice.choice_text)}</div>`).join('')}</div>` : ''}
+        ${referenceAnswer ? `<div class="answer-key-preview"><span class="small muted">แนวคำตอบ/เฉลย</span><strong>${esc(referenceAnswer)}</strong></div>` : ''}
+        <div class="admin-question-footer">
+          <div class="question-meta"><span>${esc(labelFrom(QUESTION_TYPE_LABELS, question.question_type))}</span><span>${question.points} คะแนน</span>${question.is_critical ? '<span class="danger-text">ข้อสำคัญ</span>' : ''}</div>
+          ${canManage() ? `<div class="table-actions"><button class="btn btn-outline btn-sm" data-edit-question="${question.id}">แก้ไข</button><button class="btn btn-danger btn-sm" data-delete-question="${question.id}" data-question-label="${esc(`${question.question_order}. ${question.prompt}`)}">ลบ</button></div>` : ''}
+        </div>
+      </article>`;
+    }).join('');
 
     return `<div class="competency-admin-layout">
       <div class="card competency-question-manager">
-        <div class="card-header"><div><h2>${formBasedCompetency ? 'แบบประเมินของเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง' : 'ข้อสอบ'}</h2></div></div>
-        ${aiNotice}
-        ${formBasedCompetency ? `<div class="competency-compact-note"><strong>ผู้ปฏิบัติจริง 2 คนใช้หัวข้อ 4</strong><span>หัวข้อ 10 มอบหมายเฉพาะเจ้าหน้าที่คนอื่น</span></div>${hiddenEvidenceDocs.length ? `<div class="notice warning small">มี ${hiddenEvidenceDocs.length} ไฟล์ที่ยังไม่ได้เปิดสิทธิ์ให้บุคลากรทุกคน</div>` : ''}` : ''}
+        <div class="card-header">
+          <div><h2>สร้างข้อสอบด้วยตนเอง</h2><div class="small muted">รูปแบบคล้าย Microsoft Forms: เพิ่มข้อ แก้คำถาม เพิ่มตัวเลือก และผูกรูปกับแต่ละข้อ</div></div>
+          ${canManage() ? '<button class="btn btn-primary" id="add-question">＋ เพิ่มคำถาม</button>' : ''}
+        </div>
+        <div class="notice info"><strong>AI ใช้เฉพาะอ่านข้อความจากเอกสาร</strong><br>AI จะไม่สร้างข้อสอบ ไม่เลือกเฉลย และไม่นำแบบฟอร์มผู้ให้บริการมาเปิดให้เจ้าหน้าที่โดยอัตโนมัติ มัสเป็นผู้ตั้งคำถามและเลือกรูปเอง</div>
+        <div style="height:12px"></div>
+        <details class="competency-system-details"><summary>ไฟล์ที่ใช้ในรอบนี้</summary><div class="compact-status">
+          <span>เอกสารอ่านข้อความ ${sourceDocs.length}</span><span>อ่านแล้ว ${extractedDocs.length}</span><span>รูป/Antigram ${evidenceDocs.length}</span><span>ข้อสอบ ${questions.length}</span>
+        </div>${ignoredAiCount ? `<div class="small muted" style="margin-top:8px">พักคำถามเดิมที่ AI เคยสร้างไว้ ${ignoredAiCount} ข้อ และไม่นำไปให้เจ้าหน้าที่ตอบ</div>` : ''}</details>
+        ${hiddenEvidenceDocs.length ? `<div class="notice warning small">มีรูป ${hiddenEvidenceDocs.length} ไฟล์ที่ยังไม่ได้เปิดสิทธิ์ Staff แต่รูปที่ผูกกับข้อสอบจะถูกเปิดให้อัตโนมัติ</div>` : ''}
         ${canManage() ? `<div class="question-review-summary">
           <div><span>ทั้งหมด</span><strong>${questionReviewStats.total}</strong></div>
           <div class="${questionReviewStats.needsAction ? 'warning' : 'success'}"><span>ต้องตรวจ</span><strong>${questionReviewStats.needsAction}</strong></div>
@@ -5183,77 +5248,34 @@
         </div>
         <div class="question-review-toolbar">
           <div class="question-review-search"><input class="input" id="question-search" type="search" placeholder="ค้นหาคำถามหรือหัวข้อ"></div>
-          <select class="select" id="question-filter" aria-label="กรองสถานะข้อสอบ">
-            <option value="all">ทุกข้อ</option>
-            <option value="action">เฉพาะข้อที่ต้องตรวจ</option>
-            <option value="draft">ฉบับร่าง</option>
-            <option value="missing-key">ยังไม่มีเฉลย</option>
-            <option value="manual">AI ระบุว่าต้องตรวจเอง</option>
-            <option value="published">เผยแพร่แล้ว</option>
-          </select>
-          <button class="btn btn-primary" id="review-questions-sequentially" ${supplementalQuestions.length ? '' : 'disabled'}>ตรวจข้อสอบทีละข้อ</button>
-          <button class="btn btn-outline" id="preview-question-set" ${supplementalQuestions.length ? '' : 'disabled'}>ดูตัวอย่างผู้ทำแบบประเมิน</button>
+          <select class="select" id="question-filter"><option value="all">ทุกข้อ</option><option value="action">เฉพาะข้อที่ต้องตรวจ</option><option value="draft">ฉบับร่าง</option><option value="missing-key">ยังไม่มีเฉลย</option><option value="published">เผยแพร่แล้ว</option></select>
+          <button class="btn btn-outline" id="read-document-text" ${sourceDocs.length ? '' : 'disabled'}>อ่านข้อความจากเอกสาร</button>
+          <button class="btn btn-outline" id="open-extracted-text-bank" ${extractedDocs.length ? '' : 'disabled'}>คลังข้อความที่อ่านแล้ว</button>
+          <button class="btn btn-outline" id="preview-question-set" ${questions.length ? '' : 'disabled'}>ดูตัวอย่างผู้ทำแบบประเมิน</button>
         </div>
         <div class="table-actions question-review-secondary">
-          <button class="btn btn-outline" id="go-document-ai-tools">${formBasedCompetency ? 'ตรวจเอกสารและภาพผลดิบ' : 'สร้างจากเอกสาร'}</button>
-          <button class="btn btn-outline" id="publish-all-questions" ${supplementalQuestions.length ? '' : 'disabled'}>เผยแพร่คำถามเสริม</button>
-          <button class="btn btn-outline" id="unpublish-all-questions" ${supplementalQuestions.length ? '' : 'disabled'}>พักการเผยแพร่ทั้งหมด</button>
-          <button class="btn btn-outline" id="add-question">＋ เพิ่มคำถามเสริม</button>
+          <button class="btn btn-outline" id="publish-all-questions" ${questions.length ? '' : 'disabled'}>เผยแพร่ข้อสอบทั้งหมด</button>
+          <button class="btn btn-outline" id="unpublish-all-questions" ${questions.length ? '' : 'disabled'}>พักการเผยแพร่ทั้งหมด</button>
+          <button class="btn btn-outline" id="review-questions-sequentially" ${questions.length ? '' : 'disabled'}>ตรวจทีละข้อ</button>
         </div>` : ''}
-        ${latestRun ? (() => { const stale = latestRun.status === 'processing' && Date.now() - new Date(latestRun.created_at).getTime() > 5 * 60 * 1000; const statusText = latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' || stale ? 'ไม่สำเร็จ/หมดเวลา' : 'กำลังประมวลผล'; return `<details class="competency-system-details"><summary>ประวัติการสร้างล่าสุด: ${statusText}</summary><div class="small muted">${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}${latestRun.error_message ? `<br>${esc(latestRun.error_message)}` : ''}</div></details>`; })() : ''}
-        ${supplementalQuestions.length ? `<div class="admin-question-list">${supplementalQuestions.map((q) => {
-          const key = keyMap.get(q.id);
-          const hasKey = Boolean(key?.correct_choice_ids?.length || key?.answer_key_json?.text);
-          const needsManualReview = Boolean(key?.answer_key_json?.needs_manual_review);
-          const answerBasisLabel = {
-            official_intended_response: 'อิง Intended Response',
-            participant_consensus: 'อิง Participant consensus',
-            insufficient: 'หลักฐานไม่พอ'
-          }[key?.answer_key_json?.answer_basis] || '';
-          const referenceAnswer = String(key?.answer_key_json?.challenge_type === 'educational'
-            ? (key?.answer_key_json?.consensus_result || key?.answer_key_json?.text || '')
-            : (key?.answer_key_json?.text || '')).trim();
-          const referencePercent = String(key?.answer_key_json?.consensus_percent || '').trim();
-          const sortedChoices = (q.ec_question_choices || []).slice().sort((a, b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
-          const galleryHtml = questionImageGallery(q, adminImageMap, 'admin');
-          const promptParts = questionPromptParts(q.prompt);
-          const searchableQuestionText = `${q.question_order} ${q.section || ''} ${promptParts.prompt}`.toLowerCase();
-          const needsAction = !q.published || !hasKey || needsManualReview;
-          return `<article class="admin-question-card" data-question-search="${esc(searchableQuestionText)}" data-published="${q.published ? '1' : '0'}" data-has-key="${hasKey ? '1' : '0'}" data-manual="${needsManualReview ? '1' : '0'}" data-needs-action="${needsAction ? '1' : '0'}">
-            <div class="admin-question-top">
-              <div class="question-order-badge">${q.question_order}</div>
-              <div class="admin-question-title"><span class="question-section">${esc(q.section || 'การแปลผล EQA')}</span><h3>${esc(promptParts.prompt)}</h3></div>
-              <div class="question-status-stack">
-                <span class="badge ${q.published?'success':'warning'}">${q.published?'เผยแพร่แล้ว':'ฉบับร่าง'}</span>
-                <span class="badge ${hasKey?'success':'warning'}">${hasKey?'มีเฉลย':'รอเฉลย'}</span>
-              </div>
-            </div>
-            ${promptParts.context ? `<div class="quiz-case-context"><strong>ข้อมูลประกอบโจทย์</strong><div>${esc(promptParts.context)}</div></div>` : ''}
-            ${galleryHtml || `<div class="notice warning small">คำถามนี้ยังไม่ได้ผูกกับภาพผลดิบ</div>`}
-            ${questionImageIds(q).length ? `<div class="question-source-chip">เอกสาร/รูปประกอบ ${questionImageIds(q).length} ไฟล์</div>` : ''}
-            ${isAntibodyIdentificationQuestion(q) && q.question_type !== 'single_choice'
-              ? `<div class="question-catalog-note"><strong>ตัวอย่างช่องที่ผู้ทำข้อสอบจะเห็น</strong><span>พิมพ์ Anti-K แล้วเลือกรายการจาก CAP Master List ได้มากกว่า 1 รายการ</span><input class="input" type="search" list="cap-antibody-preview-${q.id}" placeholder="พิมพ์ Anti- หรือรหัส CAP เช่น 124" autocomplete="off">${capAntibodyDatalist(`cap-antibody-preview-${q.id}`)}</div>`
-              : sortedChoices.length ? `<div class="question-choice-preview">${sortedChoices.map((choice) => `<div><span class="choice-dot"></span>${esc(choice.choice_text)}</div>`).join('')}</div>` : ''}
-            ${referenceAnswer ? `<div class="answer-key-preview"><span class="small muted">${key?.answer_key_json?.challenge_type === 'educational' ? 'คำตอบของผู้เข้าร่วมส่วนใหญ่' : 'แนวคำตอบ/เฉลย'}</span><strong>${esc(referenceAnswer)}</strong>${referencePercent ? `<span class="badge info">${esc(referencePercent)}</span>` : ''}</div>` : ''}
-            <div class="admin-question-footer">
-              <div class="question-meta">
-                <span>${esc(labelFrom(QUESTION_TYPE_LABELS, q.question_type))}</span>
-                <span>${q.points} คะแนน</span>
-                ${q.is_critical ? '<span class="danger-text">ข้อสำคัญ</span>' : ''}
-                ${needsManualReview ? '<span class="danger-text">ต้องตรวจเอง</span>' : ''}
-                ${answerBasisLabel ? `<span>${esc(answerBasisLabel)}</span>` : ''}
-              </div>
-              ${canManage()?`<div class="table-actions"><button class="btn btn-outline btn-sm" data-edit-question="${q.id}">แก้ไข</button><button class="btn btn-danger btn-sm" data-delete-question="${q.id}" data-question-label="${esc(`${q.question_order}. ${q.prompt}`)}">ลบ</button></div>`:''}
-            </div>
-          </article>`;
-        }).join('')}</div>` : (formBasedCompetency ? `<div class="notice info">ยังไม่มีคำถามเสริม ซึ่งไม่เป็นปัญหา แบบประเมินหลักจะใช้แบบกรอกผลและภาพผลดิบโดยตรง</div>` : empty('ยังไม่มีคำถาม'))}
+        ${questionCards ? `<div class="admin-question-list">${questionCards}</div>` : empty('ยังไม่มีข้อสอบ กด “เพิ่มคำถาม” แล้วตั้งโจทย์เองได้เลย')}
       </div>
+
       <div class="card">
-        <div class="card-header"><div><h2>การมอบหมายและตรวจประเมิน</h2></div>${canCreateCompetency?`<button class="btn btn-primary" id="assign-all-competency">สร้างรายการประเมิน</button>`:''}</div>
-        <div class="notice ${closePassed ? 'danger' : 'info'}"><strong>${closePassed ? 'ปิดรับคำตอบแล้ว' : 'ช่วงเวลาทำ Competency'}</strong><br>${esc(windowText)}${canManage() ? `<div style="margin-top:8px"><button class="btn btn-outline btn-sm" id="set-competency-window">กำหนด/แก้ไขวันเปิด–ปิด</button></div>` : ''}</div>
-        <div style="height:12px"></div>
-        ${!round.competency_close_at ? `<div class="notice warning">กรุณากำหนดวันปิด Competency ก่อนสร้างรายการประเมิน</div><div style="height:12px"></div>` : ''}
-        ${(assignments || []).length ? `<div class="table-wrap"><table style="min-width:760px"><thead><tr><th>ชื่อ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${assignments.map((a)=>`<tr><td>${esc(name(a.user_id))}</td><td>${esc(a.assignment_type === 'quiz' && formBasedCompetency ? 'ประเมินจากภาพผลดิบ / Case Study' : labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type))}</td><td>${assignmentBadge(a.status)}</td><td>${a.score ?? '-'}</td><td><div class="table-actions">${actionFor(a)}</div></td></tr>`).join('')}</tbody></table></div>` : empty('ยังไม่ได้สร้างรายการประเมิน')}
+        <div class="card-header"><div><h2>ตรวจรายบุคคลและส่งต่อ</h2><div class="small muted">เลือกคนที่ต้องตรวจ ตรวจจากคำตอบกับรูป แล้วส่งกลับเฉพาะข้อที่ต้องแก้</div></div>${canCreateCompetency ? '<button class="btn btn-primary" id="assign-all-competency">สร้างรายการประเมิน</button>' : ''}</div>
+        <div class="question-review-summary assignment-review-summary">
+          <div><span>ทั้งหมด</span><strong>${assignmentCounts.total}</strong></div>
+          <div class="warning"><span>รอตรวจ</span><strong>${assignmentCounts.waitingReview}</strong></div>
+          <div class="danger"><span>ส่งกลับแก้ไข</span><strong>${assignmentCounts.returned}</strong></div>
+          <div><span>รอผู้รับรอง</span><strong>${assignmentCounts.waitingQm}</strong></div>
+          <div class="success"><span>ผ่านแล้ว</span><strong>${assignmentCounts.passed}</strong></div>
+        </div>
+        <div class="notice ${closePassed ? 'danger' : 'info'}"><strong>${closePassed ? 'ปิดรับคำตอบแล้ว' : 'ช่วงเวลาทำ Competency'}</strong><br>${esc(windowText)}${canManage() ? '<div style="margin-top:8px"><button class="btn btn-outline btn-sm" id="set-competency-window">กำหนด/แก้ไขวันเปิด–ปิด</button></div>' : ''}</div>
+        ${hasRole('reviewer') ? `<div class="table-actions assignment-review-toolbar"><button class="btn btn-outline" id="select-all-review-ready">เลือกคนที่รอตรวจทั้งหมด</button><button class="btn btn-primary" id="review-selected-assignments">ตรวจคนที่เลือกทีละคน</button></div>` : ''}
+        ${(assignments || []).length ? `<div class="table-wrap"><table style="min-width:880px"><thead><tr>${hasRole('reviewer') ? '<th style="width:42px">เลือก</th>' : ''}<th>ชื่อ</th><th>ประเภท</th><th>สถานะ</th><th>คะแนน</th><th>ดำเนินการ</th></tr></thead><tbody>${(assignments || []).map((assignment) => {
+          const selectable = hasRole('reviewer') && assignment.assignment_type === 'quiz' && assignment.status === 'submitted';
+          return `<tr>${hasRole('reviewer') ? `<td><input type="checkbox" data-review-assignment-check value="${assignment.id}" ${selectable ? '' : 'disabled'} aria-label="เลือก ${esc(name(assignment.user_id))}"></td>` : ''}<td>${esc(name(assignment.user_id))}${assignment.correction_note ? `<div class="small danger-text">${esc(assignment.correction_note)}</div>` : ''}</td><td>${esc(labelFrom(COMPETENCY_TYPE_LABELS, assignment.assignment_type))}</td><td>${assignmentStatus(assignment)}</td><td>${assignment.score ?? '-'}</td><td><div class="table-actions">${actionFor(assignment)}</div></td></tr>`;
+        }).join('')}</tbody></table></div>` : empty('ยังไม่ได้สร้างรายการประเมิน')}
       </div>
     </div>`;
   }
@@ -5768,6 +5790,7 @@
       });
     };
 
+    document.getElementById('go-manual-question-builder')?.addEventListener('click', () => navigate(`round/${round.id}/competency`));
     document.getElementById('generate-form-only')?.addEventListener('click', () => openBundleModal('form'));
     document.getElementById('review-round-structure')?.addEventListener('click', () => openRoundStructureReview(round));
     document.getElementById('generate-instruction-only')?.addEventListener('click', () => openBundleModal('instructions'));
@@ -5828,7 +5851,7 @@
         }
         closeModal();
         const nextHint = ['source_document','instruction'].includes(category)
-          ? ' อัปโหลดเอกสารต้นทางแล้ว เมื่อไฟล์ครบให้กด “สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร”'
+          ? ' อัปโหลดเอกสารต้นทางแล้ว สำหรับข้อสอบให้ไปหัวข้อ 10 แล้วกด “อ่านข้อความจากเอกสาร” จากนั้นเพิ่มคำถาม ตัวเลือก เฉลย และรูปเอง'
           : category === 'raw_result_image'
             ? ' อัปโหลดภาพผลทดสอบดิบแล้ว ระบบจะใช้สร้าง Competency สำหรับเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง'
           : category === 'submission_form'
@@ -6009,29 +6032,142 @@
     });
   }
 
+    function mergeIndividualCorrectionPayload(existingPayload, editedPayload, correctionScope) {
+    const original = existingPayload && typeof existingPayload === 'object'
+      ? JSON.parse(JSON.stringify(existingPayload))
+      : {};
+    const edited = editedPayload && typeof editedPayload === 'object' ? editedPayload : {};
+    const sections = new Set(Array.isArray(correctionScope?.sections) ? correctionScope.sections : []);
+    if (!sections.size) return edited;
+
+    const merged = { ...original };
+    if (edited.schema && !merged.schema) merged.schema = edited.schema;
+    if (edited.form_schema_version && !merged.form_schema_version) merged.form_schema_version = edited.form_schema_version;
+    if (sections.has('specimen')) merged.specimens = edited.specimens || {};
+    if (sections.has('antigen')) merged.antigen_typing = edited.antigen_typing || {};
+    if (sections.has('method')) {
+      if ('methods_by_program' in edited || 'methods_by_program' in original) merged.methods_by_program = edited.methods_by_program || {};
+      if ('methods' in edited || 'methods' in original) merged.methods = edited.methods || {};
+    }
+    if (sections.has('general')) {
+      ['reagents','instrument','overall_note'].forEach((key) => { merged[key] = edited[key] ?? ''; });
+    }
+    return merged;
+  }
+
     function bindIndividual(round) {
+    const ownForm = document.getElementById('individual-result-form');
+    if (ownForm?.dataset.isCorrection === '1') {
+      let allowed = [];
+      try { allowed = JSON.parse(ownForm.dataset.correctionSections || '[]'); } catch (_) { allowed = []; }
+      const allowedSet = new Set(allowed);
+      ownForm.querySelectorAll('[data-provider-group]').forEach((control) => {
+        const group = String(control.dataset.providerGroup || '');
+        if (allowedSet.size && !allowedSet.has(group)) control.disabled = true;
+      });
+      ownForm.querySelectorAll('.provider-test-card, .provider-donor-crossmatch').forEach((section) => {
+        const controls = [...section.querySelectorAll('[data-provider-group]')];
+        if (controls.length && controls.every((control) => control.disabled)) section.classList.add('question-locked-after-review');
+      });
+    }
+
     const save = async (submit) => {
-      const form=document.getElementById('individual-result-form'); if(!form)return;
-      const payload=collectResultPayload(form,'individual');
-      if (!payload) return toast('กรุณาสร้างแบบกรอกจากฟอร์มเปล่าของรอบนี้ก่อนบันทึกผล', 'warning');
-      const {data: existing}=await state.supabase.from('ec_individual_results').select('id,status').eq('round_id',round.id).eq('user_id',state.user.id).maybeSingle();
-      const row={round_id:round.id,user_id:state.user.id,result_payload:payload,status:submit?'submitted':'draft',started_at:new Date().toISOString(),submitted_at:submit?new Date().toISOString():null};
-      const res=existing?await state.supabase.from('ec_individual_results').update(row).eq('id',existing.id):await state.supabase.from('ec_individual_results').insert(row);
-      if(res.error)return toast(friendlyError(res.error), 'danger'); toast(submit?'ส่งผลแล้ว':'บันทึกร่างแล้ว','success'); route();
+      const form = document.getElementById('individual-result-form');
+      if (!form) return;
+      const editedPayload = collectResultPayload(form, 'individual');
+      if (!editedPayload) return toast('กรุณาสร้างแบบกรอกจากฟอร์มเปล่าของรอบนี้ก่อนบันทึกผล', 'warning');
+      const { data: existing, error: existingError } = await state.supabase.from('ec_individual_results').select('id,status,result_payload,correction_scope').eq('round_id', round.id).eq('user_id', state.user.id).maybeSingle();
+      if (existingError) return toast(friendlyError(existingError), 'danger');
+      const wasReturned = existing?.status === 'returned';
+      const payload = wasReturned
+        ? mergeIndividualCorrectionPayload(existing.result_payload, editedPayload, existing.correction_scope)
+        : editedPayload;
+      const row = {
+        round_id: round.id,
+        user_id: state.user.id,
+        result_payload: payload,
+        status: submit ? (wasReturned ? 'resubmitted' : 'submitted') : (wasReturned ? 'returned' : 'draft'),
+        review_status: submit ? 'pending' : undefined,
+        started_at: new Date().toISOString(),
+        submitted_at: submit ? new Date().toISOString() : null
+      };
+      if (row.review_status === undefined) delete row.review_status;
+      const res = existing
+        ? await state.supabase.from('ec_individual_results').update(row).eq('id', existing.id)
+        : await state.supabase.from('ec_individual_results').insert(row);
+      if (res.error) return toast(friendlyError(res.error), 'danger');
+      toast(submit ? (wasReturned ? 'ส่งกลับตรวจอีกครั้งแล้ว' : 'ส่งผลแล้ว') : 'บันทึกร่างแล้ว', 'success');
+      route();
     };
+
     bindWorkEvidencePanel('practical-current', { roundId: round.id, contextType: 'practical' });
-    document.getElementById('save-individual')?.addEventListener('click',()=>save(false));
-    document.getElementById('submit-individual')?.addEventListener('click',()=>{ if(confirm('ยืนยันส่งผลรายบุคคลหรือไม่ หลังส่งจะแก้ไขเองไม่ได้')) save(true); });
-    document.querySelectorAll('[data-view-individual]').forEach((b)=>b.addEventListener('click',async()=>{
-      const [{data,error},{data:evidenceRows,error:evidenceError}] = await Promise.all([
-        state.supabase.from('ec_individual_results').select('*,ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('id',b.dataset.viewIndividual).single(),
-        state.supabase.from('ec_work_evidence').select('*').eq('round_id',round.id).eq('context_type','practical').is('archived_at',null).order('created_at',{ascending:false})
+    document.getElementById('save-individual')?.addEventListener('click', () => save(false));
+    document.getElementById('submit-individual')?.addEventListener('click', () => {
+      if (confirm('ยืนยันส่งผลรายบุคคลให้ผู้ทบทวนตรวจหรือไม่')) save(true);
+    });
+
+    const loadIndividualForModal = async (resultId) => {
+      const [{ data, error }, { data: evidenceRows, error: evidenceError }] = await Promise.all([
+        state.supabase.from('ec_individual_results').select('*,ec_profiles!ec_individual_results_user_id_fkey(full_name)').eq('id', resultId).single(),
+        state.supabase.from('ec_work_evidence').select('*').eq('round_id', round.id).eq('context_type', 'practical').is('archived_at', null).order('created_at', { ascending: false })
       ]);
-      if(error||evidenceError)return toast(friendlyError(error||evidenceError),'danger');
-      const userEvidence=(evidenceRows||[]).filter((row)=>row.user_id===data.user_id);
-      showModal(`ผลของ ${data.ec_profiles?.full_name||''}`,`${resultForm(data.result_payload,'view',true)}<div style="height:14px"></div>${workEvidencePanelHtml('view-practical-evidence',userEvidence,false)}`,'',true);
-      bindCapWorkupControls(document.getElementById('modal-backdrop')||document);
-      bindWorkEvidencePanel('view-practical-evidence',{roundId:round.id,contextType:'practical'});
+      if (error || evidenceError) throw (error || evidenceError);
+      return { data, userEvidence: (evidenceRows || []).filter((row) => row.user_id === data.user_id) };
+    };
+
+    document.querySelectorAll('[data-view-individual]').forEach((button) => button.addEventListener('click', async () => {
+      try {
+        const { data, userEvidence } = await loadIndividualForModal(button.dataset.viewIndividual);
+        showModal(`ผลของ ${data.ec_profiles?.full_name || ''}`, `${data.reviewer_note ? `<div class="notice warning"><strong>หมายเหตุผู้ทบทวน:</strong> ${esc(data.reviewer_note)}</div><div style="height:12px"></div>` : ''}${resultForm(data.result_payload, 'view', true)}<div style="height:14px"></div>${workEvidencePanelHtml('view-practical-evidence', userEvidence, false)}`, '<button class="btn btn-primary" data-close-modal>ปิด</button>', true);
+        bindCapWorkupControls(document.getElementById('modal-backdrop') || document);
+        bindWorkEvidencePanel('view-practical-evidence', { roundId: round.id, contextType: 'practical' });
+      } catch (loadError) {
+        toast(friendlyError(loadError), 'danger');
+      }
+    }));
+
+    document.querySelectorAll('[data-review-individual]').forEach((button) => button.addEventListener('click', async () => {
+      try {
+        const { data, userEvidence } = await loadIndividualForModal(button.dataset.reviewIndividual);
+        const sections = [
+          ['specimen', 'ผลตัวอย่าง การอ่านปฏิกิริยา ABO/Rh/Screen/Iden/Crossmatch'],
+          ['method', 'วิธีทดสอบ ผู้ผลิต และรหัสรายงาน'],
+          ['antigen', 'Antigen typing'],
+          ['general', 'ข้อมูลทั่วไปหรือคำตอบอื่น'],
+          ['evidence', 'ภาพหลักฐาน/ไฟล์แนบ']
+        ];
+        showModal(`ตรวจผลรายบุคคล — ${data.ec_profiles?.full_name || ''}`, `
+          <div class="notice info"><strong>ตรวจจากผลที่กรอกและภาพหลักฐาน</strong><br>หากต้องแก้ ให้ติ๊กเฉพาะหัวข้อที่ต้องเปิดกลับไปแก้ ส่วนหัวข้ออื่นจะล็อกไว้</div>
+          <div style="height:12px"></div>${resultForm(data.result_payload, 'reviewIndividual', true)}
+          <div style="height:14px"></div>${workEvidencePanelHtml('review-individual-evidence', userEvidence, false)}
+          <div class="card correction-section-picker"><h3>หัวข้อที่ต้องส่งกลับแก้</h3>${sections.map(([value,label]) => `<label><input type="checkbox" data-individual-correction-section value="${value}"> ${esc(label)}</label>`).join('')}</div>
+          <div class="field"><label>หมายเหตุถึงผู้ปฏิบัติ</label><textarea class="textarea" id="individual-review-note" placeholder="จำเป็นเมื่อส่งกลับแก้ไข">${esc(data.reviewer_note || '')}</textarea></div>
+        `, '<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-warning" id="return-individual-result">ส่งกลับเฉพาะหัวข้อที่เลือก</button><button class="btn btn-success" id="approve-individual-result">ตรวจผ่าน</button>', true);
+        bindCapWorkupControls(document.getElementById('modal-backdrop') || document);
+        bindWorkEvidencePanel('review-individual-evidence', { roundId: round.id, contextType: 'practical' });
+
+        const decide = async (decision) => {
+          const selected = [...document.querySelectorAll('[data-individual-correction-section]:checked')].map((item) => item.value);
+          const note = String(document.getElementById('individual-review-note')?.value || '').trim();
+          if (decision === 'returned' && !selected.length) return toast('กรุณาเลือกหัวข้อที่ต้องแก้', 'warning');
+          if (decision === 'returned' && !note) return toast('กรุณาระบุคำแนะนำที่ส่งกลับ', 'warning');
+          if (!confirm(decision === 'returned' ? 'ยืนยันส่งกลับเฉพาะหัวข้อที่เลือกหรือไม่' : 'ยืนยันว่าผลรายบุคคลนี้ตรวจผ่านหรือไม่')) return;
+          const { error } = await state.supabase.rpc('ec_reviewer_decide_individual_v281', {
+            p_result_id: data.id,
+            p_decision: decision,
+            p_sections: selected,
+            p_note: note || null
+          });
+          if (error) return toast(friendlyError(error), 'danger');
+          closeModal();
+          toast(decision === 'returned' ? 'ส่งกลับให้แก้เฉพาะหัวข้อที่เลือกแล้ว' : 'ตรวจผลรายบุคคลผ่านแล้ว', 'success');
+          route();
+        };
+        document.getElementById('return-individual-result')?.addEventListener('click', () => decide('returned'));
+        document.getElementById('approve-individual-result')?.addEventListener('click', () => decide('approved'));
+      } catch (loadError) {
+        toast(friendlyError(loadError), 'danger');
+      }
     }));
   }
 
@@ -6070,6 +6206,7 @@
       toast('ส่งสรุปผลให้ผู้รับรองคุณภาพแล้ว', 'success'); navigate(`round/${round.id}/approval`);
     });
 
+    document.getElementById('go-individual-review')?.addEventListener('click', () => navigate(`round/${round.id}/individual`));
     document.getElementById('go-approval-from-summary')?.addEventListener('click', () => navigate(`round/${round.id}/approval`));
   }
 
@@ -6209,7 +6346,7 @@
       return data;
     };
 
-    const openQuestion = async (row = null) => {
+    const openQuestion = async (row = null, prefill = {}) => {
       let choices = [];
       let key = null;
       let answerCount = 0;
@@ -6229,6 +6366,8 @@
         answerCount = Number(results[3].count || 0);
       }
       const choicesLocked = answerCount > 0;
+      const existingQuestionImageMap = row?.image_document_id ? await loadSignedImageMap([row.image_document_id]) : new Map();
+      const existingQuestionImageUrl = row?.image_document_id ? existingQuestionImageMap.get(row.image_document_id) : '';
       const correctChoiceIds = new Set(key?.correct_choice_ids || []);
       const keyJson = key?.answer_key_json && typeof key.answer_key_json === 'object' ? key.answer_key_json : {};
       const currentReferenceAnswer = String(keyJson.challenge_type === 'educational' ? (keyJson.consensus_result || keyJson.text || '') : (keyJson.text || '')).trim();
@@ -6245,18 +6384,26 @@
         <button class="btn btn-outline btn-sm" type="button" data-remove-choice ${choicesLocked ? 'disabled' : ''} aria-label="ลบตัวเลือก">ลบ</button>
       </div>`).join('');
 
-      showModal(row ? `ตรวจและแก้ไขข้อ ${row.question_order}` : 'เพิ่มคำถาม', `<form id="question-form" class="question-editor-form">
+      showModal(row?.id ? `ตรวจและแก้ไขข้อ ${row.question_order}` : 'เพิ่มคำถาม', `<form id="question-form" class="question-editor-form">
         <input type="hidden" name="id" value="${esc(row?.id || '')}">
         <div class="question-editor-layout">
           <div class="question-editor-main">
             ${row?.generated_by_ai ? '<div class="notice info"><strong>AI สร้างเป็นร่างเท่านั้น</strong><br>กรุณาตรวจโจทย์ ตัวเลือก รูป และเฉลยก่อนเปิดให้เจ้าหน้าที่</div>' : ''}
             ${choicesLocked ? `<div class="notice warning"><strong>มีผู้ตอบข้อนี้แล้ว ${answerCount} รายการ</strong><br>ระบบล็อกข้อความและลำดับตัวเลือกเพื่อรักษาหลักฐานเดิม แต่ยังเลือกเฉลยที่ถูก แก้คำถาม คำอธิบาย และสถานะเผยแพร่ได้</div>` : ''}
             <div class="question-editor-quick-grid">
-              <div class="field"><label>หัวข้อ</label><input class="input" name="section" value="${esc(row?.section || '')}" placeholder="เช่น Antibody Identification"></div>
-              <div class="field"><label>ประเภทคำตอบ</label><select class="select" name="type" id="question-type-select">${Object.entries(QUESTION_TYPE_LABELS).map(([value,label])=>`<option value="${value}" ${row?.question_type===value?'selected':''}>${esc(label)}</option>`).join('')}</select></div>
+              <div class="field"><label>หัวข้อ</label><input class="input" name="section" value="${esc(row?.section || prefill.section || '')}" placeholder="เช่น Antibody Identification"></div>
+              <div class="field"><label>ประเภทคำตอบ</label><select class="select" name="type" id="question-type-select">${Object.entries(QUESTION_TYPE_LABELS).map(([value,label])=>`<option value="${value}" ${(row?.question_type || prefill.question_type || 'single_choice')===value?'selected':''}>${esc(label)}</option>`).join('')}</select></div>
             </div>
-            <div class="field"><label>คำถาม</label><textarea class="textarea question-prompt-input" name="prompt" required placeholder="พิมพ์คำถามที่เจ้าหน้าที่จะเห็น">${esc(row?.prompt || '')}</textarea></div>
-            <div class="field"><label>รูปประกอบ</label><select class="select" name="image_document_id">${imageOptions}</select><div class="help">เมื่อเลือก ระบบจะเปิดไฟล์นี้ให้บุคลากรที่ได้รับมอบหมายเห็น</div></div>
+            <div class="field"><label>คำถาม</label><textarea class="textarea question-prompt-input" name="prompt" required placeholder="พิมพ์คำถามที่เจ้าหน้าที่จะเห็น">${esc(row?.prompt || prefill.prompt || '')}</textarea></div>
+            <div class="field question-image-editor">
+              <label>รูปประกอบของข้อนี้</label>
+              <select class="select" name="image_document_id" id="question-existing-image">${imageOptions}</select>
+              <div class="question-image-or">หรือ</div>
+              <input class="input" type="file" name="question_image_file" id="question-image-file" accept="image/jpeg,image/png,image/webp">
+              <label class="small"><input type="checkbox" name="remove_image"> ไม่ใช้รูปประกอบ / นำรูปเดิมออกจากข้อนี้</label>
+              <div class="help">อัปโหลดรูปตรงนี้ได้เลย ระบบจะเก็บเป็น “รูปประกอบข้อสอบ” และเปิดให้ผู้ทำแบบประเมินเห็นเฉพาะในข้อนี้</div>
+              <div id="question-image-preview" class="question-image-upload-preview">${existingQuestionImageUrl ? `<img src="${esc(existingQuestionImageUrl)}" alt="รูปประกอบปัจจุบัน"><div class="small muted">รูปประกอบปัจจุบัน</div>` : ''}</div>
+            </div>
 
             <section class="question-choice-editor">
               <div class="question-choice-editor-head"><div><strong>ตัวเลือกและเฉลย</strong><div class="small muted">ติ๊กคำว่า “เฉลย” ที่หน้าตัวเลือกที่ถูก ไม่ต้องจำเลขลำดับอีกแล้ว</div></div><button class="btn btn-outline btn-sm" type="button" id="add-choice-row" ${choicesLocked ? 'disabled' : ''}>＋ เพิ่มตัวเลือก</button></div>
@@ -6269,7 +6416,7 @@
             <details class="question-advanced-settings">
               <summary>การตั้งค่าเพิ่มเติม</summary>
               <div class="form-grid cols-2">
-                <div class="field"><label>ลำดับ</label><input class="input" type="number" name="order" required value="${esc(row?.question_order || 1)}"></div>
+                <div class="field"><label>ลำดับ</label><input class="input" type="number" name="order" required value="${esc(row?.question_order || prefill.order || 1)}"></div>
                 <div class="field"><label>คะแนน</label><input class="input" type="number" step="0.1" name="points" value="${esc(row?.points || 1)}"></div>
                 <div class="field"><label>ประเภทการประเมิน</label><select class="select" name="challenge_type"><option value="graded" ${keyJson.challenge_type==='graded'?'selected':''}>Graded — มีเฉลยทางการ</option><option value="educational" ${keyJson.challenge_type==='educational'?'selected':''}>Educational — ใช้คำตอบส่วนใหญ่</option><option value="unknown" ${!keyJson.challenge_type||keyJson.challenge_type==='unknown'?'selected':''}>รอตรวจ</option></select></div>
                 <div class="field"><label>แหล่งอ้างอิงคำตอบ</label><select class="select" name="answer_basis"><option value="official_intended_response" ${keyJson.answer_basis==='official_intended_response'?'selected':''}>Official Intended Response</option><option value="participant_consensus" ${keyJson.answer_basis==='participant_consensus'?'selected':''}>Participant consensus</option><option value="insufficient" ${!keyJson.answer_basis||keyJson.answer_basis==='insufficient'?'selected':''}>หลักฐานยังไม่พอ</option></select></div>
@@ -6284,8 +6431,8 @@
           <aside class="question-live-preview" aria-live="polite">
             <div class="question-live-preview-label">ตัวอย่างที่เจ้าหน้าที่เห็น</div>
             <div class="question-live-preview-card">
-              <span class="question-section" id="question-preview-section">${esc(row?.section || 'แบบประเมิน')}</span>
-              <h3 id="question-preview-prompt">${esc(row?.prompt || 'คำถามจะแสดงตรงนี้')}</h3>
+              <span class="question-section" id="question-preview-section">${esc(row?.section || prefill.section || 'แบบประเมิน')}</span>
+              <h3 id="question-preview-prompt">${esc(row?.prompt || prefill.prompt || 'คำถามจะแสดงตรงนี้')}</h3>
               <div id="question-preview-choices"></div>
             </div>
             <div class="small muted">หน้าตัวอย่างนี้ไม่บันทึกคำตอบ</div>
@@ -6353,11 +6500,78 @@
       });
       updateQuestionPreview();
 
+      const imageFileInput = document.getElementById('question-image-file');
+      const existingImageSelect = document.getElementById('question-existing-image');
+      const removeImageControl = document.querySelector('#question-form [name="remove_image"]');
+      const imagePreview = document.getElementById('question-image-preview');
+      existingImageSelect?.addEventListener('change', async () => {
+        if (!imagePreview || imageFileInput?.files?.length) return;
+        const documentId = String(existingImageSelect.value || '');
+        if (!documentId) { imagePreview.innerHTML = ''; return; }
+        const signedMap = await loadSignedImageMap([documentId]);
+        const signedUrl = signedMap.get(documentId);
+        imagePreview.innerHTML = signedUrl ? `<img src="${esc(signedUrl)}" alt="รูปประกอบที่เลือก"><div class="small muted">รูปที่เลือกจากเอกสารของรอบ</div>` : '<div class="small muted">ไม่สามารถแสดงตัวอย่างรูปได้</div>';
+        if (removeImageControl) removeImageControl.checked = false;
+      });
+      removeImageControl?.addEventListener('change', () => {
+        if (removeImageControl.checked) {
+          if (imageFileInput) imageFileInput.value = '';
+          if (existingImageSelect) existingImageSelect.value = '';
+          if (imagePreview) imagePreview.innerHTML = '<div class="small muted">ข้อนี้จะไม่มีรูปประกอบ</div>';
+        }
+      });
+      imageFileInput?.addEventListener('change', () => {
+        const file = imageFileInput.files?.[0];
+        if (!imagePreview) return;
+        imagePreview.innerHTML = '';
+        if (!file) return;
+        if (!['image/jpeg','image/png','image/webp'].includes(file.type)) {
+          imageFileInput.value = '';
+          return toast('รองรับเฉพาะ JPG, PNG และ WebP', 'warning');
+        }
+        if (file.size > 20 * 1024 * 1024) {
+          imageFileInput.value = '';
+          return toast('รูปต้องมีขนาดไม่เกิน 20 MB', 'warning');
+        }
+        if (removeImageControl) removeImageControl.checked = false;
+        const objectUrl = URL.createObjectURL(file);
+        imagePreview.innerHTML = `<img src="${esc(objectUrl)}" alt="ตัวอย่างรูปใหม่"><div class="small muted">${esc(file.name)}</div>`;
+      });
+
       const saveQuestion = async (goNext = false) => {
         const form = document.getElementById('question-form'); if (!form.reportValidity()) return;
         const fd = new FormData(form);
         const id = String(fd.get('id') || '');
-        const imageDocumentId = String(fd.get('image_document_id') || '') || null;
+        let imageDocumentId = fd.get('remove_image') === 'on' ? null : (String(fd.get('image_document_id') || '') || null);
+        const imageFile = fd.get('question_image_file');
+        let uploadedImagePath = null;
+        let uploadedImageDocumentId = null;
+        if (imageFile instanceof File && imageFile.size > 0) {
+          if (!['image/jpeg','image/png','image/webp'].includes(imageFile.type)) return toast('รองรับเฉพาะ JPG, PNG และ WebP', 'warning');
+          if (imageFile.size > 20 * 1024 * 1024) return toast('รูปต้องมีขนาดไม่เกิน 20 MB', 'warning');
+          const safeName = imageFile.name.replace(/[^a-zA-Z0-9._-]+/g, '_');
+          uploadedImagePath = `${round.id}/quiz_image/${crypto.randomUUID()}_${safeName}`;
+          const uploadResult = await state.supabase.storage.from(cfg.PRIVATE_BUCKET).upload(uploadedImagePath, imageFile, { upsert: false, contentType: imageFile.type });
+          if (uploadResult.error) return toast(friendlyError(uploadResult.error), 'danger');
+          const title = String(fd.get('prompt') || '').trim().slice(0, 100) || `รูปประกอบข้อ ${String(fd.get('order') || '')}`;
+          const { data: imageDoc, error: imageDocError } = await state.supabase.from('ec_round_documents').insert({
+            round_id: round.id,
+            category: 'quiz_image',
+            title,
+            file_name: imageFile.name,
+            storage_path: uploadedImagePath,
+            mime_type: imageFile.type,
+            file_size: imageFile.size,
+            visibility: 'staff',
+            uploaded_by: state.user.id
+          }).select('id').single();
+          if (imageDocError) {
+            await state.supabase.storage.from(cfg.PRIVATE_BUCKET).remove([uploadedImagePath]);
+            return toast(friendlyError(imageDocError), 'danger');
+          }
+          uploadedImageDocumentId = imageDoc.id;
+          imageDocumentId = imageDoc.id;
+        }
         if (imageDocumentId) {
           const { data: imageDocument, error: imageError } = await state.supabase.from('ec_round_documents').select('id,mime_type,visibility').eq('id', imageDocumentId).eq('round_id', round.id).single();
           if (imageError) return toast(friendlyError(imageError), 'danger');
@@ -6382,7 +6596,11 @@
         const questionResult = id
           ? await state.supabase.from('ec_questions').update(payload).eq('id', id).select().single()
           : await state.supabase.from('ec_questions').insert({ ...payload, created_by: state.user.id }).select().single();
-        if (questionResult.error) return toast(friendlyError(questionResult.error), 'danger');
+        if (questionResult.error) {
+          if (uploadedImagePath) await state.supabase.storage.from(cfg.PRIVATE_BUCKET).remove([uploadedImagePath]);
+          if (uploadedImageDocumentId) await state.supabase.from('ec_round_documents').delete().eq('id', uploadedImageDocumentId);
+          return toast(friendlyError(questionResult.error), 'danger');
+        }
         const questionId = questionResult.data.id;
         let correctIds = key?.correct_choice_ids || [];
         if (choicesLocked) {
@@ -6426,7 +6644,7 @@
         if (goNext) {
           const { data: orderedQuestions, error: orderError } = await state.supabase.from('ec_questions').select('*').eq('round_id', round.id).order('question_order');
           if (orderError) return toast(friendlyError(orderError), 'danger');
-          const visibleQuestions = generatedResultSchema(round) ? (orderedQuestions || []).filter((question) => !question.generated_by_ai) : (orderedQuestions || []);
+          const visibleQuestions = (orderedQuestions || []).filter((question) => question.generated_by_ai !== true);
           const currentIndex = visibleQuestions.findIndex((question) => question.id === questionId);
           const nextQuestion = currentIndex >= 0 ? visibleQuestions[currentIndex + 1] : null;
           if (nextQuestion) {
@@ -6441,6 +6659,100 @@
       };
       document.getElementById('save-question')?.addEventListener('click', () => saveQuestion(false));
       document.getElementById('save-question-next')?.addEventListener('click', () => saveQuestion(true));
+    };
+
+
+    const extractionTextItems = (documentRow) => {
+      const extraction = documentRow?.ai_extraction && typeof documentRow.ai_extraction === 'object' ? documentRow.ai_extraction : {};
+      const items = [];
+      const seen = new Set();
+      const add = (text, label = '') => {
+        const value = String(text || '').replace(/\s+/g, ' ').trim();
+        if (value.length < 8 || seen.has(value)) return;
+        seen.add(value);
+        items.push({ text: value, label: label || documentRow.title || documentRow.file_name || 'ข้อความจากเอกสาร' });
+      };
+      add(extraction.summary_th || extraction.summary, 'สรุปจากเอกสาร');
+      (Array.isArray(extraction.provider_questions) ? extraction.provider_questions : []).forEach((item) => add(item?.prompt || item?.question || item?.text, item?.section || 'คำถามในเอกสาร'));
+      (Array.isArray(extraction.document_sections) ? extraction.document_sections : []).forEach((item) => add(item?.text || item?.content || item?.body, item?.title || 'หัวข้อในเอกสาร'));
+      (Array.isArray(extraction.case_studies) ? extraction.case_studies : []).forEach((item) => add(item?.text || item?.case_text || item?.content || item, item?.title || 'Case Study'));
+      (Array.isArray(extraction.instructions) ? extraction.instructions : []).forEach((item) => add(item?.text || item?.content || item, 'คำแนะนำ'));
+      (Array.isArray(extraction.raw_observations) ? extraction.raw_observations : []).forEach((item) => add(item?.text || item?.content || item, 'ข้อความที่อ่านได้'));
+      if (!items.length) {
+        const walk = (value, key = '') => {
+          if (typeof value === 'string') {
+            if (!/^(v\d|completed|pending|failed|openai|gpt)/i.test(value.trim())) add(value, key);
+            return;
+          }
+          if (Array.isArray(value)) return value.forEach((item) => walk(item, key));
+          if (value && typeof value === 'object') Object.entries(value).forEach(([childKey, childValue]) => walk(childValue, childKey));
+        };
+        walk(extraction);
+      }
+      return items.slice(0, 200);
+    };
+
+    const openExtractedTextBank = async () => {
+      const { data: docs, error } = await state.supabase.from('ec_round_documents')
+        .select('id,title,file_name,category,ai_extraction,ai_extraction_status,ai_extracted_at')
+        .eq('round_id', round.id)
+        .is('archived_at', null)
+        .in('category', ['source_document','instruction','official_result','participant_summary'])
+        .order('created_at', { ascending: false });
+      if (error) return toast(friendlyError(error), 'danger');
+      const banks = (docs || []).map((doc) => ({ doc, items: extractionTextItems(doc) })).filter((bank) => bank.items.length);
+      if (!banks.length) return toast('ยังไม่มีข้อความที่ AI อ่านไว้ กด “อ่านข้อความจากเอกสาร” ก่อน', 'warning');
+      const body = banks.map(({ doc, items }) => `<section class="extracted-text-document">
+        <div class="card-header"><div><h3>${esc(doc.title || doc.file_name)}</h3><div class="small muted">${esc(labelFrom(DOCUMENT_CATEGORY_LABELS, doc.category))} · อ่าน ${fmtDate(doc.ai_extracted_at, true)}</div></div><span class="badge success">${items.length} ข้อความ</span></div>
+        <div class="extracted-text-list">${items.map((item, index) => `<article class="extracted-text-item">
+          <div><span class="small muted">${esc(item.label)}</span><p>${esc(item.text)}</p></div>
+          <div class="table-actions"><button class="btn btn-outline btn-sm" type="button" data-copy-extracted="${esc(`${doc.id}:${index}`)}">คัดลอก</button><button class="btn btn-primary btn-sm" type="button" data-use-extracted="${esc(`${doc.id}:${index}`)}">ใช้เป็นคำถาม</button></div>
+        </article>`).join('')}</div>
+      </section>`).join('');
+      showModal('คลังข้อความจากเอกสาร', `<div class="notice info"><strong>AI อ่านข้อความเท่านั้น</strong><br>ข้อความด้านล่างจะไม่กลายเป็นข้อสอบจนกว่ามัสจะกด “ใช้เป็นคำถาม” แล้วตั้งตัวเลือก เฉลย และรูปเอง</div><div class="extracted-text-bank">${body}</div>`, '<button class="btn btn-primary" data-close-modal>ปิด</button>', true);
+      const itemMap = new Map();
+      banks.forEach(({ doc, items }) => items.forEach((item, index) => itemMap.set(`${doc.id}:${index}`, item)));
+      document.querySelectorAll('[data-copy-extracted]').forEach((button) => button.addEventListener('click', async () => {
+        const item = itemMap.get(button.dataset.copyExtracted);
+        if (!item) return;
+        try { await navigator.clipboard.writeText(item.text); toast('คัดลอกข้อความแล้ว', 'success'); }
+        catch (_) { toast('คัดลอกอัตโนมัติไม่ได้ กรุณาลากเลือกข้อความ', 'warning'); }
+      }));
+      document.querySelectorAll('[data-use-extracted]').forEach((button) => button.addEventListener('click', async () => {
+        const item = itemMap.get(button.dataset.useExtracted);
+        if (!item) return;
+        const { data: lastQuestion } = await state.supabase.from('ec_questions').select('question_order').eq('round_id', round.id).eq('generated_by_ai', false).order('question_order', { ascending: false }).limit(1).maybeSingle();
+        closeModal();
+        await openQuestion(null, { prompt: item.text, section: item.label || 'แบบประเมิน', order: Number(lastQuestion?.question_order || 0) + 1, question_type: 'single_choice' });
+      }));
+    };
+
+    const readDocumentsAsText = async () => {
+      const { data: docs, error } = await state.supabase.from('ec_round_documents')
+        .select('id,title,file_name,category,mime_type,ai_extraction_status')
+        .eq('round_id', round.id)
+        .is('archived_at', null)
+        .in('category', ['source_document','instruction','official_result','participant_summary'])
+        .order('created_at');
+      if (error) return toast(friendlyError(error), 'danger');
+      if (!(docs || []).length) return toast('ยังไม่มีเอกสารต้นฉบับ คู่มือ Official Result หรือ Participant Summary', 'warning');
+      if (!confirm(`ให้ AI อ่านข้อความจากเอกสาร ${(docs || []).length} ไฟล์หรือไม่ ระบบจะไม่สร้างข้อสอบและไม่ตั้งเฉลย`)) return;
+      setBusy(true);
+      let completed = 0;
+      let failed = 0;
+      for (const doc of docs || []) {
+        try {
+          toast(`กำลังอ่านข้อความ ${completed + failed + 1}/${docs.length}: ${doc.title || doc.file_name}`, 'info', 1800);
+          await invokeCompetencyAI({ action: 'extract_document', round_id: round.id, document_id: doc.id, force: false });
+          completed += 1;
+        } catch (extractError) {
+          failed += 1;
+          console.error('extract_document failed', doc.id, extractError);
+        }
+      }
+      setBusy(false);
+      toast(failed ? `อ่านสำเร็จ ${completed} ไฟล์ ไม่สำเร็จ ${failed} ไฟล์` : `อ่านข้อความสำเร็จ ${completed} ไฟล์`, failed ? 'warning' : 'success', 7000);
+      await openExtractedTextBank();
     };
 
     const openWindowModal = (afterSave = null) => {
@@ -6467,7 +6779,12 @@
     };
 
     document.getElementById('go-document-ai-tools')?.addEventListener('click', () => navigate(`round/${round.id}/documents`));
-    document.getElementById('add-question')?.addEventListener('click', () => openQuestion());
+    document.getElementById('read-document-text')?.addEventListener('click', readDocumentsAsText);
+    document.getElementById('open-extracted-text-bank')?.addEventListener('click', openExtractedTextBank);
+    document.getElementById('add-question')?.addEventListener('click', async () => {
+      const { data: lastQuestion } = await state.supabase.from('ec_questions').select('question_order').eq('round_id', round.id).eq('generated_by_ai', false).order('question_order', { ascending: false }).limit(1).maybeSingle();
+      openQuestion(null, { order: Number(lastQuestion?.question_order || 0) + 1, question_type: 'single_choice' });
+    });
 
     const applyQuestionFilters = () => {
       const query = String(document.getElementById('question-search')?.value || '').trim().toLowerCase();
@@ -6579,51 +6896,37 @@
     });
 
     document.getElementById('unpublish-all-questions')?.addEventListener('click', async () => {
-      const formBased = Boolean(generatedResultSchema(round));
-      if (!confirm(formBased
-        ? 'พักการเผยแพร่คำถามเสริมทั้งหมดชั่วคราวหรือไม่ คำตอบเดิมจะไม่ถูกลบ'
-        : 'พักการเผยแพร่ข้อสอบทั้งหมดชั่วคราวหรือไม่ คำตอบเดิมจะไม่ถูกลบ')) return;
-      let query = state.supabase.from('ec_questions')
+      if (!confirm('พักการเผยแพร่ข้อสอบทั้งหมดชั่วคราวหรือไม่ คำตอบเดิมจะไม่ถูกลบ')) return;
+      const { data, error } = await state.supabase.from('ec_questions')
         .update({ published: false, updated_by: state.user.id })
         .eq('round_id', round.id)
-        .is('archived_at', null);
-      if (formBased) query = query.eq('generated_by_ai', false);
-      const { data, error } = await query.select('id');
+        .eq('generated_by_ai', false)
+        .is('archived_at', null)
+        .select('id');
       if (error) return toast(friendlyError(error), 'danger');
       toast(`พักการเผยแพร่แล้ว ${(data || []).length} ข้อ คำตอบเดิมยังอยู่ครบ`, 'success');
       route();
     });
 
     document.getElementById('publish-all-questions')?.addEventListener('click', async () => {
-      const formBased = Boolean(generatedResultSchema(round));
-      if (!confirm(formBased
-        ? 'ยืนยันเผยแพร่คำถามเสริมหรือไม่ แบบกรอกผลหลักไม่ต้องกดเผยแพร่'
-        : 'ยืนยันเผยแพร่ข้อสอบทั้งหมดหรือไม่ เจ้าหน้าที่ที่ได้รับมอบหมายจะเห็นคำถามทันทีตามช่วงเวลาที่กำหนด')) return;
-      if (formBased) {
-        const { data, error } = await state.supabase.from('ec_questions')
-          .update({ published: true, updated_by: state.user.id })
-          .eq('round_id', round.id)
-          .eq('generated_by_ai', false)
-          .is('archived_at', null)
-          .select('id');
-        if (error) return toast(friendlyError(error), 'danger');
-        toast(`เผยแพร่คำถามเสริมแล้ว ${(data || []).length} ข้อ`, 'success'); route();
-        return;
-      }
-      const { data, error } = await state.supabase.rpc('ec_publish_all_questions', { p_round_id: round.id });
+      if (!confirm('ยืนยันเผยแพร่ข้อสอบทั้งหมดหรือไม่ เจ้าหน้าที่ที่ได้รับมอบหมายจะเห็นคำถามตามช่วงเวลาที่กำหนด')) return;
+      const { data, error } = await state.supabase.from('ec_questions')
+        .update({ published: true, updated_by: state.user.id })
+        .eq('round_id', round.id)
+        .eq('generated_by_ai', false)
+        .is('archived_at', null)
+        .select('id');
       if (error) return toast(friendlyError(error), 'danger');
-      toast(`เผยแพร่ข้อสอบแล้ว ${data || 0} ข้อ`, 'success'); route();
+      toast(`เผยแพร่ข้อสอบแล้ว ${(data || []).length} ข้อ`, 'success');
+      route();
     });
 
     document.getElementById('set-competency-window')?.addEventListener('click', () => openWindowModal());
 
     document.getElementById('assign-all-competency')?.addEventListener('click', async () => {
-      const formBased = Boolean(generatedResultSchema(round));
-      if (!formBased) {
-        const { count: publishedCount, error: questionCountError } = await state.supabase.from('ec_questions').select('id', { count: 'exact', head: true }).eq('round_id', round.id).eq('published', true).is('archived_at', null);
-        if (questionCountError) return toast(friendlyError(questionCountError), 'danger');
-        if (!publishedCount) return toast('กรุณาตรวจและเผยแพร่ข้อสอบอย่างน้อย 1 ข้อก่อนสร้างรายการประเมิน', 'warning');
-      }
+      const { count: publishedCount, error: questionCountError } = await state.supabase.from('ec_questions').select('id', { count: 'exact', head: true }).eq('round_id', round.id).eq('published', true).eq('generated_by_ai', false).is('archived_at', null);
+      if (questionCountError) return toast(friendlyError(questionCountError), 'danger');
+      if (!publishedCount) return toast('กรุณาเพิ่ม ตรวจ และเผยแพร่ข้อสอบอย่างน้อย 1 ข้อก่อนสร้างรายการประเมิน', 'warning');
 
       const createAssignments = async () => {
         const { data, error } = await state.supabase.rpc('ec_sync_competency_assignments', { p_round_id: round.id });
@@ -6644,6 +6947,28 @@
     });
 
     document.querySelectorAll('[data-preview-staff-assignment]').forEach((button) => button.addEventListener('click', () => openStaffCompetencyPreview(button.dataset.previewStaffAssignment)));
+
+    document.getElementById('select-all-review-ready')?.addEventListener('click', () => {
+      const boxes = [...document.querySelectorAll('[data-review-assignment-check]:not(:disabled)')];
+      const shouldCheck = boxes.some((box) => !box.checked);
+      boxes.forEach((box) => { box.checked = shouldCheck; });
+    });
+
+    document.getElementById('review-selected-assignments')?.addEventListener('click', async () => {
+      const ids = [...document.querySelectorAll('[data-review-assignment-check]:checked')].map((box) => box.value).filter(Boolean);
+      if (!ids.length) return toast('กรุณาเลือกอย่างน้อย 1 คนที่รอตรวจ', 'warning');
+      const queue = [...ids];
+      const openNext = async () => {
+        const next = queue.shift();
+        if (!next) {
+          toast('ตรวจครบคนที่เลือกแล้ว', 'success');
+          route();
+          return;
+        }
+        await openQuizReview(next, openNext);
+      };
+      await openNext();
+    });
 
     document.querySelectorAll('[data-archive-competency]').forEach((button) => button.addEventListener('click', async () => {
       button.disabled = true;
@@ -6685,116 +7010,163 @@
     });
   }
 
-  async function openQuizReview(assignmentId) {
-    const [{ data: assignment, error: assignmentError }, { data: answers, error: answersError }, { data: questions }, { data: choices }, { data: keys }, { data: reviewEvidenceRows, error: reviewEvidenceError }] = await Promise.all([
-      state.supabase.from('ec_competency_assignments').select('*, ec_profiles!ec_competency_assignments_user_id_fkey(full_name), ec_eqa_rounds(*)').eq('id', assignmentId).single(),
+  async function openQuizReview(assignmentId, onDone = null) {
+    const { data: assignment, error: assignmentError } = await state.supabase
+      .from('ec_competency_assignments')
+      .select('*,ec_profiles(full_name),ec_eqa_rounds(*)')
+      .eq('id', assignmentId)
+      .single();
+    if (assignmentError) return toast(friendlyError(assignmentError), 'danger');
+
+    const [
+      { data: answers, error: answersError },
+      { data: questionRows, error: questionsError },
+      { data: evidenceRows, error: evidenceError },
+      { data: reviewEvidenceRows, error: reviewEvidenceError }
+    ] = await Promise.all([
       state.supabase.from('ec_competency_answers').select('*').eq('assignment_id', assignmentId),
-      state.supabase.from('ec_questions').select('*').order('question_order'),
-      state.supabase.from('ec_question_choices').select('*').order('choice_order'),
-      state.supabase.from('ec_question_answer_keys').select('*'),
+      state.supabase.from('ec_questions').select('*').eq('round_id', assignment.round_id).eq('published', true).eq('generated_by_ai', false).is('archived_at', null).order('question_order'),
+      state.supabase.from('ec_round_documents').select('id,title,file_name,storage_path,mime_type,category,visibility').eq('round_id', assignment.round_id).is('archived_at', null),
       state.supabase.from('ec_work_evidence').select('*').eq('competency_assignment_id', assignmentId).eq('context_type', 'competency').is('archived_at', null).order('created_at', { ascending: false })
     ]);
-    if (assignmentError || answersError || reviewEvidenceError) return toast(friendlyError(assignmentError || answersError || reviewEvidenceError), 'danger');
-
-    state.currentRound = assignment.ec_eqa_rounds;
-    await loadRoundInstructionExtractions(assignment.round_id);
-    if (generatedResultSchema(assignment.ec_eqa_rounds) && resultPayloadHasData(assignment.result_payload)) {
-      const supplementalQuestions = (questions || []).filter((question) => question.round_id === assignment.round_id && !question.generated_by_ai && question.published);
-      const { data: evidenceDocuments, error: evidenceError } = await state.supabase.from('ec_round_documents')
-        .select('id,title,file_name,storage_path,mime_type,visibility,category')
-        .eq('round_id', assignment.round_id)
-        .in('category', ['raw_result_image','antibody_panel'])
-        .is('archived_at', null)
-        .order('created_at');
-      if (evidenceError) return toast(friendlyError(evidenceError), 'danger');
-      const evidenceMap = await loadSignedImageMap((evidenceDocuments || []).map((document) => document.id), 1800);
-      const answerMap = new Map((answers || []).map((answer) => [answer.question_id, answer]));
-      const keyMap = new Map((keys || []).map((key) => [key.question_id, key]));
-      const choiceName = (id) => (choices || []).find((choice) => choice.id === id)?.choice_text || id || '-';
-      const supplementalRows = supplementalQuestions.map((question) => {
-        const answer = answerMap.get(question.id);
-        const payload = answer?.answer_payload || {};
-        const userAnswer = payload.choice_id ? choiceName(payload.choice_id) : (payload.text || '-');
-        const key = keyMap.get(question.id);
-        const correctText = (key?.correct_choice_ids || []).map(choiceName).join(', ') || key?.answer_key_json?.text || key?.explanation || 'ให้ผู้ทบทวนพิจารณา';
-        return `<div class="card" style="box-shadow:none;border:1px solid var(--line)"><h3>${question.question_order}. ${esc(displayQuestionPrompt(question.prompt) || question.prompt)}</h3><div class="grid cols-2"><div><strong>คำตอบของผู้ทำ</strong><p>${esc(userAnswer)}</p></div><div><strong>แนวคำตอบ/เฉลย</strong><p>${esc(correctText)}</p></div></div><div class="form-grid cols-2"><div class="field"><label>ผลการตรวจ</label><select class="select" data-answer-result="${answer?.id || ''}" required><option value="">เลือกผล</option><option value="true" ${answer?.is_correct===true?'selected':''}>ถูก</option><option value="false" ${answer?.is_correct===false?'selected':''}>ไม่ถูก</option></select></div><div class="field"><label>ข้อคิดเห็น</label><input class="input" data-answer-comment="${answer?.id || ''}" value="${esc(answer?.reviewer_comment || '')}"></div></div></div>`;
-      }).join('');
-      const formReviewValue = assignment.result_form_review_pass === true ? 'true' : assignment.result_form_review_pass === false ? 'false' : '';
-      const body = `<div class="notice info"><strong>ตรวจผลที่เจ้าหน้าที่แปลจากภาพผลดิบ</strong><br>แบบกรอกนี้แยกจากผลรายบุคคลของผู้ปฏิบัติจริง 2 คน ผู้ทบทวนตรวจความถูกต้องโดยเทียบกับหลักฐานและผลกลางของห้อง</div><div style="height:12px"></div>
-        <details class="competency-review-evidence"><summary><strong>เปิดดูภาพผลดิบที่ใช้ทำ Competency</strong></summary>${competencyEvidenceGallery(evidenceDocuments || [], evidenceMap)}</details>
-        <div style="height:12px"></div><div class="card" style="box-shadow:none;border:1px solid var(--line)"><div class="card-header"><h3>แบบผลที่เจ้าหน้าที่กรอก</h3></div>${resultForm(assignment.result_payload, 'reviewCompetencyResult', true, true, { showReportingCodes: false })}</div>
-        <div style="height:12px"></div><div class="field"><label>ผลการตรวจแบบกรอกหลัก</label><select class="select" id="result-form-review-pass" required><option value="">เลือกผล</option><option value="true" ${formReviewValue==='true'?'selected':''}>ผ่าน — แปลผลเหมาะสม</option><option value="false" ${formReviewValue==='false'?'selected':''}>ต้องทบทวน — มีผลไม่ถูกต้อง/ไม่ครบ</option></select></div>
-        ${supplementalRows ? `<div style="height:12px"></div><h3>คำถามเสริม</h3><div id="quiz-review-list" class="grid">${supplementalRows}</div>` : ''}
-        <div style="height:12px"></div>${workEvidencePanelHtml('review-competency-evidence', reviewEvidenceRows || [], false)}
-        <div class="field"><label>หมายเหตุรวมของผู้ทบทวน</label><textarea class="textarea" id="quiz-review-note">${esc(assignment.result_form_review_note || '')}</textarea></div>`;
-      showModal(`ตรวจการแปลผลจากภาพ — ${assignment.ec_profiles?.full_name || ''}`, body, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-quiz-review">ผ่านการทบทวนและส่งให้ผู้รับรองคุณภาพ</button>`, true);
-      bindWorkEvidencePanel('review-competency-evidence', { roundId: assignment.round_id, contextType: 'competency', assignmentId });
-      document.getElementById('save-quiz-review').addEventListener('click', async () => {
-        const passValue = document.getElementById('result-form-review-pass').value;
-        if (!passValue) return toast('กรุณาเลือกผลการตรวจแบบกรอกหลัก', 'warning');
-        const reviewRows = [...document.querySelectorAll('[data-answer-result]')].map((select) => ({
-          answer_id: select.dataset.answerResult,
-          is_correct: select.value === 'true' ? true : select.value === 'false' ? false : null,
-          comment: document.querySelector(`[data-answer-comment="${select.dataset.answerResult}"]`)?.value || ''
-        }));
-        if (reviewRows.some((row) => !row.answer_id || row.is_correct === null)) return toast('กรุณาตรวจคำถามเสริมให้ครบ', 'warning');
-        const note = document.getElementById('quiz-review-note').value || null;
-        if (reviewRows.length) {
-          const { error: quizError } = await state.supabase.rpc('ec_reviewer_review_quiz', { p_assignment_id: assignmentId, p_reviews: reviewRows, p_note: note });
-          if (quizError) return toast(friendlyError(quizError), 'danger');
-        }
-        const { error: formError } = await state.supabase.rpc('ec_reviewer_review_result_form', {
-          p_assignment_id: assignmentId,
-          p_pass: passValue === 'true',
-          p_note: note
-        });
-        if (formError) return toast(friendlyError(formError), 'danger');
-        await archiveReportToDrive({ report_type: 'competency', assignment_id: assignmentId, stage: 'reviewed' }, true);
-        closeModal(); toast('ตรวจแบบผลแล้ว ส่งให้ผู้รับรองคุณภาพเรียบร้อย', 'success'); route();
-      });
-      return;
+    if (answersError || questionsError || evidenceError || reviewEvidenceError) {
+      return toast(friendlyError(answersError || questionsError || evidenceError || reviewEvidenceError), 'danger');
     }
 
-    const roundQuestions = (questions || []).filter((question) => question.round_id === assignment.round_id);
-    const imageMap = await loadSignedImageMap(roundQuestions.flatMap((question) => questionImageIds(question)));
+    const questionIds = (questionRows || []).map((question) => question.id);
+    let choices = [];
+    let keys = [];
+    if (questionIds.length) {
+      const [{ data: choiceRows, error: choicesError }, { data: keyRows, error: keysError }] = await Promise.all([
+        state.supabase.from('ec_question_choices').select('*').in('question_id', questionIds).order('choice_order'),
+        state.supabase.from('ec_question_answer_keys').select('*').in('question_id', questionIds)
+      ]);
+      if (choicesError || keysError) return toast(friendlyError(choicesError || keysError), 'danger');
+      choices = choiceRows || [];
+      keys = keyRows || [];
+    }
+
     const answerMap = new Map((answers || []).map((answer) => [answer.question_id, answer]));
     const keyMap = new Map((keys || []).map((key) => [key.question_id, key]));
-    const choiceName = (id) => (choices || []).find((choice) => choice.id === id)?.choice_text || id || '-';
-    const rows = roundQuestions.map((question) => {
-      const answer = answerMap.get(question.id);
+    const imageMap = await loadSignedImageMap((questionRows || []).flatMap((question) => questionImageIds(question)));
+    const rawEvidence = evidenceRows.filter((doc) => ['raw_result_image','antibody_panel'].includes(doc.category));
+    const rawEvidenceMap = await loadSignedImageMap(rawEvidence.map((doc) => doc.id));
+
+    const answerText = (question, answer) => {
       const payload = answer?.answer_payload || {};
-      const userAnswer = payload.choice_id ? choiceName(payload.choice_id) : (payload.text || '-');
+      if (question.question_type === 'single_choice') {
+        return (choices || []).find((choice) => choice.id === payload.choice_id)?.choice_text || '-';
+      }
+      if (question.question_type === 'multiple_choice') {
+        const selectedIds = new Set(Array.isArray(payload.choice_ids) ? payload.choice_ids.map(String) : []);
+        const selectedTexts = (choices || [])
+          .filter((choice) => choice.question_id === question.id && selectedIds.has(String(choice.id)))
+          .sort((a,b) => Number(a.choice_order || 0) - Number(b.choice_order || 0))
+          .map((choice) => choice.choice_text);
+        return selectedTexts.join(' / ') || '-';
+      }
+      return payload.text || '-';
+    };
+    const correctText = (question) => {
       const key = keyMap.get(question.id);
-      const isEducational = String(key?.answer_key_json?.challenge_type || '').toLowerCase() === 'educational'
-        || String(key?.answer_key_json?.answer_basis || '').toLowerCase() === 'participant_consensus';
-      const consensusText = [key?.answer_key_json?.consensus_result, key?.answer_key_json?.consensus_percent].filter(Boolean).join(' · ');
-      const correctText = consensusText || (key?.correct_choice_ids || []).map(choiceName).join(', ') || key?.answer_key_json?.text || key?.explanation || 'ให้ผู้ทบทวนพิจารณา';
-      const galleryHtml = questionImageGallery(question, imageMap, 'review');
-      return `<div class="card" style="box-shadow:none;border:1px solid var(--line)">
-        <h3>${question.question_order}. ${esc(displayQuestionPrompt(question.prompt) || question.prompt)} ${isEducational ? '<span class="badge info">Educational</span>' : ''}</h3>
-        ${galleryHtml}
-        <div class="grid cols-2"><div><strong>คำตอบของผู้ทำ</strong><p>${esc(userAnswer)}</p></div><div><strong>${isEducational ? 'คำตอบของผู้เข้าร่วมส่วนใหญ่' : 'แนวคำตอบ/เฉลย'}</strong><p>${esc(correctText)}</p></div></div>
-        ${isEducational && key?.answer_key_json?.comparison_note ? `<div class="notice info small">${esc(key.answer_key_json.comparison_note)}</div>` : ''}
-        <div class="form-grid cols-2">
-          <div class="field"><label>${isEducational ? 'ผลการเปรียบเทียบ' : 'ผลการตรวจ'}</label><select class="select" data-answer-result="${answer?.id || ''}" required><option value="">เลือกผล</option><option value="true" ${answer?.is_correct===true?'selected':''}>${isEducational ? 'สอดคล้องกับกลุ่มส่วนใหญ่' : 'ถูก'}</option><option value="false" ${answer?.is_correct===false?'selected':''}>${isEducational ? 'คำตอบส่วนน้อย — ต้องชี้แจง' : 'ไม่ถูก'}</option></select></div>
-          <div class="field"><label>ข้อคิดเห็น</label><input class="input" data-answer-comment="${answer?.id || ''}" value="${esc(answer?.reviewer_comment || '')}"></div>
+      const correctIds = new Set(key?.correct_choice_ids || []);
+      const choiceTexts = (choices || []).filter((choice) => choice.question_id === question.id && correctIds.has(choice.id)).sort((a,b) => Number(a.choice_order || 0)-Number(b.choice_order || 0)).map((choice) => choice.choice_text);
+      return choiceTexts.join(' / ') || key?.answer_key_json?.text || key?.answer_key_json?.consensus_result || '-';
+    };
+
+    const questionCards = (questionRows || []).map((question) => {
+      const answer = answerMap.get(question.id);
+      const currentResult = answer?.is_correct === true ? 'true' : answer?.is_correct === false ? 'false' : '';
+      return `<article class="review-person-question" data-review-question="${question.id}">
+        <div class="review-person-question-head">
+          <div><span class="question-section">${esc(question.section || 'แบบประเมิน')}</span><h3>${question.question_order}. ${esc(displayQuestionPrompt(question.prompt) || question.prompt)}</h3></div>
+          <label class="return-question-check"><input type="checkbox" data-needs-correction="${question.id}"> ส่งข้อนี้กลับแก้</label>
         </div>
-      </div>`;
+        ${questionImageGallery(question, imageMap, 'review')}
+        <div class="grid cols-2 review-answer-compare">
+          <div><span class="small muted">คำตอบของผู้ทำ</span><div class="review-answer-value">${esc(answerText(question, answer))}</div></div>
+          <div><span class="small muted">แนวคำตอบ/เฉลย</span><div class="review-answer-value">${esc(correctText(question))}</div></div>
+        </div>
+        <div class="form-grid cols-2">
+          <div class="field"><label>ผลการตรวจ</label><select class="select" data-answer-result="${answer?.id || ''}" data-question-id="${question.id}" required>
+            <option value="">เลือกผล</option>
+            <option value="true" ${currentResult === 'true' ? 'selected' : ''}>ถูก / เหมาะสม</option>
+            <option value="false" ${currentResult === 'false' ? 'selected' : ''}>ไม่ถูก / ต้องแก้</option>
+          </select></div>
+          <div class="field"><label>ข้อคิดเห็นเฉพาะข้อนี้</label><input class="input" data-answer-comment="${answer?.id || ''}" value="${esc(answer?.reviewer_comment || '')}" placeholder="เช่น ตรวจ Cell 7–11 ใหม่"></div>
+        </div>
+      </article>`;
     }).join('');
-    showModal(`ตรวจแบบทดสอบ — ${assignment.ec_profiles?.full_name || ''}`, `<div class="notice">ผู้ทบทวนเป็นผู้ตรวจด่านแรก เมื่อบันทึกแล้วระบบจะส่งต่อให้ผู้รับรองคุณภาพรับรอง</div><div style="height:12px"></div><div id="quiz-review-list" class="grid">${rows || empty('ไม่พบคำตอบ')}</div><div style="height:12px"></div>${workEvidencePanelHtml('review-competency-evidence', reviewEvidenceRows || [], false)}<div class="field"><label>หมายเหตุรวมของผู้ทบทวน</label><textarea class="textarea" id="quiz-review-note"></textarea></div>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-quiz-review">ผ่านการทบทวนและส่งให้ผู้รับรองคุณภาพ</button>`, true);
+
+    const rawGallery = rawEvidence.length ? `<details class="competency-review-evidence" open><summary><strong>ภาพผลดิบและ Antigram ของรอบนี้</strong></summary><div class="provider-evidence-thumb-grid">${rawEvidence.map((doc) => {
+      const url = rawEvidenceMap.get(doc.id);
+      return url ? `<figure class="provider-evidence-thumb"><a href="${esc(url)}" target="_blank" rel="noopener"><img src="${esc(url)}" alt="${esc(doc.title || doc.file_name)}"></a><figcaption>${esc(doc.title || doc.file_name)}</figcaption></figure>` : '';
+    }).join('')}</div></details>` : '';
+
+    showModal(`ตรวจรายบุคคล — ${assignment.ec_profiles?.full_name || ''}`, `
+      <div class="notice info"><strong>ตรวจทีละคน</strong><br>เทียบคำตอบกับรูปผลดิบและเฉลย จากนั้นเลือกเฉพาะข้อที่ต้องส่งกลับแก้ ข้อที่ไม่เลือกจะถูกล็อกไว้เมื่อเจ้าหน้าที่กลับมาแก้</div>
+      ${rawGallery}
+      <div style="height:12px"></div>
+      <div id="quiz-review-list" class="review-person-question-list">${questionCards || empty('ยังไม่มีข้อสอบที่เผยแพร่')}</div>
+      <div style="height:12px"></div>
+      ${workEvidencePanelHtml('review-competency-evidence', reviewEvidenceRows || [], false)}
+      <div class="field"><label>หมายเหตุรวมถึงผู้ทำแบบประเมิน</label><textarea class="textarea" id="quiz-review-note" placeholder="จำเป็นเมื่อส่งกลับแก้ไข">${esc(assignment.correction_note || assignment.reviewer_note || '')}</textarea></div>
+    `, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-warning" id="return-quiz-correction">ส่งกลับเฉพาะข้อที่เลือก</button><button class="btn btn-success" id="approve-quiz-review">ผ่านและส่งต่อผู้รับรองคุณภาพ</button>`, true);
     bindWorkEvidencePanel('review-competency-evidence', { roundId: assignment.round_id, contextType: 'competency', assignmentId });
-    document.getElementById('save-quiz-review').addEventListener('click', async () => {
-      const reviewRows = [...document.querySelectorAll('[data-answer-result]')].map((select) => ({
-        answer_id: select.dataset.answerResult,
-        is_correct: select.value === 'true' ? true : select.value === 'false' ? false : null,
-        comment: document.querySelector(`[data-answer-comment="${select.dataset.answerResult}"]`)?.value || ''
-      }));
-      if (reviewRows.some((row) => !row.answer_id || row.is_correct === null)) return toast('กรุณาตรวจทุกข้อให้ครบ', 'warning');
-      const { error } = await state.supabase.rpc('ec_reviewer_review_quiz', { p_assignment_id: assignmentId, p_reviews: reviewRows, p_note: document.getElementById('quiz-review-note').value || null });
-      if (error) return toast(friendlyError(error), 'danger');
-      await archiveReportToDrive({ report_type: 'competency', assignment_id: assignmentId, stage: 'reviewed' }, true);
-      closeModal(); toast('ตรวจทานแล้ว ส่งให้ผู้รับรองคุณภาพเรียบร้อย', 'success'); route();
+
+    document.querySelectorAll('[data-answer-result]').forEach((select) => {
+      select.addEventListener('change', () => {
+        if (select.value === 'false') {
+          document.querySelector(`[data-needs-correction="${select.dataset.questionId}"]`)?.setAttribute('checked', 'checked');
+          const checkbox = document.querySelector(`[data-needs-correction="${select.dataset.questionId}"]`);
+          if (checkbox) checkbox.checked = true;
+        }
+      });
     });
+
+    const collectReviews = () => {
+      return (questionRows || []).map((question) => {
+        const answer = answerMap.get(question.id);
+        const result = document.querySelector(`[data-answer-result="${answer?.id || ''}"]`);
+        const comment = document.querySelector(`[data-answer-comment="${answer?.id || ''}"]`);
+        const correction = document.querySelector(`[data-needs-correction="${question.id}"]`);
+        return {
+          answer_id: answer?.id || '',
+          question_id: question.id,
+          is_correct: result?.value || '',
+          comment: String(comment?.value || '').trim(),
+          needs_correction: Boolean(correction?.checked)
+        };
+      });
+    };
+
+    const decide = async (decision) => {
+      const reviews = collectReviews();
+      if (reviews.some((review) => !review.answer_id || !review.is_correct)) return toast('กรุณาตรวจคำตอบทุกข้อให้ครบ', 'warning');
+      const note = String(document.getElementById('quiz-review-note')?.value || '').trim();
+      if (decision === 'returned' && !reviews.some((review) => review.needs_correction)) return toast('กรุณาเลือกอย่างน้อย 1 ข้อที่ต้องแก้', 'warning');
+      if (decision === 'returned' && !note) return toast('กรุณาระบุคำแนะนำก่อนส่งกลับ', 'warning');
+      const confirmation = decision === 'returned'
+        ? 'ยืนยันส่งกลับเฉพาะข้อที่เลือกให้เจ้าหน้าที่แก้หรือไม่'
+        : 'ยืนยันว่าตรวจครบและส่งต่อผู้รับรองคุณภาพหรือไม่';
+      if (!confirm(confirmation)) return;
+      setBusy(true);
+      const { data, error } = await state.supabase.rpc('ec_reviewer_decide_quiz_v281', {
+        p_assignment_id: assignmentId,
+        p_reviews: reviews,
+        p_decision: decision,
+        p_note: note || null
+      });
+      setBusy(false);
+      if (error) return toast(friendlyError(error), 'danger');
+      closeModal();
+      toast(decision === 'returned' ? `ส่งกลับให้แก้ ${data?.question_count || 0} ข้อแล้ว` : 'ตรวจผ่านและส่งต่อผู้รับรองคุณภาพแล้ว', 'success');
+      if (typeof onDone === 'function') await onDone();
+      else route();
+    };
+
+    document.getElementById('return-quiz-correction')?.addEventListener('click', () => decide('returned'));
+    document.getElementById('approve-quiz-review')?.addEventListener('click', () => decide('approved'));
   }
 
   async function openReflectionReview(assignmentId) {
@@ -6831,27 +7203,29 @@
   }
 
   async function openStaffCompetencyPreview(assignmentId) {
-    const { data: assignment, error } = await state.supabase
-      .from('ec_competency_assignments')
-      .select('*, ec_profiles!ec_competency_assignments_user_id_fkey(full_name), ec_eqa_rounds(*)')
-      .eq('id', assignmentId)
-      .single();
+    const { data: assignment, error } = await state.supabase.from('ec_competency_assignments').select('*,ec_profiles(full_name),ec_eqa_rounds(*)').eq('id', assignmentId).single();
     if (error) return toast(friendlyError(error), 'danger');
-    state.currentRound = assignment.ec_eqa_rounds;
-    await loadRoundInstructionExtractions(assignment.round_id);
-    const { data: evidenceDocuments, error: evidenceError } = await state.supabase.from('ec_round_documents')
-      .select('id,title,file_name,storage_path,mime_type,visibility,category')
-      .eq('round_id', assignment.round_id)
-      .in('category', ['raw_result_image','antibody_panel'])
-      .is('archived_at', null)
-      .order('created_at');
-    if (evidenceError) return toast(friendlyError(evidenceError), 'danger');
-    const staffEvidenceDocuments = (evidenceDocuments || []).filter((row) => row.visibility === 'staff');
-    const evidenceMap = await loadSignedImageMap(staffEvidenceDocuments.map((row) => row.id), 1200);
-    const body = `<div class="staff-preview-ribbon"><strong>ตัวอย่างหน้าจอของเจ้าหน้าที่</strong><span>ดูอย่างเดียว ไม่เปลี่ยนสิทธิ์จริงและไม่บันทึกข้อมูล</span></div>
-      <div class="staff-preview-section"><h3>แบบประเมินพร้อมภาพผลดิบที่ใช้ตอบ</h3>${resultForm(assignment.result_payload, 'staffPreview', true, true, { showReportingCodes: false, evidenceContext: { showEvidence: true, documents: staffEvidenceDocuments, imageMap: evidenceMap } })}</div>`;
-    showModal(`มุมมองของ ${assignment.ec_profiles?.full_name || 'เจ้าหน้าที่'}`, body, '<button class="btn btn-primary" data-close-modal>ปิด</button>', true);
-    bindProviderGeneratedResultControls(document.getElementById('modal-backdrop') || document);
+    const [{ data: questions, error: questionError }, { data: choices, error: choiceError }] = await Promise.all([
+      state.supabase.from('ec_questions').select('*').eq('round_id', assignment.round_id).eq('published', true).eq('generated_by_ai', false).is('archived_at', null).order('question_order'),
+      state.supabase.from('ec_question_choices').select('*')
+    ]);
+    if (questionError || choiceError) return toast(friendlyError(questionError || choiceError), 'danger');
+    const imageMap = await loadSignedImageMap((questions || []).flatMap((question) => questionImageIds(question)));
+    let previousSection = '';
+    const html = (questions || []).map((question) => {
+      const section = String(question.section || 'แบบประเมิน');
+      const divider = section !== previousSection ? `<div class="quiz-section-divider"><span>${esc(section)}</span></div>` : '';
+      previousSection = section;
+      const questionChoices = (choices || []).filter((choice) => choice.question_id === question.id).sort((a,b) => Number(a.choice_order || 0)-Number(b.choice_order || 0));
+      const promptParts = questionPromptParts(question.prompt);
+      const input = question.question_type === 'single_choice'
+        ? `<div class="quiz-choice-list">${questionChoices.map((choice) => `<label class="quiz-choice"><input type="radio" disabled><span class="quiz-radio-ui"></span><span>${esc(choice.choice_text)}</span></label>`).join('')}</div>`
+        : question.question_type === 'multiple_choice'
+          ? `<div class="quiz-choice-list">${questionChoices.map((choice) => `<label class="quiz-choice"><input type="checkbox" disabled><span class="quiz-checkbox-ui"></span><span>${esc(choice.choice_text)}</span></label>`).join('')}</div>`
+          : '<textarea class="textarea quiz-text-answer" disabled placeholder="ช่องคำตอบของเจ้าหน้าที่"></textarea>';
+      return `${divider}<article class="quiz-question-card"><div class="quiz-question-head"><span class="quiz-question-number">${question.question_order}</span><div><span class="small muted">${esc(section)}</span><h3>${esc(promptParts.prompt)}</h3></div></div>${promptParts.context ? `<div class="quiz-case-context"><strong>ข้อมูลประกอบโจทย์</strong><div>${esc(promptParts.context)}</div></div>` : ''}${questionImageGallery(question, imageMap, 'quiz')}${input}</article>`;
+    }).join('');
+    showModal(`ตัวอย่างหน้าของ ${assignment.ec_profiles?.full_name || 'เจ้าหน้าที่'}`, `<div class="notice info"><strong>โหมดตัวอย่างเท่านั้น</strong><br>ไม่บันทึกคำตอบและไม่เปลี่ยนบทบาทที่กำลังใช้งาน</div><div class="quiz-form-shell staff-question-set-preview">${html || empty('ยังไม่มีข้อสอบที่เผยแพร่')}</div>`, '<button class="btn btn-primary" data-close-modal>ปิดตัวอย่าง</button>', true);
   }
 
   function bindCompetencyReview(round) {
@@ -6933,8 +7307,15 @@
       } else if (!result) {
         badge = '<span class="badge info">ยังไม่เริ่ม</span>';
       } else if (result.status === 'draft' || result.status === 'returned') {
-        badge = `<span class="badge ${result.status === 'returned' ? 'warning' : 'info'}">${esc(labelFrom(RESULT_STATUS_LABELS, result.status))}</span>`;
-        actionLabel = 'ทำต่อ';
+        badge = result.status === 'returned'
+          ? '<span class="badge danger">ส่งกลับแก้ไข</span>'
+          : `<span class="badge info">${esc(labelFrom(RESULT_STATUS_LABELS, result.status))}</span>`;
+        actionLabel = result.status === 'returned' ? 'แก้เฉพาะหัวข้อที่ส่งกลับ' : 'ทำต่อ';
+        if (result.status === 'returned') {
+          const returnedSections = Array.isArray(result.correction_scope?.sections) ? result.correction_scope.sections : [];
+          const sectionNames = { specimen: 'ผลตัวอย่าง/การอ่านปฏิกิริยา', method: 'วิธีทดสอบและผู้ผลิต', antigen: 'Antigen typing', general: 'ข้อมูลทั่วไป', evidence: 'รูปหรือหลักฐาน' };
+          detail = `<div class="correction-card-note"><strong>ผู้ทบทวนส่งกลับ:</strong> ${esc(result.reviewer_note || 'กรุณาแก้หัวข้อที่เปิดให้แก้')}<br><span class="small">แก้ได้เฉพาะ: ${esc(returnedSections.map((key) => sectionNames[key] || key).join(', ') || 'หัวข้อที่ผู้ทบทวนเลือก')}</span></div>`;
+        }
       } else {
         badge = `<span class="badge success">${esc(labelFrom(RESULT_STATUS_LABELS, result.status))}</span>`;
         actionLabel = 'เปิดดูผลที่ส่ง';
@@ -6965,20 +7346,20 @@
     const competencyCards = competencyAssignments.map((a) => {
       const closeAt = a.ec_eqa_rounds?.competency_close_at;
       const expired = closeAt && new Date(closeAt).getTime() < Date.now() && ['not_started','in_progress'].includes(a.status);
-      const typeText = a.assignment_type === 'quiz' && generatedResultSchema(a.ec_eqa_rounds)
-        ? 'ประเมินจากภาพผลดิบ / Case Study'
-        : labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type);
+      const typeText = a.assignment_type === 'quiz' ? 'แบบประเมินที่แอดมินจัดคำถามและผูกรูปเอง' : labelFrom(COMPETENCY_TYPE_LABELS, a.assignment_type);
+      const correctionQuestionIds = Array.isArray(a.correction_scope?.question_ids) ? a.correction_scope.question_ids : [];
       return `<article class="my-competency-card">
         <div class="my-competency-card-head">
           <div><span class="my-work-kicker">หัวข้อ 10 · การประเมินความสามารถ</span><h2>${esc(a.ec_eqa_rounds?.provider || '')} ${esc(a.ec_eqa_rounds?.round_code || '')}</h2><div class="my-competency-type">${esc(typeText)}</div></div>
-          ${assignmentBadge(a.status)}
+          ${a.correction_required ? '<span class="badge danger">ส่งกลับแก้ไข</span>' : assignmentBadge(a.status)}
         </div>
         <div class="my-competency-meta">
           <div><span>ปิดรับคำตอบ</span><strong>${closeAt ? fmtDate(closeAt, true) : '-'}</strong></div>
           <div><span>คะแนน</span><strong>${a.score ?? '-'}</strong></div>
         </div>
+        ${a.correction_required ? `<div class="correction-card-note"><strong>ผู้ทบทวนส่งกลับ ${correctionQuestionIds.length || ''} ข้อ</strong><br>${esc(a.correction_note || 'กรุณาแก้เฉพาะข้อที่เปิดให้แก้')}</div>` : ''}
         ${expired ? '<div class="notice danger small">ปิดรับคำตอบแล้ว</div>' : ''}
-        <button class="btn btn-primary my-competency-open" data-open-assignment="${a.id}" ${expired ? 'disabled' : ''}>${a.status === 'in_progress' ? 'ทำต่อ' : a.status === 'not_started' ? 'เริ่มทำ' : 'เปิดดูผล'}</button>
+        <button class="btn btn-primary my-competency-open" data-open-assignment="${a.id}" ${expired ? 'disabled' : ''}>${a.correction_required ? 'แก้เฉพาะข้อที่ส่งกลับ' : a.status === 'in_progress' ? 'ทำต่อ' : a.status === 'not_started' ? 'เริ่มทำ' : 'เปิดดูผล'}</button>
       </article>`;
     }).join('');
 
@@ -6998,32 +7379,27 @@
   async function renderAssignment(id) {
     const assignedStaff = hasAssignedRole('staff') && !hasAssignedRole('physician');
     if (!assignedStaff) return navigate('dashboard');
+
     const { data: assignment, error } = await state.supabase.from('ec_competency_assignments').select('*,ec_eqa_rounds(*)').eq('id', id).eq('user_id', state.user.id).single();
     if (error) return renderError(error);
     const { data: competencyEvidenceRows, error: competencyEvidenceError } = await state.supabase.from('ec_work_evidence')
-      .select('*')
-      .eq('competency_assignment_id', id)
-      .eq('context_type', 'competency')
-      .is('archived_at', null)
-      .order('created_at', { ascending: false });
+      .select('*').eq('competency_assignment_id', id).eq('context_type', 'competency').is('archived_at', null).order('created_at', { ascending: false });
     if (competencyEvidenceError) return renderError(competencyEvidenceError);
+
     state.currentRound = assignment.ec_eqa_rounds;
     await loadRoundInstructionExtractions(assignment.round_id);
+
     const { data: practitionerLink, error: practitionerLinkError } = await state.supabase.from('ec_round_assignments')
-      .select('id')
-      .eq('round_id', assignment.round_id)
-      .eq('user_id', state.user.id)
-      .eq('assignment_role', 'practitioner')
-      .eq('active', true)
-      .maybeSingle();
+      .select('id').eq('round_id', assignment.round_id).eq('user_id', state.user.id).eq('assignment_role', 'practitioner').eq('active', true).maybeSingle();
     if (practitionerLinkError) return renderError(practitionerLinkError);
     if (practitionerLink) {
-      const content = `<section class="page"><div class="page-header"><div><h1>ไม่ต้องทำหัวข้อ 10</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><button class="btn btn-outline" id="back-my">กลับ</button></div><div class="notice success"><strong>คุณเป็นผู้ปฏิบัติจริงของรอบนี้</strong><br>ระบบใช้ผลรายบุคคลที่บันทึกในหัวข้อ 4 เป็นการประเมินแล้ว จึงไม่ต้องทำ Competency ซ้ำในหัวข้อ 10</div></section>`;
+      const content = `<section class="page"><div class="page-header"><div><h1>ไม่ต้องทำหัวข้อ 10</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><button class="btn btn-outline" id="back-my">กลับ</button></div><div class="notice success"><strong>คุณเป็นผู้ปฏิบัติจริงของรอบนี้</strong><br>ระบบใช้ผลรายบุคคลในหัวข้อ 4 เป็นการประเมินแล้ว จึงไม่ต้องทำ Competency ซ้ำในหัวข้อ 10</div></section>`;
       appEl.innerHTML = shell(content, 'การประเมินของฉัน');
       bindShell();
       document.getElementById('back-my').onclick = () => navigate('my-competency');
       return;
     }
+
     const openAt = assignment.ec_eqa_rounds?.competency_open_at;
     const closeAt = assignment.ec_eqa_rounds?.competency_close_at;
     const notOpened = openAt && new Date(openAt).getTime() > Date.now();
@@ -7033,283 +7409,127 @@
       : deadlinePassed
         ? `<div class="notice danger">ปิดรับคำตอบเมื่อ ${fmtDate(closeAt, true)} แล้ว กรุณาติดต่อผู้จัดการคุณภาพหากต้องขยายเวลา</div>`
         : closeAt ? `<div class="notice info">กรุณาส่งคำตอบภายใน ${fmtDate(closeAt, true)}</div>` : '';
+
     if (assignment.assignment_type === 'practical') {
-      let practicalReflections = [];
-      if (['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status)) {
-        const { data: reflectionData, error: reflectionError } = await state.supabase.from('ec_reflections').select('*').eq('assignment_id', id).is('answer_id', null).order('created_at');
-        if (!reflectionError) practicalReflections = reflectionData || [];
-      }
-      const reflection = practicalReflections[0] || null;
-      const reflectionEditable = assignment.status === 'needs_reflection';
-      const reflectionDue = assignment.reflection_due_at ? `<div class="notice info">กรุณาส่งแบบทบทวนภายใน ${fmtDate(assignment.reflection_due_at, true)}</div><div style="height:12px"></div>` : '';
-      const reflectionHtml = ['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status) ? `
-        <div class="card">
-          <div class="card-header"><div><h2>แบบทบทวนการปฏิบัติจริง</h2><div class="small muted">ใช้เมื่อมีหัวข้อประเมินที่ต้องปรับปรุง</div></div>${assignmentBadge(assignment.status)}</div>
-          ${reflectionDue}
-          <div class="reflection-item" data-practical-reflection>
-            <div class="form-grid">
-              <div class="field"><label>สาเหตุหรือปัจจัยที่ทำให้หัวข้อนี้ไม่ผ่าน</label><textarea class="textarea" data-practical-reflection-field="reason_for_error" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.reason_for_error || '')}</textarea></div>
-              <div class="field"><label>ความเข้าใจหรือวิธีปฏิบัติที่ถูกต้อง</label><textarea class="textarea" data-practical-reflection-field="corrected_understanding" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.corrected_understanding || '')}</textarea></div>
-              <div class="field"><label>แผนการนำไปใช้กับงานจริง</label><textarea class="textarea" data-practical-reflection-field="application_to_work" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.application_to_work || '')}</textarea></div>
-              ${reflection?.reviewer_note ? `<div class="notice warning"><strong>ข้อคิดเห็นผู้ทบทวน:</strong> ${esc(reflection.reviewer_note)}</div>` : ''}
-            </div>
-          </div>
-          ${reflectionEditable ? `<div class="modal-footer"><button class="btn btn-primary" id="submit-practical-reflection">ส่งแบบทบทวน</button></div>` : ''}
-        </div>` : '';
-      const driveButton = '';
-      const content = `<section class="page"><div class="page-header"><div><h1>การประเมินจากการปฏิบัติจริง</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div><div class="card"><div class="card-header"><div><h2>การประเมินผู้ปฏิบัติจริง</h2><p class="muted">ผลเชื่อมจากการทำ EQA รายบุคคล วิธีตรวจ การแปลผล การบันทึก และการแก้ปัญหา</p></div>${assignmentBadge(assignment.status)}</div>${assignment.reviewer_note ? `<div class="notice info"><strong>หมายเหตุจากผู้ประเมิน:</strong> ${esc(assignment.reviewer_note)}</div><div style="height:12px"></div>` : ''}<button class="btn btn-primary" id="open-round-practical">เปิดรอบ EQA</button></div><div style="height:16px"></div>${workEvidencePanelHtml('competency-assignment', competencyEvidenceRows || [], ['not_started','in_progress'].includes(assignment.status) && !deadlinePassed && !notOpened)}<div style="height:16px"></div>${reflectionHtml}</section>`;
+      const content = `<section class="page">
+        <div class="page-header"><div><h1>การประเมินจากการปฏิบัติจริง</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>
+        ${windowNotice}<div style="height:12px"></div>
+        <div class="card"><h2>ผลการปฏิบัติจริงอยู่ในหัวข้อ 4</h2><p class="muted">เปิดรอบ EQA เพื่อดูหรือแก้ผลรายบุคคลตามรายการที่ผู้ทบทวนส่งกลับ</p>${assignment.reviewer_note ? `<div class="notice warning"><strong>หมายเหตุผู้ทบทวน:</strong> ${esc(assignment.reviewer_note)}</div>` : ''}<button class="btn btn-primary" id="open-round-practical">เปิดผลรายบุคคล</button></div>
+        <div style="height:16px"></div>${workEvidencePanelHtml('competency-assignment', competencyEvidenceRows || [], ['not_started','in_progress'].includes(assignment.status) && !deadlinePassed && !notOpened)}
+      </section>`;
       appEl.innerHTML = shell(content, 'การประเมินจากการปฏิบัติจริง');
       bindShell();
       bindWorkEvidencePanel('competency-assignment', { roundId: assignment.round_id, contextType: 'competency', assignmentId: id });
       document.getElementById('back-my').onclick = () => navigate('my-competency');
       document.getElementById('open-round-practical').onclick = () => navigate(`round/${assignment.round_id}/individual`);
-      document.getElementById('archive-practical-competency')?.addEventListener('click', async () => {
-        await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: assignment.status });
-      });
-      document.getElementById('submit-practical-reflection')?.addEventListener('click', async () => {
-        const item = {
-          answer_id: null,
-          reason_for_error: String(document.querySelector('[data-practical-reflection-field="reason_for_error"]')?.value || '').trim(),
-          corrected_understanding: String(document.querySelector('[data-practical-reflection-field="corrected_understanding"]')?.value || '').trim(),
-          application_to_work: String(document.querySelector('[data-practical-reflection-field="application_to_work"]')?.value || '').trim()
-        };
-        if (!item.reason_for_error || !item.corrected_understanding || !item.application_to_work) return toast('กรุณากรอกแบบทบทวนให้ครบทุกช่อง', 'warning');
-        if (!confirm('ยืนยันส่งแบบทบทวนการปฏิบัติจริงให้ผู้ทบทวนตรวจหรือไม่')) return;
-        const { error: reflectionError } = await state.supabase.rpc('ec_submit_reflection', { p_assignment_id: id, p_items: [item] });
-        if (reflectionError) return toast(friendlyError(reflectionError), 'danger');
-        await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: 'reflection' }, true);
-        toast('ส่งแบบทบทวนแล้ว', 'success'); route();
-      });
-      return;
-    }
-    state.currentRound = assignment.ec_eqa_rounds;
-
-    if (generatedResultSchema(assignment.ec_eqa_rounds)) {
-      const [
-        { data: formQuestions, error: formQuestionError },
-        { data: formChoices, error: formChoiceError },
-        { data: formAnswers, error: formAnswerError },
-        { data: evidenceDocuments, error: evidenceError }
-      ] = await Promise.all([
-        state.supabase.from('ec_questions')
-          .select('id,round_id,question_order,section,question_type,prompt,image_document_id,ai_source_document_ids,points,is_critical,published,generated_by_ai')
-          .eq('round_id', assignment.round_id)
-          .eq('published', true)
-          .eq('generated_by_ai', false)
-          .is('archived_at', null)
-          .order('question_order'),
-        state.supabase.from('ec_question_choices_public').select('*'),
-        state.supabase.from('ec_competency_answers').select('*').eq('assignment_id', id),
-        state.supabase.from('ec_round_documents')
-          .select('id,title,file_name,storage_path,mime_type,visibility,category')
-          .eq('round_id', assignment.round_id)
-          .in('category', ['raw_result_image','antibody_panel'])
-          .is('archived_at', null)
-          .order('created_at')
-      ]);
-      if (formQuestionError || formChoiceError || formAnswerError || evidenceError) {
-        return renderError(formQuestionError || formChoiceError || formAnswerError || evidenceError);
-      }
-
-      const editable = ['not_started','in_progress'].includes(assignment.status) && !deadlinePassed && !notOpened;
-      const evidenceMap = await loadSignedImageMap((evidenceDocuments || []).map((document) => document.id), 1800);
-      const supplementalImageMap = await loadSignedImageMap((formQuestions || []).flatMap((question) => questionImageIds(question)), 1800);
-      const answerMap = new Map((formAnswers || []).map((answer) => [answer.question_id, answer]));
-      const formHtml = resultForm(assignment.result_payload, 'competencyResult', !editable, true, { showReportingCodes: false, evidenceContext: { showEvidence: true, documents: evidenceDocuments || [], imageMap: evidenceMap } });
-
-      let previousSection = '';
-      const supplementalHtml = (formQuestions || []).map((question) => {
-        const answerPayload = answerMap.get(question.id)?.answer_payload || {};
-        const questionChoices = (formChoices || [])
-          .filter((choice) => choice.question_id === question.id)
-          .sort((a, b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
-        const promptParts = questionPromptParts(question.prompt);
-        const section = String(question.section || 'คำถามเสริม');
-        const divider = section !== previousSection ? `<div class="quiz-section-divider"><span>${esc(section)}</span></div>` : '';
-        previousSection = section;
-        const input = question.question_type === 'single_choice'
-          ? `<div class="quiz-choice-list">${questionChoices.map((choice) => `<label class="quiz-choice"><input type="radio" name="q_${question.id}" value="${choice.id}" ${answerPayload.choice_id === choice.id ? 'checked' : ''} ${editable ? '' : 'disabled'}><span class="quiz-radio-ui"></span><span>${esc(choice.choice_text)}</span></label>`).join('')}</div>`
-          : `<textarea class="textarea quiz-text-answer" name="q_${question.id}" ${editable ? '' : 'disabled'} placeholder="พิมพ์คำตอบของคุณ">${esc(answerPayload.text || '')}</textarea>`;
-        return `${divider}<article class="quiz-question-card"><div class="quiz-question-head"><span class="quiz-question-number">${question.question_order}</span><div><span class="small muted">${esc(section)}</span><h3>${esc(promptParts.prompt)}</h3></div>${question.is_critical ? '<span class="badge danger">ข้อสำคัญ</span>' : ''}</div>${promptParts.context ? `<div class="quiz-case-context"><strong>ข้อมูลประกอบโจทย์</strong><div>${esc(promptParts.context)}</div></div>` : ''}${questionImageGallery(question, supplementalImageMap, 'quiz')}${input}</article>`;
-      }).join('');
-
-      let reflectionRows = [];
-      if (['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status)) {
-        const { data: rows } = await state.supabase.from('ec_reflections').select('*').eq('assignment_id', id).is('answer_id', null).order('created_at');
-        reflectionRows = rows || [];
-      }
-      const reflection = reflectionRows[0] || null;
-      const reflectionEditable = assignment.status === 'needs_reflection';
-      const reflectionHtml = ['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status)
-        ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>แบบทบทวนผลการแปลจากภาพ</h2><div class="small muted">ใช้เมื่อผลที่กรอกต้องแก้ไขหรืออธิบายเพิ่มเติม</div></div>${assignmentBadge(assignment.status)}</div><div class="form-grid"><div class="field"><label>สาเหตุที่แปลผลไม่ตรงหรือจุดที่ต้องทบทวน</label><textarea class="textarea" data-form-reflection="reason_for_error" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.reason_for_error || '')}</textarea></div><div class="field"><label>ความเข้าใจที่ถูกต้องหลังทบทวน</label><textarea class="textarea" data-form-reflection="corrected_understanding" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.corrected_understanding || '')}</textarea></div><div class="field"><label>สิ่งที่จะนำไปใช้กับงานจริง</label><textarea class="textarea" data-form-reflection="application_to_work" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.application_to_work || '')}</textarea></div>${reflection?.reviewer_note ? `<div class="notice warning"><strong>ข้อคิดเห็นผู้ทบทวน:</strong> ${esc(reflection.reviewer_note)}</div>` : ''}</div>${reflectionEditable ? `<div class="modal-footer"><button class="btn btn-primary" id="submit-form-reflection">ส่งแบบทบทวน</button></div>` : ''}</div>`
-        : '';
-
-      const completedLabel = resultPayloadHasData(assignment.result_payload) ? 'มีร่างที่บันทึกแล้ว' : 'ยังไม่ได้บันทึก';
-      const driveButton = '';
-      const content = `<section class="page competency-result-page"><div class="page-header"><div><h1>ประเมิน EQA จากภาพผลดิบและ Case Study</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div>
-        <div class="quiz-intro-card quiz-intro-compact"><div><span class="eyebrow">แบบประเมินรายบุคคล</span><h2>อ่านข้อมูล แล้วกรอกผลของตนเอง</h2></div><div class="quiz-progress-box"><strong>${esc(completedLabel)}</strong><span>สถานะ</span></div></div>
-        <div class="card"><div class="card-header"><div><h2>กรอกผลจากภาพของแต่ละตัวอย่าง</h2><div class="small muted">เลือกตัวอย่างด้านบน ภาพผลดิบที่เกี่ยวข้องจะแสดงก่อนช่องตอบในหน้าเดียวกัน</div></div></div><form id="competency-result-form">${formHtml}</form></div>
-        ${supplementalHtml ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>3. คำถามเสริม</h2><div class="small muted">มีเฉพาะข้อที่ผู้จัดการคุณภาพเพิ่มเอง</div></div></div><form id="competency-supplement-form" class="quiz-form-shell">${supplementalHtml}</form></div>` : ''}
-        <div style="height:16px"></div>${workEvidencePanelHtml('competency-assignment', competencyEvidenceRows || [], editable)}
-        ${editable ? `<div class="quiz-submit-bar"><button class="btn btn-secondary" id="save-competency-form">บันทึกร่าง</button><button class="btn btn-primary" id="submit-competency-form">ยืนยันและส่งผล</button></div>` : `<div style="height:16px"></div><div class="notice info">${assignment.reviewer_note ? `<strong>หมายเหตุผู้ประเมิน:</strong> ${esc(assignment.reviewer_note)}` : 'แบบประเมินถูกส่งแล้วและล็อกการแก้ไข'}</div>`}
-        ${reflectionHtml}
-      </section>`;
-      appEl.innerHTML = shell(content, 'ประเมินจากภาพผลดิบ / Case Study');
-      bindShell();
-      bindCapWorkupControls(document.getElementById('competency-result-form') || document);
-      bindWorkEvidencePanel('competency-assignment', { roundId: assignment.round_id, contextType: 'competency', assignmentId: id });
-
-      document.getElementById('back-my').onclick = () => navigate('my-competency');
-      document.getElementById('archive-my-competency')?.addEventListener('click', async () => {
-        await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: assignment.status });
-      });
-      document.getElementById('submit-form-reflection')?.addEventListener('click', async () => {
-        const item = {
-          answer_id: null,
-          reason_for_error: String(document.querySelector('[data-form-reflection="reason_for_error"]')?.value || '').trim(),
-          corrected_understanding: String(document.querySelector('[data-form-reflection="corrected_understanding"]')?.value || '').trim(),
-          application_to_work: String(document.querySelector('[data-form-reflection="application_to_work"]')?.value || '').trim()
-        };
-        if (!item.reason_for_error || !item.corrected_understanding || !item.application_to_work) return toast('กรุณากรอกแบบทบทวนให้ครบทุกช่อง', 'warning');
-        const { error: reflectionError } = await state.supabase.rpc('ec_submit_reflection', { p_assignment_id: id, p_items: [item] });
-        if (reflectionError) return toast(friendlyError(reflectionError), 'danger');
-        toast('ส่งแบบทบทวนแล้ว', 'success'); route();
-      });
-
-      if (editable) {
-        const startResult = await state.supabase.rpc('ec_start_competency', { p_assignment_id: id });
-        if (startResult.error) toast(friendlyError(startResult.error), 'danger');
-
-        const saveForm = async (validateForSubmit = false) => {
-          const form = document.getElementById('competency-result-form');
-          if (!form) throw new Error('ไม่พบแบบประเมิน กรุณาเปิดหน้าใหม่อีกครั้ง');
-          // Drafts must accept incomplete forms. Full required-field validation is
-          // performed only when the user confirms final submission.
-          if (validateForSubmit && !form.reportValidity()) throw new Error('กรุณากรอกช่องบังคับในแบบผลให้ครบ');
-          const payload = collectResultPayload(form, 'competencyResult');
-          if (!payload || !resultPayloadHasData(payload)) throw new Error('กรุณากรอกผลอย่างน้อย 1 รายการก่อนบันทึก');
-          const { error: resultError } = await state.supabase.rpc('ec_save_competency_result', { p_assignment_id: id, p_result_payload: payload });
-          if (resultError) throw resultError;
-
-          const answerRows = (formQuestions || []).map((question) => {
-            let answerPayload = {};
-            if (question.question_type === 'single_choice') {
-              const checked = document.querySelector(`input[name="q_${question.id}"]:checked`);
-              answerPayload = checked ? { choice_id: checked.value } : {};
-            } else {
-              answerPayload = { text: String(document.querySelector(`[name="q_${question.id}"]`)?.value || '').trim() };
-            }
-            return { assignment_id: id, question_id: question.id, answer_payload: answerPayload };
-          });
-          if (answerRows.length) {
-            const { error: answerError } = await state.supabase.from('ec_competency_answers').upsert(answerRows, { onConflict: 'assignment_id,question_id' });
-            if (answerError) throw answerError;
-          }
-        };
-
-        document.getElementById('save-competency-form').onclick = async () => {
-          try { await saveForm(false); toast('บันทึกร่างแบบประเมินแล้ว', 'success'); } catch (saveError) { toast(friendlyError(saveError), 'danger'); }
-        };
-        document.getElementById('submit-competency-form').onclick = async () => {
-          if (!confirm('ยืนยันส่งผลการแปลจากภาพหรือไม่ หลังส่งจะแก้ไขไม่ได้')) return;
-          try {
-            await saveForm(true);
-            const { error: submitError } = await state.supabase.rpc('ec_submit_competency', { p_assignment_id: id });
-            if (submitError) throw submitError;
-            await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: 'submitted' }, true);
-            toast('ส่งผลการประเมินแล้ว', 'success');
-            navigate('my-competency');
-          } catch (submitError) {
-            toast(friendlyError(submitError), 'danger');
-          }
-        };
-      }
       return;
     }
 
-    const [{ data: questions }, { data: choices }, { data: answers }] = await Promise.all([
-      state.supabase.from('ec_questions').select('id,round_id,question_order,section,question_type,prompt,image_document_id,ai_source_document_ids,points,is_critical,published').eq('round_id', assignment.round_id).eq('published', true).is('archived_at', null).order('question_order'),
+    const [
+      { data: questions, error: questionError },
+      { data: choices, error: choiceError },
+      { data: answers, error: answerError }
+    ] = await Promise.all([
+      state.supabase.from('ec_questions').select('id,round_id,question_order,section,question_type,prompt,image_document_id,ai_source_document_ids,points,is_critical,published,generated_by_ai')
+        .eq('round_id', assignment.round_id).eq('published', true).eq('generated_by_ai', false).is('archived_at', null).order('question_order'),
       state.supabase.from('ec_question_choices_public').select('*'),
       state.supabase.from('ec_competency_answers').select('*').eq('assignment_id', id)
     ]);
+    if (questionError || choiceError || answerError) return renderError(questionError || choiceError || answerError);
+
     const imageMap = await loadSignedImageMap((questions || []).flatMap((question) => questionImageIds(question)));
     const answerMap = new Map((answers || []).map((answer) => [answer.question_id, answer]));
-    const editable = ['not_started','in_progress'].includes(assignment.status) && !deadlinePassed && !notOpened;
+    const correctionRequired = Boolean(assignment.correction_required);
+    const correctionQuestionIds = new Set(Array.isArray(assignment.correction_scope?.question_ids) ? assignment.correction_scope.question_ids.map(String) : []);
+    const baseEditable = ['not_started','in_progress'].includes(assignment.status) && !deadlinePassed && !notOpened;
+    const canEditQuestion = (question) => baseEditable && (!correctionRequired || correctionQuestionIds.has(String(question.id)));
+
     let releasedReview = null;
-    if (!editable && assignment.ec_eqa_rounds?.answer_released_at) {
+    if (!baseEditable && assignment.ec_eqa_rounds?.answer_released_at) {
       const { data: reviewData, error: reviewError } = await state.supabase.rpc('ec_get_my_competency_review', { p_assignment_id: id });
       if (!reviewError) releasedReview = reviewData;
     }
+
     let reflections = [];
     if (['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status)) {
       const { data: reflectionData, error: reflectionError } = await state.supabase.from('ec_reflections').select('*').eq('assignment_id', id).order('created_at');
       if (!reflectionError) reflections = reflectionData || [];
     }
+
     let previousSection = '';
     const questionHtml = (questions || []).map((question) => {
       const answerPayload = answerMap.get(question.id)?.answer_payload || {};
-      const questionChoices = (choices || [])
-        .filter((choice) => choice.question_id === question.id)
-        .sort((a, b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
+      const questionChoices = (choices || []).filter((choice) => choice.question_id === question.id).sort((a,b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
+      const questionEditable = canEditQuestion(question);
+      const lockedByCorrection = correctionRequired && !correctionQuestionIds.has(String(question.id));
       const galleryHtml = questionImageGallery(question, imageMap, 'quiz');
       const promptParts = questionPromptParts(question.prompt);
-      const section = String(question.section || 'การแปลผล EQA');
-      const sectionDivider = section !== previousSection
-        ? `<div class="quiz-section-divider"><span>${esc(section)}</span></div>`
-        : '';
+      const section = String(question.section || 'แบบประเมิน');
+      const sectionDivider = section !== previousSection ? `<div class="quiz-section-divider"><span>${esc(section)}</span></div>` : '';
       previousSection = section;
       let input = '';
       if (isAntibodyIdentificationQuestion(question) && question.question_type !== 'single_choice') {
-        input = quizAntibodyPicker(question, answerPayload.text || '', editable);
+        input = quizAntibodyPicker(question, answerPayload.text || '', questionEditable);
       } else if (question.question_type === 'single_choice') {
-        input = `<div class="quiz-choice-list">${questionChoices.map((choice) => `<label class="quiz-choice">
-          <input type="radio" name="q_${question.id}" value="${choice.id}" ${answerPayload.choice_id===choice.id?'checked':''} ${editable?'':'disabled'}>
+        input = `<div class="quiz-choice-list">${questionChoices.map((choice) => `<label class="quiz-choice ${questionEditable ? '' : 'disabled'}">
+          <input type="radio" name="q_${question.id}" value="${choice.id}" ${answerPayload.choice_id === choice.id ? 'checked' : ''} ${questionEditable ? '' : 'disabled'}>
           <span class="quiz-radio-ui"></span><span>${esc(choice.choice_text)}</span>
         </label>`).join('')}</div>`;
+      } else if (question.question_type === 'multiple_choice') {
+        const selectedIds = new Set(Array.isArray(answerPayload.choice_ids) ? answerPayload.choice_ids.map(String) : []);
+        input = `<div class="quiz-choice-list">${questionChoices.map((choice) => `<label class="quiz-choice ${questionEditable ? '' : 'disabled'}">
+          <input type="checkbox" name="q_${question.id}" value="${choice.id}" ${selectedIds.has(String(choice.id)) ? 'checked' : ''} ${questionEditable ? '' : 'disabled'}>
+          <span class="quiz-checkbox-ui"></span><span>${esc(choice.choice_text)}</span>
+        </label>`).join('')}</div>`;
       } else {
-        input = `<textarea class="textarea quiz-text-answer" name="q_${question.id}" ${editable?'':'disabled'} placeholder="พิมพ์คำตอบของคุณ">${esc(answerPayload.text || '')}</textarea>`;
+        input = `<textarea class="textarea quiz-text-answer" name="q_${question.id}" ${questionEditable ? '' : 'disabled'} placeholder="พิมพ์คำตอบของคุณ">${esc(answerPayload.text || '')}</textarea>`;
       }
-      return `${sectionDivider}<article class="quiz-question-card">
+      return `${sectionDivider}<article class="quiz-question-card ${lockedByCorrection ? 'question-locked-after-review' : ''}" data-question-id="${question.id}" data-question-editable="${questionEditable ? '1' : '0'}">
         <div class="quiz-question-head">
           <span class="quiz-question-number">${question.question_order}</span>
           <div><span class="small muted">${esc(section)}</span><h3>${esc(promptParts.prompt)}</h3></div>
-          ${question.is_critical?'<span class="badge danger">ข้อสำคัญ</span>':''}
+          ${lockedByCorrection ? '<span class="badge success">ผ่านแล้ว · ล็อกไว้</span>' : question.is_critical ? '<span class="badge danger">ข้อสำคัญ</span>' : ''}
         </div>
         ${promptParts.context ? `<div class="quiz-case-context"><strong>ข้อมูลประกอบโจทย์</strong><div>${esc(promptParts.context)}</div></div>` : ''}
         ${galleryHtml}
         ${input}
       </article>`;
     }).join('');
+
+    const correctionBanner = correctionRequired ? `<div class="notice warning correction-banner"><strong>ผู้ทบทวนส่งกลับให้แก้ ${correctionQuestionIds.size} ข้อ</strong><br>${esc(assignment.correction_note || 'กรุณาแก้เฉพาะข้อที่เปิดให้แก้ แล้วส่งกลับตรวจอีกครั้ง')}<div class="small" style="margin-top:6px">ข้อที่ผ่านแล้วถูกล็อกเพื่อป้องกันการแก้คำตอบส่วนอื่นโดยไม่ตั้งใจ</div></div>` : '';
+
     const reviewQuestions = Array.isArray(releasedReview?.questions) ? releasedReview.questions : [];
-    const releasedScoreBadge = releasedReview?.score === null || releasedReview?.score === undefined
-      ? '<span class="badge info">ไม่มีคะแนนทางการสำหรับ Educational</span>'
-      : `<span class="badge info">คะแนน Graded ${esc(releasedReview.score)}%</span>`;
-    const releasedReviewHtml = releasedReview ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>ผลเปรียบเทียบและเฉลยหลังส่งคำตอบ</h2><div class="small muted">รายการ Graded แสดงเฉลยทางการ ส่วน Educational แสดงคำตอบของผู้เข้าร่วมส่วนใหญ่เพื่อทบทวนภายใน</div></div>${releasedScoreBadge}</div>${releasedReview.official_summary ? `<div class="notice info">${esc(releasedReview.official_summary)}</div><div style="height:12px"></div>` : ''}${reviewQuestions.map((item) => {
-      const educational = isEducationalCompetencyReview(item);
+    const releasedReviewHtml = releasedReview ? `<div style="height:16px"></div><div class="card"><div class="card-header"><h2>ผลเปรียบเทียบและเฉลยหลังส่งคำตอบ</h2>${releasedReview?.score === null || releasedReview?.score === undefined ? '' : `<span class="badge info">คะแนน ${esc(releasedReview.score)}%</span>`}</div>${reviewQuestions.map((item) => {
       const [statusLabel, statusClass] = competencyReviewStatus(item);
       const comparisonText = [item.consensus_result, item.consensus_percent].filter(Boolean).join(' · ') || item.correct_answer || '-';
-      return `<div class="answer-review-row ${!educational && item.is_correct === true ? 'correct' : !educational && item.is_correct === false ? 'incorrect' : ''}"><div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><strong>${item.question_order}. ${esc(item.prompt || '')}</strong><span class="badge ${esc(statusClass)}">${esc(statusLabel)}</span></div><div class="grid cols-2" style="margin-top:8px"><div><span class="small muted">คำตอบของคุณ</span><div>${esc(item.user_answer || '-')}</div></div><div><span class="small muted">${educational ? 'คำตอบของผู้เข้าร่วมส่วนใหญ่' : 'เฉลย'}</span><div>${esc(comparisonText)}</div></div></div>${item.comparison_note ? `<div class="small" style="margin-top:8px"><strong>ผลการเปรียบเทียบ:</strong> ${esc(item.comparison_note)}</div>` : ''}${item.explanation ? `<div class="small" style="margin-top:8px"><strong>${educational ? 'คำอธิบายประกอบ:' : 'คำอธิบาย:'}</strong> ${esc(item.explanation)}</div>` : ''}</div>`;
+      return `<div class="answer-review-row"><div style="display:flex;justify-content:space-between;gap:12px"><strong>${item.question_order}. ${esc(item.prompt || '')}</strong><span class="badge ${esc(statusClass)}">${esc(statusLabel)}</span></div><div class="grid cols-2"><div><span class="small muted">คำตอบของคุณ</span><div>${esc(item.user_answer || '-')}</div></div><div><span class="small muted">เฉลย/คำตอบอ้างอิง</span><div>${esc(comparisonText)}</div></div></div>${item.comparison_note ? `<div class="small"><strong>ข้อคิดเห็น:</strong> ${esc(item.comparison_note)}</div>` : ''}</div>`;
     }).join('')}</div>` : '';
+
     const reflectionMap = new Map((reflections || []).map((row) => [row.answer_id, row]));
     const incorrectReviewQuestions = reviewQuestions.filter((item) => item.is_correct === false);
     const reflectionEditable = assignment.status === 'needs_reflection';
     const reflectionHtml = ['needs_reflection','reflection_submitted','passed_after_review'].includes(assignment.status)
-      ? `<div style="height:16px"></div><div class="card"><div class="card-header"><div><h2>แบบทบทวนและชี้แจง</h2><div class="small muted">ใช้ทั้งข้อที่ตอบไม่ถูกและ Educational ที่คำตอบต่างจากกลุ่มส่วนใหญ่</div></div>${assignmentBadge(assignment.status)}</div>${!releasedReview ? `<div class="notice warning">ผู้จัดการคุณภาพยังไม่ได้เปิดผล จึงยังกรอกแบบทบทวนไม่ได้</div>` : incorrectReviewQuestions.map((item) => {
+      ? `<div style="height:16px"></div><div class="card"><div class="card-header"><h2>แบบทบทวนและชี้แจง</h2>${assignmentBadge(assignment.status)}</div>${!releasedReview ? '<div class="notice warning">ผู้จัดการคุณภาพยังไม่ได้เปิดผล</div>' : incorrectReviewQuestions.map((item) => {
           const answer = answerMap.get(item.question_id);
           const reflection = answer ? reflectionMap.get(answer.id) : null;
-          const educational = isEducationalCompetencyReview(item);
-          const referenceText = [item.consensus_result, item.consensus_percent].filter(Boolean).join(' · ') || item.correct_answer || '-';
-          return `<div class="reflection-item" data-reflection-answer="${answer?.id || ''}"><h3>${item.question_order}. ${esc(item.prompt || '')} ${educational ? '<span class="badge info">Educational</span>' : ''}</h3><div class="grid cols-2"><div><span class="small muted">คำตอบของคุณ</span><div>${esc(item.user_answer || '-')}</div></div><div><span class="small muted">${educational ? 'คำตอบของผู้เข้าร่วมส่วนใหญ่' : 'เฉลย'}</span><div>${esc(referenceText)}</div></div></div><div class="form-grid" style="margin-top:12px"><div class="field"><label>${educational ? 'เหตุผลที่เลือกคำตอบต่างจากกลุ่มส่วนใหญ่' : 'สาเหตุที่ตอบไม่ถูก'}</label><textarea class="textarea" data-reflection-field="reason_for_error" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.reason_for_error || '')}</textarea></div><div class="field"><label>${educational ? 'ทบทวนแล้ว คำตอบของห้องเหมาะสมหรือควรแก้ไข เพราะเหตุใด' : 'ความเข้าใจที่ถูกต้องหลังทบทวน'}</label><textarea class="textarea" data-reflection-field="corrected_understanding" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.corrected_understanding || '')}</textarea></div><div class="field"><label>สิ่งที่จะตรวจสอบหรือปรับใช้กับงาน</label><textarea class="textarea" data-reflection-field="application_to_work" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.application_to_work || '')}</textarea></div>${reflection?.reviewer_note ? `<div class="notice warning"><strong>ข้อคิดเห็นผู้ทบทวน:</strong> ${esc(reflection.reviewer_note)}</div>` : ''}</div></div>`;
-        }).join('')}${reflectionEditable && releasedReview ? `<div class="modal-footer"><button class="btn btn-primary" id="submit-reflection">ส่งแบบทบทวน</button></div>` : ''}</div>`
-      : '';
-    const driveButton = '';
+          return `<div class="reflection-item" data-reflection-answer="${answer?.id || ''}"><h3>${item.question_order}. ${esc(item.prompt || '')}</h3><div class="form-grid"><div class="field"><label>สาเหตุที่ตอบไม่ถูก</label><textarea class="textarea" data-reflection-field="reason_for_error" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.reason_for_error || '')}</textarea></div><div class="field"><label>ความเข้าใจที่ถูกต้องหลังทบทวน</label><textarea class="textarea" data-reflection-field="corrected_understanding" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.corrected_understanding || '')}</textarea></div><div class="field"><label>สิ่งที่จะนำไปใช้กับงานจริง</label><textarea class="textarea" data-reflection-field="application_to_work" ${reflectionEditable ? '' : 'disabled'} required>${esc(reflection?.application_to_work || '')}</textarea></div></div></div>`;
+        }).join('')}${reflectionEditable && releasedReview ? '<div class="modal-footer"><button class="btn btn-primary" id="submit-reflection">ส่งแบบทบทวน</button></div>' : ''}</div>` : '';
+
     const answeredCount = (questions || []).filter((question) => {
       const payload = answerMap.get(question.id)?.answer_payload || {};
-      return Boolean(payload.choice_id || payload.text);
+      return Boolean(payload.choice_id || (Array.isArray(payload.choice_ids) && payload.choice_ids.length) || payload.text);
     }).length;
-    const content = `<section class="page quiz-page"><div class="page-header"><div><h1>แบบทดสอบ EQA Competency</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${assignmentBadge(assignment.status)}${driveButton}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>${windowNotice}<div style="height:12px"></div>
-      <div class="quiz-intro-card"><div><span class="eyebrow">แบบประเมินจากผลทดสอบจริง</span><h2>อ่านภาพและเลือกคำตอบที่ถูกต้องที่สุด</h2><p>คำถามแยกตามหมวดเหมือน Google Form สามารถบันทึกร่างแล้วกลับมาทำต่อได้ก่อนวันปิดรับคำตอบ</p></div><div class="quiz-progress-box"><strong>${answeredCount}/${(questions || []).length}</strong><span>ข้อที่บันทึกแล้ว</span></div></div>
-      <form id="quiz-form" class="quiz-form-shell">${questionHtml || empty('ผู้จัดการคุณภาพยังไม่ได้เผยแพร่คำถาม')}</form><div style="height:16px"></div>${workEvidencePanelHtml('competency-assignment', competencyEvidenceRows || [], editable)}${editable && questions?.length ? `<div class="quiz-submit-bar"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">ยืนยันและส่งคำตอบ</button></div>` : ''}${releasedReviewHtml}${reflectionHtml}</section>`;
+
+    const content = `<section class="page quiz-page">
+      <div class="page-header"><div><h1>แบบทดสอบ EQA Competency</h1><p>${esc(assignment.ec_eqa_rounds?.provider)} ${esc(assignment.ec_eqa_rounds?.round_code)}</p></div><div class="header-actions">${correctionRequired ? '<span class="badge danger">ส่งกลับแก้ไข</span>' : assignmentBadge(assignment.status)}<button class="btn btn-outline" id="back-my">กลับ</button></div></div>
+      ${windowNotice}${correctionBanner}<div style="height:12px"></div>
+      <div class="quiz-intro-card"><div><span class="eyebrow">แบบประเมินที่แอดมินจัดเอง</span><h2>ตอบคำถามทีละข้อจากรูปและข้อมูลประกอบ</h2><p>รูปแต่ละรูปผูกกับคำถามโดยตรงเหมือน Microsoft Forms</p></div><div class="quiz-progress-box"><strong>${answeredCount}/${(questions || []).length}</strong><span>ข้อที่บันทึกแล้ว</span></div></div>
+      <form id="quiz-form" class="quiz-form-shell">${questionHtml || empty('ยังไม่มีข้อสอบที่เผยแพร่')}</form>
+      <div style="height:16px"></div>${workEvidencePanelHtml('competency-assignment', competencyEvidenceRows || [], baseEditable)}
+      ${baseEditable && questions?.length ? `<div class="quiz-submit-bar"><button class="btn btn-secondary" id="save-quiz">บันทึกร่าง</button><button class="btn btn-primary" id="submit-quiz">${correctionRequired ? 'ส่งกลับตรวจอีกครั้ง' : 'ยืนยันและส่งคำตอบ'}</button></div>` : ''}
+      ${releasedReviewHtml}${reflectionHtml}
+    </section>`;
+
     appEl.innerHTML = shell(content, 'แบบทดสอบ');
     bindShell();
     bindWorkEvidencePanel('competency-assignment', { roundId: assignment.round_id, contextType: 'competency', assignmentId: id });
@@ -7317,6 +7537,7 @@
     const updateQuizProgress = () => {
       const count = (questions || []).filter((question) => {
         if (question.question_type === 'single_choice') return Boolean(document.querySelector(`input[name="q_${question.id}"]:checked`));
+        if (question.question_type === 'multiple_choice') return document.querySelectorAll(`input[name="q_${question.id}"]:checked`).length > 0;
         return Boolean(String(document.querySelector(`[name="q_${question.id}"]`)?.value || '').trim());
       }).length;
       const progress = document.querySelector('.quiz-progress-box strong');
@@ -7334,12 +7555,12 @@
         updateQuizProgress();
       };
       const addValue = () => {
+        if (search?.disabled) return;
         const typed = String(search?.value || '').trim();
         if (!typed) return;
         const value = resolveCapAntibodyEntry(typed);
         if (!value) return toast('กรุณาเลือกชื่อ antibody จาก CAP Master List', 'warning');
-        const duplicate = [...selected.querySelectorAll('[data-antibody-value]')].some((chip) => chip.dataset.antibodyValue === value);
-        if (duplicate) { search.value = ''; return; }
+        if ([...selected.querySelectorAll('[data-antibody-value]')].some((chip) => chip.dataset.antibodyValue === value)) { search.value = ''; return; }
         selected.querySelector('[data-antibody-empty]')?.remove();
         selected.insertAdjacentHTML('beforeend', `<span class="antibody-chip" data-antibody-value="${esc(value)}"><span>${esc(value)}</span><button type="button" data-remove-antibody aria-label="ลบ">×</button></span>`);
         search.value = '';
@@ -7348,7 +7569,8 @@
       picker.querySelector('[data-add-antibody]')?.addEventListener('click', addValue);
       search?.addEventListener('change', addValue);
       search?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); addValue(); } });
-      selected.addEventListener('click', (event) => {
+      selected?.addEventListener('click', (event) => {
+        if (hidden?.disabled) return;
         const remove = event.target.closest('[data-remove-antibody]');
         if (!remove) return;
         remove.closest('[data-antibody-value]')?.remove();
@@ -7363,6 +7585,7 @@
     updateQuizProgress();
 
     document.getElementById('back-my').onclick = () => navigate('my-competency');
+
     document.getElementById('submit-reflection')?.addEventListener('click', async () => {
       const items = [...document.querySelectorAll('[data-reflection-answer]')].map((card) => ({
         answer_id: card.dataset.reflectionAnswer,
@@ -7370,46 +7593,54 @@
         corrected_understanding: String(card.querySelector('[data-reflection-field="corrected_understanding"]')?.value || '').trim(),
         application_to_work: String(card.querySelector('[data-reflection-field="application_to_work"]')?.value || '').trim()
       }));
-      if (!items.length || items.some((item) => !item.answer_id || !item.reason_for_error || !item.corrected_understanding || !item.application_to_work)) return toast('กรุณากรอกแบบทบทวนให้ครบทุกข้อและทุกช่อง', 'warning');
+      if (!items.length || items.some((item) => !item.answer_id || !item.reason_for_error || !item.corrected_understanding || !item.application_to_work)) return toast('กรุณากรอกแบบทบทวนให้ครบทุกช่อง', 'warning');
       if (!confirm('ยืนยันส่งแบบทบทวนให้ผู้ทบทวนตรวจหรือไม่')) return;
       const { error: reflectionError } = await state.supabase.rpc('ec_submit_reflection', { p_assignment_id: id, p_items: items });
       if (reflectionError) return toast(friendlyError(reflectionError), 'danger');
-      await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: 'reflection' }, true);
-      toast('ส่งแบบทบทวนแล้ว', 'success'); route();
+      toast('ส่งแบบทบทวนแล้ว', 'success');
+      route();
     });
-    if (editable) {
+
+    if (baseEditable) {
       const startResult = await state.supabase.rpc('ec_start_competency', { p_assignment_id: id });
       if (startResult.error) toast(friendlyError(startResult.error), 'danger');
+
       const save = async () => {
         const rows = [];
-        (questions || []).forEach((question) => {
+        (questions || []).filter(canEditQuestion).forEach((question) => {
           let answerPayload = {};
           if (question.question_type === 'single_choice') {
             const checked = document.querySelector(`input[name="q_${question.id}"]:checked`);
             answerPayload = checked ? { choice_id: checked.value } : {};
+          } else if (question.question_type === 'multiple_choice') {
+            const choiceIds = [...document.querySelectorAll(`input[name="q_${question.id}"]:checked`)].map((control) => control.value);
+            answerPayload = choiceIds.length ? { choice_ids: choiceIds } : {};
           } else {
             answerPayload = { text: String(document.querySelector(`[name="q_${question.id}"]`)?.value || '').trim() };
           }
           rows.push({ assignment_id: id, question_id: question.id, answer_payload: answerPayload });
         });
+        if (!rows.length) throw new Error('ไม่มีข้อที่เปิดให้แก้');
         const { error: saveError } = await state.supabase.from('ec_competency_answers').upsert(rows, { onConflict: 'assignment_id,question_id' });
         if (saveError) throw saveError;
       };
-      document.getElementById('save-quiz').onclick = async () => {
+
+      document.getElementById('save-quiz')?.addEventListener('click', async () => {
         try { await save(); toast('บันทึกร่างแล้ว', 'success'); } catch (saveError) { toast(friendlyError(saveError), 'danger'); }
-      };
-      document.getElementById('submit-quiz').onclick = async () => {
-        if (!confirm('ยืนยันส่งคำตอบหรือไม่ หลังส่งจะแก้ไขไม่ได้')) return;
+      });
+      document.getElementById('submit-quiz')?.addEventListener('click', async () => {
+        const message = correctionRequired ? 'ยืนยันส่งข้อที่แก้กลับให้ผู้ทบทวนตรวจอีกครั้งหรือไม่' : 'ยืนยันส่งคำตอบหรือไม่ หลังส่งจะแก้ไขเองไม่ได้';
+        if (!confirm(message)) return;
         try {
           await save();
           const { error: submitError } = await state.supabase.rpc('ec_submit_competency', { p_assignment_id: id });
           if (submitError) throw submitError;
-          await archiveReportToDrive({ report_type: 'competency', assignment_id: id, stage: 'submitted' }, true);
-          toast('ส่งคำตอบแล้ว', 'success');
-          if (assignment.ec_eqa_rounds?.answer_released_at) route();
-          else navigate('my-competency');
-        } catch (submitError) { toast(friendlyError(submitError), 'danger'); }
-      };
+          toast(correctionRequired ? 'ส่งกลับตรวจอีกครั้งแล้ว' : 'ส่งคำตอบแล้ว', 'success');
+          navigate('my-competency');
+        } catch (submitError) {
+          toast(friendlyError(submitError), 'danger');
+        }
+      });
     }
   }
   async function renderReports() {
@@ -7818,7 +8049,7 @@
         </div></details>
         <details><summary>ผลรายบุคคลและสรุปผลห้องปฏิบัติการ</summary><div class="guide-body"><p>ผู้ปฏิบัติแต่ละคนบันทึกผลของตนเองแยกกัน เมื่อส่งครบ ระบบจะเติมค่าที่ตรงกันในสรุปผลห้องให้อัตโนมัติ</p><p>ค่าที่ไม่ตรงกันจะถูกทำเครื่องหมายให้ผู้ทบทวนตรวจและเลือกผลที่ถูกต้องก่อนส่งให้ผู้รับรองคุณภาพ</p></div></details>
         <details><summary>การตรวจ รับรอง และรับทราบ</summary><div class="guide-body"><p>ผู้ทบทวนตรวจผลห้องและหลักฐาน จากนั้นส่งให้ผู้รับรองคุณภาพรับรอง เมื่อรับรองแล้วแพทย์จึงกดรับทราบได้</p><p>แต่ละรอบต้องกำหนดผู้รับรองคุณภาพเป็นผู้จัดการคุณภาพหรือรองผู้จัดการคุณภาพ โดยต้องเป็นคนละคนกับผู้ปฏิบัติจริงทั้งสองคนและผู้ทบทวนผล</p><p>บุคคลเดียวกันมีหลายบทบาทในระบบได้และทำหน้าที่ต่างกันในคนละรอบ แต่ระบบจะป้องกันหน้าที่ที่ขัดกันภายในรอบเดียวกัน ประวัติการอนุมัติจะแสดงชื่อ บทบาท และวันเวลาที่บันทึกจริง</p><p>การส่งกลับต้องระบุเหตุผล เพื่อให้ผู้เกี่ยวข้องแก้ไขเฉพาะจุด</p></div></details>
-        <details><summary>การสร้างจากเอกสารและรายงานผล</summary><div class="guide-body"><p><strong>ระบบอ่านไฟล์ทีละฉบับ</strong> และบันทึกสถานะ “รออ่าน / กำลังอ่าน / AI อ่านแล้ว / อ่านไม่สำเร็จ” ไว้ในตาราง หากเกิดรหัส 546 ให้กดสร้างใหม่ ระบบจะทำต่อเฉพาะไฟล์ที่เหลือ</p><p><strong>สร้างแบบกรอก คำแนะนำ และข้อสอบจากเอกสาร</strong> อ่านฟอร์มเปล่า คู่มือ ภาพผลดิบ และ Antigram/Panel cell แล้วสร้างฉบับร่างให้ QM ตรวจ</p><p><strong>สร้างเฉลยและสรุปจาก Evaluation / Participant Summary</strong> ต้องมี Official Evaluation ก่อน ระบบใช้ Intended Response เป็นเฉลยของรายการ graded และใช้ Participant Summary เฉพาะ Educational Challenge</p><p>ระบบแยกสรุปเป็น 5 ส่วน: ผลของห้อง, ผลที่ควรเป็น, คะแนน/Grade, เปรียบเทียบผู้เข้าร่วม และหัวข้อทบทวน</p><p>Educational Challenge ไม่คิดเป็นคะแนนทางการ แต่ระบบต้องเทียบคำตอบของห้อง/บุคลากรกับ participant consensus: ถ้าสอดคล้องให้ระบุว่าเหมาะสม ถ้าเป็นคำตอบส่วนน้อยให้สถานะ “ต้องทบทวน/ชี้แจง” และบันทึกเหตุผลว่าทำไมจึงตอบต่าง หากไม่มี Participant Summary หรือ consensus ไม่ชัด ระบบจะไม่เดาและให้ QM ตรวจเอง</p><p><strong>สร้างย้อนหลังครบชุด</strong> ใช้กับรอบที่ได้รับผลแล้ว ระบบสร้างแบบกรอก คำแนะนำ ข้อสอบ เฉลย และสรุป พร้อมตั้งให้เห็นเฉลยหลังส่งคำตอบ</p><p>ข้อสอบทุกข้อยังเป็นฉบับร่างจนกว่า QM จะตรวจและกดเผยแพร่</p></div></details>
+        <details><summary>การสร้างแบบกรอก ข้อสอบ และรายงานผล</summary><div class="guide-body"><p><strong>แบบกรอกผลห้องปฏิบัติการ (หัวข้อ 4–5)</strong> ยังสร้างโครงสร้างจาก Blank Result Form ได้ เพื่อช่วยจัดช่องผลตามตัวอย่างจริง แต่ผู้ดูแลต้องตรวจ Preview ก่อนใช้งาน</p><p><strong>ข้อสอบ Competency (หัวข้อ 10) จัดเองทั้งหมด</strong> AI มีหน้าที่อ่านข้อความจากเอกสารให้เป็นคลังข้อความเท่านั้น ระบบจะไม่สร้างคำถาม ตัวเลือก เฉลย หรือผูกรูปให้อัตโนมัติ</p><p>ผู้ดูแลกด “ใช้เป็นคำถาม” หรือเพิ่มคำถามใหม่ แล้วกำหนดข้อความ ชนิดคำตอบ ตัวเลือก เฉลย คะแนน และรูปประกอบเฉพาะข้อนั้นได้เหมือน Microsoft Forms</p><p>ก่อนเผยแพร่ให้ใช้ปุ่ม “ดูตัวอย่างผู้ทำแบบประเมิน” และพักการเผยแพร่ได้โดยไม่ลบคำตอบเดิม</p><p><strong>การตรวจผลเป็นรายบุคคล</strong> ผู้ทบทวนตรวจทีละคน เทียบกับภาพผลดิบ/Antigram แล้วส่งกลับเฉพาะข้อหรือเฉพาะหัวข้อที่ต้องแก้ ส่วนที่ผ่านแล้วถูกล็อกไว้</p><p>Official Evaluation และ Participant Summary ยังใช้เป็นเอกสารอ้างอิงสำหรับผู้ทบทวนและการสรุปผลทางการ แต่ไม่ถูกนำไปสร้างเฉลยข้อสอบโดยอัตโนมัติ</p></div></details>
         <details><summary>การแจ้งเตือน EQA และ Competency</summary><div class="guide-body"><p>ผู้ดูแลระบบหรือผู้จัดการคุณภาพตั้งค่าได้ที่เมนู <strong>แจ้งเตือน</strong> ระบบตรวจรายการ EQA ใกล้ครบกำหนด แบบทดสอบที่ยังไม่ส่ง แบบทบทวน ผู้ทบทวนที่ยังไม่ตรวจ และรายการรอผู้รับรองคุณภาพ</p><p>Email ส่งถึงผู้เกี่ยวข้องตามหน้าที่ ส่วน Google Chat ใช้แจ้งภาพรวมของหน่วยงาน โดยค่าเริ่มต้นไม่แสดงชื่อผู้รับการประเมินรายบุคคล</p><p>ปุ่ม <strong>ตรวจและส่งตอนนี้</strong> ใช้ทดสอบหรือตรวจรายการทันที ส่วน Trigger ใน Google Apps Script จะเรียกตรวจอัตโนมัติทุกวัน</p></div></details>
         <details><summary>แบบทบทวนหลังตอบไม่ถูกหรือ Educational เป็นคำตอบส่วนน้อย</summary><div class="guide-body"><p>เมื่อผู้รับรองคุณภาพรับรองแล้วพบข้อที่ตอบไม่ถูก หรือ Educational Challenge ที่คำตอบต่างจากกลุ่มผู้เข้าร่วมส่วนใหญ่ ระบบจะเปลี่ยนสถานะเป็น <strong>ต้องทบทวน</strong> โดย Educational ไม่ถูกนับเป็นคะแนนทางการ</p><p>เจ้าหน้าที่บันทึกเหตุผลที่เลือกคำตอบเดิม ผลการทบทวนว่าคำตอบของห้องเหมาะสมหรือควรแก้ไข และสิ่งที่จะนำไปใช้กับงาน จากนั้นส่งให้ผู้ทบทวนรับรองหรือส่งกลับแก้ไข</p></div></details>
         <details><summary>รายงานและเอกสารคุณภาพ</summary><div class="guide-body"><p>ระบบ PDF รุ่นเดิมถูกปิดชั่วคราวระหว่างออกแบบรายงานใหม่ให้เหมาะกับ ISO 15189, HA และระบบควบคุมเอกสาร</p><p>ข้อมูลรอบ ผลตรวจ การรับรอง และ Audit log ยังถูกเก็บตามปกติ การลบทะเบียน PDF เดิมไม่กระทบข้อมูลเหล่านี้</p></div></details>
