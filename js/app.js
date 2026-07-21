@@ -1,4 +1,4 @@
-/* CNMI EQA and Competency Management System v2.7.6
+/* CNMI EQA and Competency Management System v2.8.0
  * Static SPA for GitHub Pages + Supabase
  */
 (() => {
@@ -80,7 +80,7 @@
     viewer: 'อ่านรายงานและประวัติการใช้งานโดยไม่แก้ไขข้อมูล'
   };
   const ROLE_PRIORITY = ['admin', 'qm', 'deputy_qm', 'reviewer', 'physician', 'viewer', 'staff'];
-  const ADMIN_PREVIEW_ROLES = ['admin', 'staff', 'reviewer', 'qm', 'deputy_qm', 'physician', 'viewer'];
+  const ACTING_ROLE_ORDER = ['staff', 'reviewer', 'qm', 'deputy_qm', 'physician', 'viewer', 'admin'];
   const SIGNING_ROLE_LABELS = {
     staff: 'นักเทคนิคการแพทย์ / เจ้าหน้าที่ผู้ปฏิบัติ',
     reviewer: 'ผู้ทบทวนผล',
@@ -761,21 +761,28 @@
   }
 
   function isSystemAdmin() { return state.roles.includes('admin'); }
-  function availableViewRoles() { return isSystemAdmin() ? ADMIN_PREVIEW_ROLES : state.roles; }
-  function isAdminPreview() { return isSystemAdmin() && state.activeRole !== 'admin'; }
+
+  // สิทธิ์บัญชีจริง (state.roles) แยกจากบทบาทที่กำลังทำงาน (state.activeRole)
+  // ผู้ดูแลระบบสลับมาใช้บทบาทเจ้าหน้าที่เพื่อทำ Competency ของตนเองได้
+  // แต่การสลับบทบาทจะไม่แก้สิทธิ์ในฐานข้อมูล ไม่เปลี่ยนเจ้าของคำตอบ และไม่ใช่โหมด Preview
+  function availableViewRoles() {
+    const allowed = new Set(normalizedRoles(state.roles));
+    if (isSystemAdmin()) allowed.add('staff');
+    return ACTING_ROLE_ORDER.filter((role) => allowed.has(role));
+  }
 
   function syncActiveRole() {
     const saved = localStorage.getItem(roleStorageKey());
     const available = availableViewRoles();
     const fallback = isSystemAdmin()
       ? 'admin'
-      : (state.roles.includes('staff') ? 'staff' : (ROLE_PRIORITY.find((role) => state.roles.includes(role)) || state.roles[0] || 'staff'));
+      : (available.includes('staff') ? 'staff' : (ROLE_PRIORITY.find((role) => available.includes(role)) || available[0] || 'staff'));
     state.activeRole = saved && available.includes(saved) ? saved : fallback;
     localStorage.setItem(roleStorageKey(), state.activeRole);
   }
 
-  function hasAssignedRole(...roles) { return roles.some((r) => state.roles.includes(r)); }
-  // hasRole ใช้สำหรับ “มุมมองที่กำลังจำลอง” เท่านั้น ผู้ดูแลระบบยังคงสิทธิ์จริงระดับ admin ผ่าน isSystemAdmin()
+  function hasAssignedRole(...roles) { return roles.some((r) => normalizedRoles(state.roles).includes(r)); }
+  // hasRole ใช้ตรวจบทบาทที่ผู้ใช้กำลังทำงานอยู่เท่านั้น
   function hasRole(...roles) { return roles.includes(state.activeRole); }
   function canManage() { return hasRole('admin', 'qm'); }
   function canQualityApprove(roundId = state.currentRound?.id || null) {
@@ -809,6 +816,11 @@
 
   function canViewRoute(routeName) {
     return visibleRoutesForActiveRole().includes(routeName);
+  }
+
+  function defaultRouteForActiveRole() {
+    if (state.activeRole === 'staff' && canViewRoute('my-competency') && isCompetencyParticipant()) return 'my-competency';
+    return 'dashboard';
   }
   function personHasRole(person, role) { return Array.isArray(person?.roles) && person.roles.includes(role); }
   function normalizedRoles(roles) {
@@ -1085,11 +1097,11 @@
                 <span class="badge info">ออนไลน์</span>
               </div>
               <div class="role-switcher">
-                <label for="active-role-select">เลือกตำแหน่ง</label>
+                <label for="active-role-select">ทำงานในบทบาท</label>
                 <select class="role-select" id="active-role-select" data-role-switch ${availableViewRoles().length <= 1 ? 'disabled' : ''}>
                   ${roleOptions()}
                 </select>
-                
+                <div class="account-role-summary"><span>สิทธิ์บัญชี</span><strong>${esc(normalizedRoles(state.roles).map((role) => ROLE_LABELS[role] || role).join(' · ') || 'ไม่ระบุ')}</strong></div>
               </div>
               <button class="btn btn-outline btn-sm" id="logout-btn">ออกจากระบบ</button>
             </div>
@@ -1103,7 +1115,7 @@
               <div style="min-width:0"><strong>${esc(title || 'ระบบ EQA และประเมินความสามารถ')}</strong><div class="small muted">${esc(cfg.ORGANIZATION_NAME || '')}</div></div>
             </div>
             <div class="topbar-user">
-              <span class="active-role-badge">สิทธิ์: ${esc(ROLE_LABELS[state.activeRole] || 'ไม่ระบุตำแหน่ง')}</span>
+              <span class="active-role-badge">กำลังทำงาน: ${esc(ROLE_LABELS[state.activeRole] || 'ไม่ระบุบทบาท')}</span>
               <span class="small topbar-username">${esc(state.profile?.username || '')}</span>
             </div>
           </header>
@@ -1184,15 +1196,11 @@
       state.activeRole = nextRole;
       localStorage.setItem(roleStorageKey(), nextRole);
       closeSidebar();
-      toast(`เปลี่ยนตำแหน่งเป็น ${ROLE_LABELS[nextRole] || 'ตำแหน่งที่เลือก'} แล้ว`, 'success');
-      await route();
+      toast(`เปลี่ยนโหมดการทำงานเป็น ${ROLE_LABELS[nextRole] || 'บทบาทที่เลือก'} แล้ว`, 'success');
+      const routeName = currentRoute().split('/')[0] || 'dashboard';
+      if (!canViewRoute(routeName)) navigate(defaultRouteForActiveRole());
+      else await route();
     }));
-    document.getElementById('reset-admin-preview')?.addEventListener('click', async () => {
-      state.activeRole = 'admin';
-      localStorage.setItem(roleStorageKey(), 'admin');
-      toast('กลับสู่มุมมองผู้ดูแลระบบแล้ว', 'success');
-      await route();
-    });
   }
 
   function navigate(route) {
@@ -5120,6 +5128,17 @@
     const parkedAiQuestions = formBasedCompetency
       ? (questions || []).filter((question) => question.generated_by_ai)
       : [];
+    const questionReviewStats = supplementalQuestions.reduce((stats, question) => {
+      const answerKey = keyMap.get(question.id);
+      const hasKey = Boolean(answerKey?.correct_choice_ids?.length || String(answerKey?.answer_key_json?.text || '').trim());
+      const manual = Boolean(answerKey?.answer_key_json?.needs_manual_review);
+      stats.total += 1;
+      if (!question.published) stats.draft += 1;
+      if (!hasKey) stats.missingKey += 1;
+      if (manual) stats.manual += 1;
+      if (!question.published || !hasKey || manual) stats.needsAction += 1;
+      return stats;
+    }, { total: 0, draft: 0, missingKey: 0, manual: 0, needsAction: 0 });
     const evidenceDocs = (documents || []).filter((doc) => ['raw_result_image','antibody_panel'].includes(doc.category));
     const hiddenEvidenceDocs = evidenceDocs.filter((doc) => doc.visibility !== 'staff');
     const latestRun = generationRuns?.[0] || null;
@@ -5156,9 +5175,29 @@
         <div class="card-header"><div><h2>${formBasedCompetency ? 'แบบประเมินของเจ้าหน้าที่ที่ไม่ได้เป็นผู้ปฏิบัติจริง' : 'ข้อสอบ'}</h2></div></div>
         ${aiNotice}
         ${formBasedCompetency ? `<div class="competency-compact-note"><strong>ผู้ปฏิบัติจริง 2 คนใช้หัวข้อ 4</strong><span>หัวข้อ 10 มอบหมายเฉพาะเจ้าหน้าที่คนอื่น</span></div>${hiddenEvidenceDocs.length ? `<div class="notice warning small">มี ${hiddenEvidenceDocs.length} ไฟล์ที่ยังไม่ได้เปิดสิทธิ์ให้บุคลากรทุกคน</div>` : ''}` : ''}
-        ${canManage() ? `<div class="table-actions" style="margin-bottom:14px;flex-wrap:wrap">
+        ${canManage() ? `<div class="question-review-summary">
+          <div><span>ทั้งหมด</span><strong>${questionReviewStats.total}</strong></div>
+          <div class="${questionReviewStats.needsAction ? 'warning' : 'success'}"><span>ต้องตรวจ</span><strong>${questionReviewStats.needsAction}</strong></div>
+          <div><span>ฉบับร่าง</span><strong>${questionReviewStats.draft}</strong></div>
+          <div><span>ยังไม่มีเฉลย</span><strong>${questionReviewStats.missingKey}</strong></div>
+        </div>
+        <div class="question-review-toolbar">
+          <div class="question-review-search"><input class="input" id="question-search" type="search" placeholder="ค้นหาคำถามหรือหัวข้อ"></div>
+          <select class="select" id="question-filter" aria-label="กรองสถานะข้อสอบ">
+            <option value="all">ทุกข้อ</option>
+            <option value="action">เฉพาะข้อที่ต้องตรวจ</option>
+            <option value="draft">ฉบับร่าง</option>
+            <option value="missing-key">ยังไม่มีเฉลย</option>
+            <option value="manual">AI ระบุว่าต้องตรวจเอง</option>
+            <option value="published">เผยแพร่แล้ว</option>
+          </select>
+          <button class="btn btn-primary" id="review-questions-sequentially" ${supplementalQuestions.length ? '' : 'disabled'}>ตรวจข้อสอบทีละข้อ</button>
+          <button class="btn btn-outline" id="preview-question-set" ${supplementalQuestions.length ? '' : 'disabled'}>ดูตัวอย่างผู้ทำแบบประเมิน</button>
+        </div>
+        <div class="table-actions question-review-secondary">
           <button class="btn btn-outline" id="go-document-ai-tools">${formBasedCompetency ? 'ตรวจเอกสารและภาพผลดิบ' : 'สร้างจากเอกสาร'}</button>
           <button class="btn btn-outline" id="publish-all-questions" ${supplementalQuestions.length ? '' : 'disabled'}>เผยแพร่คำถามเสริม</button>
+          <button class="btn btn-outline" id="unpublish-all-questions" ${supplementalQuestions.length ? '' : 'disabled'}>พักการเผยแพร่ทั้งหมด</button>
           <button class="btn btn-outline" id="add-question">＋ เพิ่มคำถามเสริม</button>
         </div>` : ''}
         ${latestRun ? (() => { const stale = latestRun.status === 'processing' && Date.now() - new Date(latestRun.created_at).getTime() > 5 * 60 * 1000; const statusText = latestRun.status === 'completed' ? 'สำเร็จ' : latestRun.status === 'failed' || stale ? 'ไม่สำเร็จ/หมดเวลา' : 'กำลังประมวลผล'; return `<details class="competency-system-details"><summary>ประวัติการสร้างล่าสุด: ${statusText}</summary><div class="small muted">${fmtDate(latestRun.created_at, true)}${latestRun.generated_summary ? `<br>${esc(latestRun.generated_summary)}` : ''}${latestRun.error_message ? `<br>${esc(latestRun.error_message)}` : ''}</div></details>`; })() : ''}
@@ -5178,7 +5217,9 @@
           const sortedChoices = (q.ec_question_choices || []).slice().sort((a, b) => Number(a.choice_order || 0) - Number(b.choice_order || 0));
           const galleryHtml = questionImageGallery(q, adminImageMap, 'admin');
           const promptParts = questionPromptParts(q.prompt);
-          return `<article class="admin-question-card">
+          const searchableQuestionText = `${q.question_order} ${q.section || ''} ${promptParts.prompt}`.toLowerCase();
+          const needsAction = !q.published || !hasKey || needsManualReview;
+          return `<article class="admin-question-card" data-question-search="${esc(searchableQuestionText)}" data-published="${q.published ? '1' : '0'}" data-has-key="${hasKey ? '1' : '0'}" data-manual="${needsManualReview ? '1' : '0'}" data-needs-action="${needsAction ? '1' : '0'}">
             <div class="admin-question-top">
               <div class="question-order-badge">${q.question_order}</div>
               <div class="admin-question-title"><span class="question-section">${esc(q.section || 'การแปลผล EQA')}</span><h3>${esc(promptParts.prompt)}</h3></div>
@@ -6171,44 +6212,148 @@
     const openQuestion = async (row = null) => {
       let choices = [];
       let key = null;
+      let answerCount = 0;
       const requests = [state.supabase.from('ec_round_documents').select('id,title,file_name,mime_type,visibility').eq('round_id', round.id).like('mime_type', 'image/%').order('created_at', { ascending: false })];
       if (row?.id) {
         requests.push(state.supabase.from('ec_question_choices').select('*').eq('question_id', row.id).order('choice_order'));
         requests.push(state.supabase.from('ec_question_answer_keys').select('*').eq('question_id', row.id).maybeSingle());
+        requests.push(state.supabase.from('ec_competency_answers').select('id', { count: 'exact', head: true }).eq('question_id', row.id));
       }
       const results = await Promise.all(requests);
       const imageDocuments = results[0].data || [];
       if (results[0].error) return toast(friendlyError(results[0].error), 'danger');
       if (row?.id) {
+        if (results[1].error || results[2].error || results[3].error) return toast(friendlyError(results[1].error || results[2].error || results[3].error), 'danger');
         choices = results[1].data || [];
         key = results[2].data || null;
+        answerCount = Number(results[3].count || 0);
       }
-      const correctIndex = choices.findIndex((choice) => (key?.correct_choice_ids || []).includes(choice.id));
+      const choicesLocked = answerCount > 0;
+      const correctChoiceIds = new Set(key?.correct_choice_ids || []);
       const keyJson = key?.answer_key_json && typeof key.answer_key_json === 'object' ? key.answer_key_json : {};
       const currentReferenceAnswer = String(keyJson.challenge_type === 'educational' ? (keyJson.consensus_result || keyJson.text || '') : (keyJson.text || '')).trim();
       const imageOptions = imageDocuments.length
         ? `<option value="">ไม่ใช้รูปประกอบ</option>${imageDocuments.map((doc) => `<option value="${doc.id}" ${row?.image_document_id===doc.id?'selected':''}>${esc(doc.title)} — ${esc(doc.file_name)}${doc.visibility==='staff'?'':' (ระบบจะเปิดให้บุคลากรทุกคน)'}</option>`).join('')}`
         : '<option value="">ยังไม่มีไฟล์รูปในหัวข้อ 2. เอกสาร/ภาพ</option>';
-      showModal(row ? 'แก้ไขคำถาม' : 'เพิ่มคำถาม', `<form id="question-form" class="form-grid cols-2">
+      const initialChoices = choices.length ? choices : [null, null, null, null];
+      const choiceRowsHtml = initialChoices.map((choice, index) => `<div class="question-choice-editor-row" data-choice-row data-choice-id="${esc(choice?.id || '')}">
+        <label class="choice-answer-marker" title="ทำเครื่องหมายคำตอบที่ถูก">
+          <input type="checkbox" data-choice-correct ${choice && correctChoiceIds.has(choice.id) ? 'checked' : ''}>
+          <span>เฉลย</span>
+        </label>
+        <input class="input" type="text" data-choice-text value="${esc(choice?.choice_text || '')}" placeholder="ตัวเลือก ${index + 1}" ${choicesLocked ? 'readonly' : ''}>
+        <button class="btn btn-outline btn-sm" type="button" data-remove-choice ${choicesLocked ? 'disabled' : ''} aria-label="ลบตัวเลือก">ลบ</button>
+      </div>`).join('');
+
+      showModal(row ? `ตรวจและแก้ไขข้อ ${row.question_order}` : 'เพิ่มคำถาม', `<form id="question-form" class="question-editor-form">
         <input type="hidden" name="id" value="${esc(row?.id || '')}">
-        ${row?.generated_by_ai ? '<div class="notice info" style="grid-column:1/-1">คำถามนี้สร้างจากไฟล์อัตโนมัติ กรุณาตรวจข้อความ ตัวเลือก และเฉลยก่อนเผยแพร่</div>' : ''}
-        <div class="field"><label>ลำดับ</label><input class="input" type="number" name="order" required value="${esc(row?.question_order || 1)}"></div>
-        <div class="field"><label>หัวข้อ</label><input class="input" name="section" value="${esc(row?.section || '')}"></div>
-        <div class="field"><label>ประเภท</label><select class="select" name="type">${Object.entries(QUESTION_TYPE_LABELS).map(([value,label])=>`<option value="${value}" ${row?.question_type===value?'selected':''}>${esc(label)}</option>`).join('')}</select></div>
-        <div class="field"><label>คะแนน</label><input class="input" type="number" step="0.1" name="points" value="${esc(row?.points || 1)}"></div>
-        <div class="field" style="grid-column:1/-1"><label>คำถาม</label><textarea class="textarea" name="prompt" required>${esc(row?.prompt || '')}</textarea></div>
-        <div class="field" style="grid-column:1/-1"><label>รูปประกอบจากหัวข้อ 2. เอกสาร/ภาพ</label><select class="select" name="image_document_id">${imageOptions}</select><div class="help">เมื่อใช้เป็นรูปข้อสอบ ระบบจะตั้งสิทธิ์ไฟล์เป็น “บุคลากรทุกคน”</div></div>
-        <div class="field" style="grid-column:1/-1"><label>ตัวเลือก (หนึ่งบรรทัดต่อหนึ่งตัวเลือก)</label><textarea class="textarea" name="choices">${esc(choices.map((choice) => choice.choice_text).join('\n'))}</textarea></div>
-        <div class="field"><label>ลำดับตัวเลือกที่ถูก</label><input class="input" type="number" name="correct" min="1" value="${correctIndex >= 0 ? correctIndex + 1 : ''}"><div class="help">ใช้สำหรับข้อเลือกคำตอบเดียว</div></div>
-        <div class="field"><label>ประเภทการประเมิน</label><select class="select" name="challenge_type"><option value="graded" ${keyJson.challenge_type==='graded'?'selected':''}>Graded — มีเฉลยทางการ</option><option value="educational" ${keyJson.challenge_type==='educational'?'selected':''}>Educational — ใช้คำตอบส่วนใหญ่</option><option value="unknown" ${!keyJson.challenge_type||keyJson.challenge_type==='unknown'?'selected':''}>รอตรวจ</option></select></div>
-        <div class="field"><label>แหล่งอ้างอิงคำตอบ</label><select class="select" name="answer_basis"><option value="official_intended_response" ${keyJson.answer_basis==='official_intended_response'?'selected':''}>Official Intended Response</option><option value="participant_consensus" ${keyJson.answer_basis==='participant_consensus'?'selected':''}>Participant consensus</option><option value="insufficient" ${!keyJson.answer_basis||keyJson.answer_basis==='insufficient'?'selected':''}>หลักฐานยังไม่พอ</option></select></div>
-        <div class="field"><label>ร้อยละของคำตอบส่วนใหญ่</label><input class="input" name="consensus_percent" value="${esc(keyJson.consensus_percent || '')}" placeholder="เช่น 98.0%"></div>
-        <div class="field" style="grid-column:1/-1"><label>แนวคำตอบ / คำตอบส่วนใหญ่</label><textarea class="textarea" name="reference_answer" placeholder="เช่น 115 │ Anti-E; 124 │ Anti-K">${esc(currentReferenceAnswer)}</textarea><div class="help">ข้อ Antibody Identification ใส่ได้หลายรายการ คั่นด้วย ; ระบบจะเทียบโดยไม่สนลำดับ</div></div>
-        <div class="field" style="grid-column:1/-1"><label>คำอธิบายเฉลย</label><input class="input" name="explanation" value="${esc(key?.explanation || '')}"></div>
-        <label><input type="checkbox" name="critical" ${row?.is_critical?'checked':''}> ข้อสำคัญ</label>
-        <label><input type="checkbox" name="published" ${row?.published?'checked':''}> เผยแพร่คำถาม</label>
-      </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-primary" id="save-question">บันทึก</button>`, true);
-      document.getElementById('save-question').addEventListener('click', async () => {
+        <div class="question-editor-layout">
+          <div class="question-editor-main">
+            ${row?.generated_by_ai ? '<div class="notice info"><strong>AI สร้างเป็นร่างเท่านั้น</strong><br>กรุณาตรวจโจทย์ ตัวเลือก รูป และเฉลยก่อนเปิดให้เจ้าหน้าที่</div>' : ''}
+            ${choicesLocked ? `<div class="notice warning"><strong>มีผู้ตอบข้อนี้แล้ว ${answerCount} รายการ</strong><br>ระบบล็อกข้อความและลำดับตัวเลือกเพื่อรักษาหลักฐานเดิม แต่ยังเลือกเฉลยที่ถูก แก้คำถาม คำอธิบาย และสถานะเผยแพร่ได้</div>` : ''}
+            <div class="question-editor-quick-grid">
+              <div class="field"><label>หัวข้อ</label><input class="input" name="section" value="${esc(row?.section || '')}" placeholder="เช่น Antibody Identification"></div>
+              <div class="field"><label>ประเภทคำตอบ</label><select class="select" name="type" id="question-type-select">${Object.entries(QUESTION_TYPE_LABELS).map(([value,label])=>`<option value="${value}" ${row?.question_type===value?'selected':''}>${esc(label)}</option>`).join('')}</select></div>
+            </div>
+            <div class="field"><label>คำถาม</label><textarea class="textarea question-prompt-input" name="prompt" required placeholder="พิมพ์คำถามที่เจ้าหน้าที่จะเห็น">${esc(row?.prompt || '')}</textarea></div>
+            <div class="field"><label>รูปประกอบ</label><select class="select" name="image_document_id">${imageOptions}</select><div class="help">เมื่อเลือก ระบบจะเปิดไฟล์นี้ให้บุคลากรที่ได้รับมอบหมายเห็น</div></div>
+
+            <section class="question-choice-editor">
+              <div class="question-choice-editor-head"><div><strong>ตัวเลือกและเฉลย</strong><div class="small muted">ติ๊กคำว่า “เฉลย” ที่หน้าตัวเลือกที่ถูก ไม่ต้องจำเลขลำดับอีกแล้ว</div></div><button class="btn btn-outline btn-sm" type="button" id="add-choice-row" ${choicesLocked ? 'disabled' : ''}>＋ เพิ่มตัวเลือก</button></div>
+              <div id="choice-editor-list" data-choices-locked="${choicesLocked ? '1' : '0'}">${choiceRowsHtml}</div>
+            </section>
+
+            <div class="field"><label>แนวคำตอบ / คำตอบส่วนใหญ่</label><textarea class="textarea" name="reference_answer" placeholder="ใช้กับคำตอบข้อความ หรือใส่รหัส CAP เช่น 115 │ Anti-E; 124 │ Anti-K">${esc(currentReferenceAnswer)}</textarea><div class="help">ข้อ Antibody Identification ใส่หลายรายการได้โดยคั่นด้วย ; ระบบจะเทียบโดยไม่สนลำดับ</div></div>
+            <div class="field"><label>คำอธิบายเฉลย</label><textarea class="textarea compact" name="explanation" placeholder="อธิบายเหตุผลสั้น ๆ เพื่อใช้ตอนเฉลย">${esc(key?.explanation || '')}</textarea></div>
+
+            <details class="question-advanced-settings">
+              <summary>การตั้งค่าเพิ่มเติม</summary>
+              <div class="form-grid cols-2">
+                <div class="field"><label>ลำดับ</label><input class="input" type="number" name="order" required value="${esc(row?.question_order || 1)}"></div>
+                <div class="field"><label>คะแนน</label><input class="input" type="number" step="0.1" name="points" value="${esc(row?.points || 1)}"></div>
+                <div class="field"><label>ประเภทการประเมิน</label><select class="select" name="challenge_type"><option value="graded" ${keyJson.challenge_type==='graded'?'selected':''}>Graded — มีเฉลยทางการ</option><option value="educational" ${keyJson.challenge_type==='educational'?'selected':''}>Educational — ใช้คำตอบส่วนใหญ่</option><option value="unknown" ${!keyJson.challenge_type||keyJson.challenge_type==='unknown'?'selected':''}>รอตรวจ</option></select></div>
+                <div class="field"><label>แหล่งอ้างอิงคำตอบ</label><select class="select" name="answer_basis"><option value="official_intended_response" ${keyJson.answer_basis==='official_intended_response'?'selected':''}>Official Intended Response</option><option value="participant_consensus" ${keyJson.answer_basis==='participant_consensus'?'selected':''}>Participant consensus</option><option value="insufficient" ${!keyJson.answer_basis||keyJson.answer_basis==='insufficient'?'selected':''}>หลักฐานยังไม่พอ</option></select></div>
+                <div class="field"><label>ร้อยละของคำตอบส่วนใหญ่</label><input class="input" name="consensus_percent" value="${esc(keyJson.consensus_percent || '')}" placeholder="เช่น 98.0%"></div>
+                <div class="question-publish-settings">
+                  <label><input type="checkbox" name="critical" ${row?.is_critical?'checked':''}> ข้อสำคัญ</label>
+                  <label><input type="checkbox" name="published" ${row?.published?'checked':''}> เปิดให้เจ้าหน้าที่เห็น</label>
+                </div>
+              </div>
+            </details>
+          </div>
+          <aside class="question-live-preview" aria-live="polite">
+            <div class="question-live-preview-label">ตัวอย่างที่เจ้าหน้าที่เห็น</div>
+            <div class="question-live-preview-card">
+              <span class="question-section" id="question-preview-section">${esc(row?.section || 'แบบประเมิน')}</span>
+              <h3 id="question-preview-prompt">${esc(row?.prompt || 'คำถามจะแสดงตรงนี้')}</h3>
+              <div id="question-preview-choices"></div>
+            </div>
+            <div class="small muted">หน้าตัวอย่างนี้ไม่บันทึกคำตอบ</div>
+          </aside>
+        </div>
+      </form>`, `<button class="btn btn-outline" data-close-modal>ยกเลิก</button><button class="btn btn-outline" id="save-question-next">บันทึกและข้อต่อไป</button><button class="btn btn-primary" id="save-question">บันทึก</button>`, true);
+
+      const choiceList = document.getElementById('choice-editor-list');
+      const typeSelect = document.getElementById('question-type-select');
+      const reindexChoiceRows = () => {
+        [...choiceList.querySelectorAll('[data-choice-row]')].forEach((choiceRow, index) => {
+          const input = choiceRow.querySelector('[data-choice-text]');
+          if (input && !input.value.trim()) input.placeholder = `ตัวเลือก ${index + 1}`;
+        });
+      };
+      const addChoiceRow = (value = '') => {
+        const choiceRow = document.createElement('div');
+        choiceRow.className = 'question-choice-editor-row';
+        choiceRow.dataset.choiceRow = '';
+        choiceRow.innerHTML = `<label class="choice-answer-marker" title="ทำเครื่องหมายคำตอบที่ถูก"><input type="checkbox" data-choice-correct><span>เฉลย</span></label><input class="input" type="text" data-choice-text placeholder="ตัวเลือก" value="${esc(value)}"><button class="btn btn-outline btn-sm" type="button" data-remove-choice aria-label="ลบตัวเลือก">ลบ</button>`;
+        choiceList.appendChild(choiceRow);
+        reindexChoiceRows();
+        updateQuestionPreview();
+      };
+      const enforceSingleChoice = (changedInput) => {
+        if (typeSelect?.value !== 'single_choice' || !changedInput?.checked) return;
+        choiceList.querySelectorAll('[data-choice-correct]').forEach((input) => { if (input !== changedInput) input.checked = false; });
+      };
+      const updateQuestionPreview = () => {
+        const form = document.getElementById('question-form');
+        const section = String(form?.elements.section?.value || '').trim() || 'แบบประเมิน';
+        const prompt = String(form?.elements.prompt?.value || '').trim() || 'คำถามจะแสดงตรงนี้';
+        const previewSection = document.getElementById('question-preview-section');
+        const previewPrompt = document.getElementById('question-preview-prompt');
+        const previewChoices = document.getElementById('question-preview-choices');
+        if (previewSection) previewSection.textContent = section;
+        if (previewPrompt) previewPrompt.textContent = prompt;
+        if (previewChoices) {
+          const values = [...choiceList.querySelectorAll('[data-choice-text]')].map((input) => input.value.trim()).filter(Boolean);
+          previewChoices.innerHTML = values.length
+            ? `<div class="question-choice-preview">${values.map((value) => `<div><span class="choice-dot"></span>${esc(value)}</div>`).join('')}</div>`
+            : '<div class="small muted">ยังไม่มีตัวเลือก หรือเป็นคำถามแบบข้อความ</div>';
+        }
+      };
+      document.getElementById('add-choice-row')?.addEventListener('click', () => addChoiceRow());
+      choiceList?.addEventListener('click', (event) => {
+        const removeButton = event.target.closest('[data-remove-choice]');
+        if (!removeButton || choicesLocked) return;
+        removeButton.closest('[data-choice-row]')?.remove();
+        reindexChoiceRows();
+        updateQuestionPreview();
+      });
+      choiceList?.addEventListener('change', (event) => {
+        if (event.target.matches('[data-choice-correct]')) enforceSingleChoice(event.target);
+        updateQuestionPreview();
+      });
+      choiceList?.addEventListener('input', updateQuestionPreview);
+      document.getElementById('question-form')?.addEventListener('input', updateQuestionPreview);
+      typeSelect?.addEventListener('change', () => {
+        if (typeSelect.value === 'single_choice') {
+          const checked = [...choiceList.querySelectorAll('[data-choice-correct]:checked')];
+          checked.slice(1).forEach((input) => { input.checked = false; });
+        }
+        updateQuestionPreview();
+      });
+      updateQuestionPreview();
+
+      const saveQuestion = async (goNext = false) => {
         const form = document.getElementById('question-form'); if (!form.reportValidity()) return;
         const fd = new FormData(form);
         const id = String(fd.get('id') || '');
@@ -6239,15 +6384,27 @@
           : await state.supabase.from('ec_questions').insert({ ...payload, created_by: state.user.id }).select().single();
         if (questionResult.error) return toast(friendlyError(questionResult.error), 'danger');
         const questionId = questionResult.data.id;
-        const deleteChoices = await state.supabase.from('ec_question_choices').delete().eq('question_id', questionId);
-        if (deleteChoices.error) return toast(friendlyError(deleteChoices.error), 'danger');
-        const lines = String(fd.get('choices') || '').split('\n').map((value) => value.trim()).filter(Boolean);
-        const correct = Number(fd.get('correct') || 0);
-        let correctIds = [];
-        if (lines.length) {
-          const { data: inserted, error } = await state.supabase.from('ec_question_choices').insert(lines.map((text, index) => ({ question_id: questionId, choice_order: index + 1, choice_text: text }))).select();
-          if (error) return toast(friendlyError(error), 'danger');
-          if (correct > 0 && inserted?.[correct - 1]) correctIds = [inserted[correct - 1].id];
+        let correctIds = key?.correct_choice_ids || [];
+        if (choicesLocked) {
+          correctIds = [...choiceList.querySelectorAll('[data-choice-row]')]
+            .filter((choiceRow) => choiceRow.querySelector('[data-choice-correct]')?.checked && choiceRow.dataset.choiceId)
+            .map((choiceRow) => choiceRow.dataset.choiceId);
+        } else {
+          const editorRows = [...choiceList.querySelectorAll('[data-choice-row]')]
+            .map((choiceRow) => ({ text: choiceRow.querySelector('[data-choice-text]')?.value.trim() || '', correct: Boolean(choiceRow.querySelector('[data-choice-correct]')?.checked) }))
+            .filter((choice) => choice.text);
+          if (payload.question_type === 'single_choice' && editorRows.filter((choice) => choice.correct).length > 1) {
+            let found = false;
+            editorRows.forEach((choice) => { if (choice.correct && !found) found = true; else if (choice.correct) choice.correct = false; });
+          }
+          const deleteChoices = await state.supabase.from('ec_question_choices').delete().eq('question_id', questionId);
+          if (deleteChoices.error) return toast(friendlyError(deleteChoices.error), 'danger');
+          correctIds = [];
+          if (editorRows.length) {
+            const { data: inserted, error } = await state.supabase.from('ec_question_choices').insert(editorRows.map((choice, index) => ({ question_id: questionId, choice_order: index + 1, choice_text: choice.text }))).select();
+            if (error) return toast(friendlyError(error), 'danger');
+            correctIds = (inserted || []).filter((_, index) => editorRows[index]?.correct).map((choice) => choice.id);
+          }
         }
         const referenceAnswer = String(fd.get('reference_answer') || '').trim();
         const challengeType = String(fd.get('challenge_type') || 'unknown');
@@ -6265,8 +6422,25 @@
         };
         const keyResult = await state.supabase.from('ec_question_answer_keys').upsert({ question_id: questionId, correct_choice_ids: correctIds, answer_key_json: answerKeyJson, explanation: String(fd.get('explanation') || '') || null, updated_by: state.user.id }, { onConflict: 'question_id' });
         if (keyResult.error) return toast(friendlyError(keyResult.error), 'danger');
-        closeModal(); toast('บันทึกคำถามแล้ว', 'success'); route();
-      });
+        toast('บันทึกคำถามแล้ว', 'success');
+        if (goNext) {
+          const { data: orderedQuestions, error: orderError } = await state.supabase.from('ec_questions').select('*').eq('round_id', round.id).order('question_order');
+          if (orderError) return toast(friendlyError(orderError), 'danger');
+          const visibleQuestions = generatedResultSchema(round) ? (orderedQuestions || []).filter((question) => !question.generated_by_ai) : (orderedQuestions || []);
+          const currentIndex = visibleQuestions.findIndex((question) => question.id === questionId);
+          const nextQuestion = currentIndex >= 0 ? visibleQuestions[currentIndex + 1] : null;
+          if (nextQuestion) {
+            closeModal();
+            await openQuestion(nextQuestion);
+            return;
+          }
+          toast('ตรวจถึงข้อสุดท้ายแล้ว', 'success');
+        }
+        closeModal();
+        route();
+      };
+      document.getElementById('save-question')?.addEventListener('click', () => saveQuestion(false));
+      document.getElementById('save-question-next')?.addEventListener('click', () => saveQuestion(true));
     };
 
     const openWindowModal = (afterSave = null) => {
@@ -6294,6 +6468,50 @@
 
     document.getElementById('go-document-ai-tools')?.addEventListener('click', () => navigate(`round/${round.id}/documents`));
     document.getElementById('add-question')?.addEventListener('click', () => openQuestion());
+
+    const applyQuestionFilters = () => {
+      const query = String(document.getElementById('question-search')?.value || '').trim().toLowerCase();
+      const filter = String(document.getElementById('question-filter')?.value || 'all');
+      let visibleCount = 0;
+      document.querySelectorAll('.admin-question-card').forEach((card) => {
+        const textMatch = !query || String(card.dataset.questionSearch || '').includes(query);
+        const stateMatch = filter === 'all'
+          || (filter === 'action' && card.dataset.needsAction === '1')
+          || (filter === 'draft' && card.dataset.published === '0')
+          || (filter === 'missing-key' && card.dataset.hasKey === '0')
+          || (filter === 'manual' && card.dataset.manual === '1')
+          || (filter === 'published' && card.dataset.published === '1');
+        const show = textMatch && stateMatch;
+        card.hidden = !show;
+        if (show) visibleCount += 1;
+      });
+      const counter = document.getElementById('question-filter-count');
+      if (counter) counter.textContent = `แสดง ${visibleCount} ข้อ`;
+    };
+    document.getElementById('question-search')?.addEventListener('input', applyQuestionFilters);
+    document.getElementById('question-filter')?.addEventListener('change', applyQuestionFilters);
+    const toolbar = document.querySelector('.question-review-toolbar');
+    if (toolbar && !document.getElementById('question-filter-count')) {
+      const counter = document.createElement('span');
+      counter.id = 'question-filter-count';
+      counter.className = 'small muted question-filter-count';
+      toolbar.insertAdjacentElement('afterend', counter);
+      applyQuestionFilters();
+    }
+    document.getElementById('review-questions-sequentially')?.addEventListener('click', () => {
+      const cards = [...document.querySelectorAll('.admin-question-card')];
+      const target = cards.find((card) => card.dataset.needsAction === '1') || cards[0];
+      target?.querySelector('[data-edit-question]')?.click();
+    });
+    document.getElementById('preview-question-set')?.addEventListener('click', () => {
+      const source = document.querySelector('.admin-question-list');
+      if (!source) return toast('ยังไม่มีข้อสอบให้ดูตัวอย่าง', 'warning');
+      const clone = source.cloneNode(true);
+      clone.querySelectorAll('.admin-question-card').forEach((card) => { card.hidden = false; });
+      clone.querySelectorAll('.question-status-stack, .answer-key-preview, .admin-question-footer, .question-source-chip, .question-catalog-note').forEach((node) => node.remove());
+      clone.querySelectorAll('[id]').forEach((node) => node.removeAttribute('id'));
+      showModal('ตัวอย่างข้อสอบในมุมผู้ทำแบบประเมิน', `<div class="notice info"><strong>โหมดตัวอย่างเท่านั้น</strong><br>หน้านี้ไม่บันทึกคำตอบ และไม่เปลี่ยนบทบาทที่กำลังทำงานอยู่</div><div class="staff-question-set-preview">${clone.outerHTML}</div>`, '<button class="btn btn-primary" data-close-modal>ปิดตัวอย่าง</button>', true);
+    });
     document.querySelectorAll('[data-edit-question]').forEach((button) => button.addEventListener('click', async () => {
       const { data, error } = await state.supabase.from('ec_questions').select('*').eq('id', button.dataset.editQuestion).single();
       if (error) return toast(friendlyError(error), 'danger');
@@ -6358,6 +6576,22 @@
       } finally {
         setBusy(false);
       }
+    });
+
+    document.getElementById('unpublish-all-questions')?.addEventListener('click', async () => {
+      const formBased = Boolean(generatedResultSchema(round));
+      if (!confirm(formBased
+        ? 'พักการเผยแพร่คำถามเสริมทั้งหมดชั่วคราวหรือไม่ คำตอบเดิมจะไม่ถูกลบ'
+        : 'พักการเผยแพร่ข้อสอบทั้งหมดชั่วคราวหรือไม่ คำตอบเดิมจะไม่ถูกลบ')) return;
+      let query = state.supabase.from('ec_questions')
+        .update({ published: false, updated_by: state.user.id })
+        .eq('round_id', round.id)
+        .is('archived_at', null);
+      if (formBased) query = query.eq('generated_by_ai', false);
+      const { data, error } = await query.select('id');
+      if (error) return toast(friendlyError(error), 'danger');
+      toast(`พักการเผยแพร่แล้ว ${(data || []).length} ข้อ คำตอบเดิมยังอยู่ครบ`, 'success');
+      route();
     });
 
     document.getElementById('publish-all-questions')?.addEventListener('click', async () => {
@@ -7311,7 +7545,7 @@
   async function renderUsers() {
     if (!hasRole('admin')) {
       const content = `<section class="page">
-        <div class="page-header"><div><h1>ผู้ใช้งานและสิทธิ์</h1><p>ขณะนี้อยู่ในโหมด ${esc(ROLE_LABELS[state.activeRole] || 'ไม่ระบุบทบาท')}</p></div></div>
+        <div class="page-header"><div><h1>ผู้ใช้งานและสิทธิ์</h1><p>กำลังทำงานในบทบาท ${esc(ROLE_LABELS[state.activeRole] || 'ไม่ระบุบทบาท')}</p></div></div>
         <div class="notice warning">หน้านี้จัดการได้เฉพาะโหมดผู้ดูแลระบบ กรุณาเลือกโหมดการทำงานจากเมนูด้านซ้าย</div>
       </section>`;
       appEl.innerHTML = shell(content, 'ผู้ใช้งาน');
@@ -7553,7 +7787,7 @@
     const content=`<section class="page">
       <div class="page-header"><div><h1>คู่มือการใช้งาน</h1><p>รวมคำอธิบายและลำดับงานของระบบไว้ในหน้านี้</p></div></div>
       <div class="guide-list">
-        <details open><summary>เริ่มต้นใช้งานและเลือกตำแหน่ง</summary><div class="guide-body"><p>เลือกตำแหน่งจากกล่องด้านล่างของแถบเมนู ระบบจะแสดงเมนูและปุ่มตามตำแหน่งที่เลือก</p><p>หากมีหลายตำแหน่ง ให้เลือกให้ตรงกับงานที่กำลังทำ เช่น เจ้าหน้าที่ ผู้ทบทวน ผู้จัดการคุณภาพ รองผู้จัดการคุณภาพ แพทย์ หรือผู้ดูแลระบบ</p></div></details>
+        <details open><summary>เริ่มต้นใช้งานและเลือกบทบาทที่กำลังทำงาน</summary><div class="guide-body"><p>เลือกจากกล่อง <strong>ทำงานในบทบาท</strong> ด้านล่างของแถบเมนู ระบบจะแสดงเมนูและปุ่มให้ตรงกับงานที่กำลังทำ</p><p><strong>สิทธิ์บัญชี</strong> เป็นสิทธิ์จริงที่ผู้ดูแลกำหนด ส่วนบทบาทที่เลือกเป็นเพียงโหมดการทำงานในขณะนั้น การสลับบทบาทไม่เปลี่ยนสิทธิ์ในฐานข้อมูลและไม่เปลี่ยนเจ้าของคำตอบ</p><p>ผู้ดูแลระบบ ผู้จัดการคุณภาพ รองผู้จัดการคุณภาพ และผู้ทบทวนสามารถเลือกบทบาทเจ้าหน้าที่เพื่อทำ Competency ของตนเองได้</p></div></details>
         <details><summary>ลำดับงานของรอบ EQA</summary><div class="guide-body"><ol><li>บันทึกข้อมูลการรับรอบและกำหนดผู้รับผิดชอบ</li><li>ผู้ปฏิบัติจริงบันทึกผลรายบุคคล</li><li>ระบบเทียบผลและสร้างสรุปผลห้องปฏิบัติการ</li><li>ผู้ทบทวนตรวจและส่งให้ผู้รับรองคุณภาพ</li><li>ผู้รับรองคุณภาพรับรอง และแพทย์รับทราบ</li></ol></div></details>
         <details><summary>เอกสารและภาพ</summary><div class="guide-body">
           <p>ไฟล์เก็บในพื้นที่ส่วนตัวของระบบ ไม่ได้เก็บใน GitHub ระบบใช้ <strong>ประเภทเอกสาร</strong> เป็นหลัก และใช้ชื่อไฟล์ช่วยจับคู่เท่านั้น</p>
